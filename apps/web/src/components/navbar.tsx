@@ -17,7 +17,7 @@ const navLinks = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const { isAuthenticated, login, logout, address } = useAuth();
+  const { isReady, isAuthenticated, login, logout, address, walletsLoading } = useAuth();
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -61,7 +61,11 @@ export function Navbar() {
             </div>
 
             <div className="flex items-center gap-3">
-              {isAuthenticated && address ? (
+              {!isReady ? (
+                <div className="px-4 py-2 rounded-lg bg-muted border border-border">
+                  <span className="text-sm text-muted-foreground">Loading...</span>
+                </div>
+              ) : isAuthenticated ? (
                 <div className="relative">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
@@ -70,7 +74,9 @@ export function Navbar() {
                     className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted border border-border hover:border-primary/50 transition-colors"
                   >
                     <Wallet className="w-4 h-4 text-primary" />
-                    <span className="font-mono text-sm">{formatAddress(address)}</span>
+                    <span className="font-mono text-sm">
+                      {walletsLoading ? 'Loading...' : address ? formatAddress(address) : 'No wallet'}
+                    </span>
                     <ChevronDown className="w-4 h-4 text-muted-foreground" />
                   </motion.button>
 

@@ -8,20 +8,36 @@ export function useAuth() {
   const { ready, authenticated, login, logout, user } = usePrivy();
   const { wallets } = useWallets();
 
-  const address = useMemo(() => {
+  const embeddedWalletAddress = useMemo(() => {
     if (!authenticated || !wallets.length) return undefined;
     const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy');
-    const address = embeddedWallet?.address || wallets[0]?.address;
-    return address as Address | undefined;
+    return embeddedWallet?.address as Address | undefined;
   }, [authenticated, wallets]);
+
+  const linkedExternalWalletAddress = useMemo(() => {
+    if (!authenticated || !user) return undefined;
+    const linkedWallet = user.linkedAccounts?.find(
+      (account) => account.type === 'wallet' && account.walletClientType !== 'privy'
+    );
+    return linkedWallet && 'address' in linkedWallet
+      ? (linkedWallet.address as Address)
+      : undefined;
+  }, [authenticated, user]);
+
+  const primaryAddress = useMemo(() => {
+    return embeddedWalletAddress ?? linkedExternalWalletAddress;
+  }, [embeddedWalletAddress, linkedExternalWalletAddress]);
 
   return {
     isReady: ready,
-    isAuthenticated: authenticated,
+    isAuthenticated: ready && authenticated,
     login,
     logout,
     user,
-    address,
+    address: primaryAddress,
+    embeddedWalletAddress,
+    externalWalletAddress: linkedExternalWalletAddress,
     wallets,
+    walletsLoading: !primaryAddress && authenticated,
   };
 }
