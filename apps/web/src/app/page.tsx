@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import { motion } from 'framer-motion';
-import { ArrowRight, Sparkles, TrendingUp, Shield } from 'lucide-react';
-import Link from 'next/link';
-import { TradeGrid } from '@/components/trade-grid';
-import { useAuth } from '@/hooks/use-auth';
+import { motion } from "framer-motion";
+import { ArrowRight, Sparkles, TrendingUp, Shield } from "lucide-react";
+import Link from "next/link";
+import { TradeGrid } from "@/components/trade-grid";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function HomePage() {
   const { isAuthenticated, login } = useAuth();
@@ -29,18 +29,15 @@ export default function HomePage() {
                 className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>The quiet escape hatch</span>
+                <span>Found a generational bet?</span>
               </motion.div>
 
               <h1 className="text-5xl lg:text-6xl font-bold tracking-tight">
-                <span className="gradient-text">Slip off</span>
-                <br />
-                the beaten path
+                <span className="gradient-text">Go first.</span>
               </h1>
 
               <p className="text-lg text-muted-foreground max-w-md">
-                A few choose to trust someone who goes first. Take one honest shot at
-                changing where you end up.
+                Stake your conviction. Others follow with capital.
               </p>
             </div>
 
@@ -52,7 +49,8 @@ export default function HomePage() {
                 <div>
                   <h3 className="font-medium">Profit Together</h3>
                   <p className="text-sm text-muted-foreground">
-                    Proposers earn 30% of profits. Funders get 70% on trades they never had to find.
+                    Proposers earn 30% of profits. Funders get 70% on trades
+                    they never had to find.
                   </p>
                 </div>
               </div>
@@ -64,7 +62,8 @@ export default function HomePage() {
                 <div>
                   <h3 className="font-medium">Protected Downside</h3>
                   <p className="text-sm text-muted-foreground">
-                    Proposers absorb losses first. Funders are shielded by the proposer&apos;s stake.
+                    Proposers absorb losses first. Funders are shielded by the
+                    proposer&apos;s stake.
                   </p>
                 </div>
               </div>

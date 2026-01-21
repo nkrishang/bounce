@@ -1,16 +1,16 @@
 # Escape
 
-> A quiet, mythic escape hatch for people with conviction—where a few choose to slip off the beaten path together, trust someone who goes first, and take one honest shot at changing where they end up.
-
 ## Overview
 
-Escape is a DeFi application that enables collaborative trading on Monad. Trade proposers put up 20% of the position and invite funders to provide the remaining 80%. 
+Escape is a DeFi application that enables collaborative trading on Monad. Trade proposers put up 20% of the position and invite funders to provide the remaining 80%.
 
 **Profit sharing:**
+
 - Proposer gets 20% of profits + 10% carry = 30% total
 - Funder gets 70% of profits
 
 **Loss protection:**
+
 - Proposer absorbs losses first (up to their 20%)
 - Funder is protected until losses exceed 20%
 
@@ -37,6 +37,7 @@ escape-app/
 ## Setup
 
 1. **Install dependencies:**
+
    ```bash
    pnpm install
    ```
@@ -44,6 +45,7 @@ escape-app/
 2. **Configure environment variables:**
 
    API (`apps/api/.env`):
+
    ```env
    MONAD_RPC_URL=https://rpc.monad.xyz
    TRADE_ESCROW_FACTORY_ADDRESS=0x...
@@ -53,6 +55,7 @@ escape-app/
    ```
 
    Web (`apps/web/.env.local`):
+
    ```env
    NEXT_PUBLIC_PRIVY_APP_ID=your-privy-app-id
    NEXT_PUBLIC_API_URL=http://localhost:3001
@@ -62,11 +65,13 @@ escape-app/
    ```
 
 3. **Build packages:**
+
    ```bash
    pnpm run build
    ```
 
 4. **Run development servers:**
+
    ```bash
    pnpm run dev
    ```
@@ -87,14 +92,14 @@ After deployment, update the contract addresses in the environment files.
 
 ## API Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check |
-| `GET /trades` | List all trades (optional: `?status=OPEN`) |
-| `GET /trades/:escrow` | Get trade details |
-| `GET /trades/user/:address` | Get user's trades |
-| `GET /tokens/:address` | Get token metadata |
-| `GET /tokens/:token/balance/:account` | Get token balance |
+| Endpoint                              | Description                                |
+| ------------------------------------- | ------------------------------------------ |
+| `GET /health`                         | Health check                               |
+| `GET /trades`                         | List all trades (optional: `?status=OPEN`) |
+| `GET /trades/:escrow`                 | Get trade details                          |
+| `GET /trades/user/:address`           | Get user's trades                          |
+| `GET /tokens/:address`                | Get token metadata                         |
+| `GET /tokens/:token/balance/:account` | Get token balance                          |
 
 ## Trade Lifecycle
 
