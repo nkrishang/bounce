@@ -1,0 +1,20 @@
+import type { Address } from './types.js';
+
+export const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
+
+export const UNISWAP_POOL_FEES = {
+  LOWEST: 100,
+  LOW: 500,
+  MEDIUM: 3000,
+  HIGH: 10000,
+} as const;
+
+export const DEFAULT_POOL_FEE = UNISWAP_POOL_FEES.MEDIUM;
+
+export const DEFAULT_SLIPPAGE_PERCENT = 1;
+
+export const PROPOSER_PROFIT_SHARE_BPS = 3000;
+export const FUNDER_PROFIT_SHARE_BPS = 7000;
+
+export const PROPOSER_CONTRIBUTION_PERCENT = 20;
+export const FUNDER_CONTRIBUTION_PERCENT = 80;

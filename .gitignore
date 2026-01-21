@@ -1,14 +1,37 @@
-# Compiler files
-cache/
-out/
+# Foundry compiler files
+packages/foundry/cache/
+packages/foundry/out/
 
 # Ignores development broadcast logs
-!/broadcast
-/broadcast/*/31337/
-/broadcast/**/dry-run/
+!/packages/foundry/broadcast
+/packages/foundry/broadcast/*/31337/
+/packages/foundry/broadcast/**/dry-run/
 
 # Docs
 docs/
 
 # Dotenv file
 .env
+.env.local
+.env*.local
+
+# Dependencies
+node_modules/*
+
+# Build outputs
+dist/
+.next/
+
+# Logs
+*.log
+pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

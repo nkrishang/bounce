@@ -1,0 +1,28 @@
+{
+  "name": "@escape/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@escape/contracts": "workspace:*",
+    "@escape/shared": "workspace:*",
+    "@fastify/cors": "^9.0.1",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.26.2",
+    "pino": "^8.19.0",
+    "pino-pretty": "^11.0.0",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  }
+}

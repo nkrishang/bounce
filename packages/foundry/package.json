@@ -1,0 +1,12 @@
+{
+  "name": "@escape/foundry",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test",
+    "clean": "forge clean",
+    "fmt": "forge fmt",
+    "snapshot": "forge snapshot"
+  }
+}

@@ -42,7 +42,7 @@ contract TradeEscrowFactory is Ownable {
 
     constructor(address _owner) {
         // Set ownership.
-        transferOwnership(_owner);
+        _initializeOwner(_owner);
 
         // Deploy trade escrow implementation.
         tradeEscrowImplementation = address(new TradeEscrow(address(this)));
