@@ -17,8 +17,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Escape - Go first.",
-  description: "Stake your conviction. Others follow with capital.",
+  title: "Escape - Next-Gen Betting.",
+  description: "Stake your conviction. Capital will follow.",
 };
 
 export default function RootLayout({
