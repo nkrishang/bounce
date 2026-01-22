@@ -2,12 +2,18 @@
   "name": "@thesis/contracts",
   "version": "1.0.0",
   "private": true,
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "echo 'Transpiled by consumer'",
     "typecheck": "tsc --noEmit",
-    "dev": "tsc --watch"
+    "dev": "echo 'Transpiled by consumer'"
   },
   "dependencies": {
     "viem": "^2.21.0"

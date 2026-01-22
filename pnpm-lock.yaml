@@ -134,7 +134,7 @@ importers:
   packages/shared:
     dependencies:
       viem:
-        specifier: ^2.21.58
+        specifier: ^2.21.0
         version: 2.44.4(typescript@5.9.3)(zod@3.22.4)
     devDependencies:
       typescript:
