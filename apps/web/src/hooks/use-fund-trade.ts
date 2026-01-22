@@ -11,8 +11,8 @@ import {
   type Address,
 } from "viem";
 import { monad } from "viem/chains";
-import { TradeEscrowAbi, ERC20Abi } from "@escape/contracts";
-import type { SwapQuote } from "@escape/shared";
+import { TradeEscrowAbi, ERC20Abi } from "@thesis/contracts";
+import type { SwapQuote } from "@thesis/shared";
 import { api } from "../lib/api";
 
 type Step = "idle" | "fetching-quote" | "approve" | "buy" | "confirming" | "success";

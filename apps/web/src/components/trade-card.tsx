@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, User, ArrowRight, AlertCircle } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
-import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@escape/shared';
+import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@thesis/shared';
 import { formatUnits } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';

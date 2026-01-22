@@ -1,5 +1,5 @@
 {
-  "name": "@escape/api",
+  "name": "@thesis/api",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@escape/contracts": "workspace:*",
-    "@escape/shared": "workspace:*",
+    "@thesis/contracts": "workspace:*",
+    "@thesis/shared": "workspace:*",
     "@fastify/cors": "^9.0.1",
     "dotenv": "^16.4.5",
     "fastify": "^4.26.2",

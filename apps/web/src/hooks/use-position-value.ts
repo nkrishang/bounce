@@ -3,8 +3,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, http, type Address, formatUnits } from 'viem';
 import { monad } from 'viem/chains';
-import { ERC20Abi } from '@escape/contracts';
-import { MONAD_TOKENS } from '@escape/shared';
+import { ERC20Abi } from '@thesis/contracts';
+import { MONAD_TOKENS } from '@thesis/shared';
 import { api } from '@/lib/api';
 
 interface IndicativePriceResponse {

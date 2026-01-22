@@ -5,7 +5,7 @@ import { X, Copy, ExternalLink, RefreshCw, Check, Wallet } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useWalletBalance } from "@/hooks/use-wallet";
-import { formatAddress } from "@escape/shared";
+import { formatAddress } from "@thesis/shared";
 import { formatUnits } from "viem";
 
 interface WalletModalProps {

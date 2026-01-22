@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Loader2, Eye, Wallet, CheckCircle, Coins, ExternalLink } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { type TradeView, type TokenMeta, formatAddress, calculateProfitLoss, calculateFunderContribution } from '@escape/shared';
+import { type TradeView, type TokenMeta, formatAddress, calculateProfitLoss, calculateFunderContribution } from '@thesis/shared';
 import { formatUnits, type Address } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';

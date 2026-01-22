@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { type TokenMeta, type Address } from '@escape/shared';
+import { type TokenMeta, type Address } from '@thesis/shared';
 import { api } from '@/lib/api';
 
 export function useTokenMeta(tokenAddress: Address | undefined) {

@@ -7,7 +7,7 @@ import {
   type SwapQuote,
   type ZeroXQuoteResponse,
   type Address,
-} from '@escape/shared';
+} from '@thesis/shared';
 import { logger } from '../lib/logger.js';
 
 const ZERO_X_API_KEY = process.env.ZERO_X_API_KEY;

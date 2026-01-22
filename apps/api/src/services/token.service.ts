@@ -1,7 +1,7 @@
 import { type Address } from 'viem';
 import { publicClient } from '../lib/viem.js';
-import { ERC20Abi } from '@escape/contracts';
-import { type TokenMeta } from '@escape/shared';
+import { ERC20Abi } from '@thesis/contracts';
+import { type TokenMeta } from '@thesis/shared';
 import { cache } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
 

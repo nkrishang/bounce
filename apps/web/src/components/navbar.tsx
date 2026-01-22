@@ -7,7 +7,7 @@ import { Compass, PlusCircle, Briefcase, Wallet, LogOut, ChevronDown } from 'luc
 import { useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { WalletModal } from './wallet-modal';
-import { formatAddress } from '@escape/shared';
+import { formatAddress } from '@thesis/shared';
 
 const navLinks = [
   { href: '/', label: 'Explore', icon: Compass },
@@ -34,7 +34,7 @@ export function Navbar() {
                 >
                   <span className="text-white font-bold">E</span>
                 </motion.div>
-                <span className="font-semibold text-lg hidden sm:inline">escape</span>
+                <span className="font-semibold text-lg hidden sm:inline">thesis</span>
               </Link>
 
               <div className="hidden md:flex items-center gap-1">

@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Escape - Next-Gen Betting.",
+  title: "Thesis - Next-Gen Betting.",
   description: "Stake your conviction. Capital will follow.",
 };
 

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { type Address } from 'viem';
 import { getTokenMeta, getTokenBalance } from '../services/token.service.js';
-import { isValidAddress } from '@escape/shared';
+import { isValidAddress } from '@thesis/shared';
 import { logger } from '../lib/logger.js';
 
 export async function tokenRoutes(fastify: FastifyInstance) {

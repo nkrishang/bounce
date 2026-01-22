@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { type Address } from '@escape/shared';
+import { type Address } from '@thesis/shared';
 import { api } from '@/lib/api';
 
 const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;

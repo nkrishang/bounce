@@ -1,8 +1,8 @@
-# Escape
+# Thesis
 
 ## Overview
 
-Escape is a DeFi application that enables collaborative trading on Monad. Trade proposers put up 20% of the position and invite funders to provide the remaining 80%.
+Thesis is a DeFi application that enables collaborative trading on Monad. Trade proposers put up 20% of the position and invite funders to provide the remaining 80%.
 
 **Profit sharing:**
 
@@ -17,7 +17,7 @@ Escape is a DeFi application that enables collaborative trading on Monad. Trade 
 ## Architecture
 
 ```
-escape-app/
+thesis-app/
 ├── apps/
 │   ├── api/          # Fastify backend API
 │   └── web/          # Next.js frontend

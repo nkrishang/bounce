@@ -1,5 +1,5 @@
 import { createPublicClient, http, type Address } from 'viem';
-import { monad } from '@escape/contracts';
+import { monad } from '@thesis/contracts';
 import { logger } from './logger.js';
 
 const MONAD_RPC_URL = process.env.MONAD_RPC_URL || 'https://rpc.monad.xyz';

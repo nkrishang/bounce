@@ -5,8 +5,8 @@ import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, createPublicClient, custom, http, type Address } from 'viem';
 import { monad } from 'viem/chains';
-import { TradeEscrowAbi } from '@escape/contracts';
-import type { SwapQuote } from '@escape/shared';
+import { TradeEscrowAbi } from '@thesis/contracts';
+import type { SwapQuote } from '@thesis/shared';
 import { api } from '../lib/api';
 
 type Step = 'idle' | 'fetching-quote' | 'sell' | 'confirming' | 'success';

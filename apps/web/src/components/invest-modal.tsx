@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Loader2, Check, User, Clock, TrendingUp, Shield, ExternalLink, XCircle } from 'lucide-react';
-import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@escape/shared';
+import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@thesis/shared';
 import { formatUnits } from 'viem';
 import { useAuth } from '@/hooks/use-auth';
 import { useFundTrade } from '@/hooks/use-fund-trade';

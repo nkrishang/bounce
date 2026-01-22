@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@escape/shared', '@escape/contracts'],
+  transpilePackages: ['@thesis/shared', '@thesis/contracts'],
   experimental: {
     externalDir: true,
   },

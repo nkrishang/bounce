@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Loader2, TrendingDown, Check, XCircle } from 'lucide-react';
-import { type TradeView, type TokenMeta, formatAddress } from '@escape/shared';
+import { type TradeView, type TokenMeta, formatAddress } from '@thesis/shared';
 import { formatUnits } from 'viem';
 import { useSellTrade } from '@/hooks/use-sell-trade';
 import { parseTransactionError } from '@/lib/parse-transaction-error';

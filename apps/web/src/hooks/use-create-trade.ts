@@ -5,7 +5,7 @@ import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, custom, type Address } from 'viem';
 import { monad } from 'viem/chains';
-import { TradeEscrowFactoryAbi, ERC20Abi } from '@escape/contracts';
+import { TradeEscrowFactoryAbi, ERC20Abi } from '@thesis/contracts';
 
 const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_TRADE_ESCROW_FACTORY_ADDRESS as Address;
 const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;

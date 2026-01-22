@@ -5,7 +5,7 @@ import {
   getTradeView,
   getUserTrades,
 } from '../services/trade.service.js';
-import { isValidAddress } from '@escape/shared';
+import { isValidAddress } from '@thesis/shared';
 import { logger } from '../lib/logger.js';
 
 export async function tradeRoutes(fastify: FastifyInstance) {

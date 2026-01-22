@@ -14,15 +14,15 @@ importers:
 
   apps/api:
     dependencies:
-      '@escape/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@escape/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@fastify/cors':
         specifier: ^9.0.1
         version: 9.0.1
+      '@thesis/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@thesis/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -51,18 +51,18 @@ importers:
 
   apps/web:
     dependencies:
-      '@escape/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@escape/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@privy-io/react-auth':
         specifier: ^1.88.4
         version: 1.99.1(@solana/web3.js@1.98.4)(@types/react@18.3.27)(bs58@6.0.0)(react-dom@18.3.1)(react@18.3.1)(typescript@5.9.3)
       '@tanstack/react-query':
         specifier: ^5.51.1
         version: 5.90.19(react@18.3.1)
+      '@thesis/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@thesis/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       clsx:
         specifier: ^2.1.1
         version: 2.1.1

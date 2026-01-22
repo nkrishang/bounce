@@ -5,7 +5,7 @@ import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, custom, type Address } from 'viem';
 import { monad } from 'viem/chains';
-import { TradeEscrowAbi } from '@escape/contracts';
+import { TradeEscrowAbi } from '@thesis/contracts';
 
 export function useWithdraw() {
   const { wallets } = useWallets();
