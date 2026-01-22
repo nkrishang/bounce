@@ -15,8 +15,8 @@ export function useWithdraw() {
 
   const withdrawProposer = useCallback(
     async (escrowAddress: Address) => {
-      const wallet = wallets[0];
-      if (!wallet) throw new Error('No wallet connected');
+      const wallet = wallets.find((w) => w.walletClientType === 'privy');
+      if (!wallet) throw new Error('No Privy embedded wallet connected');
 
       setIsLoading(true);
       setError(null);
@@ -58,8 +58,8 @@ export function useWithdraw() {
 
   const withdrawFunder = useCallback(
     async (escrowAddress: Address) => {
-      const wallet = wallets[0];
-      if (!wallet) throw new Error('No wallet connected');
+      const wallet = wallets.find((w) => w.walletClientType === 'privy');
+      if (!wallet) throw new Error('No Privy embedded wallet connected');
 
       setIsLoading(true);
       setError(null);

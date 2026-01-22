@@ -116,7 +116,8 @@ export const TradeEscrowAbi = [
     name: 'buy',
     inputs: [
       { name: 'amountOutMin', type: 'uint256', internalType: 'uint256' },
-      { name: 'poolFee', type: 'uint24', internalType: 'uint24' },
+      { name: 'swapTarget', type: 'address', internalType: 'address' },
+      { name: 'swapCallData', type: 'bytes', internalType: 'bytes' },
     ],
     outputs: [],
     stateMutability: 'nonpayable',
@@ -189,7 +190,8 @@ export const TradeEscrowAbi = [
     name: 'sell',
     inputs: [
       { name: 'amountOutMin', type: 'uint256', internalType: 'uint256' },
-      { name: 'poolFee', type: 'uint24', internalType: 'uint24' },
+      { name: 'swapTarget', type: 'address', internalType: 'address' },
+      { name: 'swapCallData', type: 'bytes', internalType: 'bytes' },
     ],
     outputs: [],
     stateMutability: 'nonpayable',
@@ -277,6 +279,8 @@ export const TradeEscrowAbi = [
   { type: 'error', name: 'OnlyFunderOrProposer', inputs: [] },
   { type: 'error', name: 'TradeExpired', inputs: [] },
   { type: 'error', name: 'TradeNotExpired', inputs: [] },
+  { type: 'error', name: 'SwapFailed', inputs: [] },
+  { type: 'error', name: 'InsufficientOutput', inputs: [] },
 ] as const;
 
 export const ERC20Abi = [

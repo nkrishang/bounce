@@ -1,11 +1,12 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { Clock, User, Coins, ArrowRight } from 'lucide-react';
-import { useState } from 'react';
-import { type TradeView, formatAddress, calculateFunderContribution } from '@escape/shared';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Clock, User, ArrowRight, AlertCircle } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@escape/shared';
 import { formatUnits } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
+import { useTokenList } from '@/hooks/use-token-list';
 import { CountdownTimer } from './countdown-timer';
 import { InvestModal } from './invest-modal';
 
@@ -15,7 +16,28 @@ interface TradeCardProps {
 
 export function TradeCard({ trade }: TradeCardProps) {
   const [showModal, setShowModal] = useState(false);
+  const [justExpired, setJustExpired] = useState(false);
   const { data: buyTokenMeta } = useTokenMeta(trade.data.buyToken);
+  const { data: tokenList = [] } = useTokenList();
+
+  const tokenFromList = useMemo(() => {
+    return tokenList.find(
+      (t) => t.address.toLowerCase() === trade.data.buyToken.toLowerCase()
+    );
+  }, [tokenList, trade.data.buyToken]);
+
+  const displayTokenMeta = useMemo((): TokenMeta | null => {
+    if (tokenFromList) {
+      return {
+        address: tokenFromList.address,
+        symbol: tokenFromList.symbol,
+        name: tokenFromList.name,
+        decimals: tokenFromList.decimals,
+        logoUrl: tokenFromList.logoURI,
+      };
+    }
+    return buyTokenMeta ?? null;
+  }, [tokenFromList, buyTokenMeta]);
 
   const sellAmount = formatUnits(BigInt(trade.data.sellAmount), 6);
   const fundingNeeded = formatUnits(
@@ -24,31 +46,66 @@ export function TradeCard({ trade }: TradeCardProps) {
   );
   const totalPosition = formatUnits(BigInt(trade.data.sellAmount) * 5n, 6);
 
-  const isExpired = trade.status === 'EXPIRED_UNFUNDED';
+  const isExpiredFromStatus = trade.status === 'EXPIRED_UNFUNDED';
+  const isExpired = isExpiredFromStatus || justExpired;
+
+  const handleExpire = useCallback(() => {
+    setJustExpired(true);
+    setShowModal(false);
+  }, []);
 
   return (
     <>
       <motion.div
         whileHover={{ scale: isExpired ? 1 : 1.01 }}
-        className={`p-5 rounded-xl bg-muted border border-border transition-all ${
+        animate={justExpired ? { opacity: [1, 0.5], scale: [1, 0.98] } : {}}
+        transition={justExpired ? { duration: 0.5 } : {}}
+        className={`p-5 rounded-xl bg-muted border transition-all relative overflow-hidden ${
           isExpired
-            ? 'opacity-50 cursor-not-allowed'
-            : 'hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 cursor-pointer'
+            ? 'opacity-50 cursor-not-allowed border-danger/30 grayscale'
+            : 'border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 cursor-pointer'
         }`}
         onClick={() => !isExpired && setShowModal(true)}
       >
+        <AnimatePresence>
+          {justExpired && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute inset-0 bg-danger/10 flex items-center justify-center z-10"
+            >
+              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-danger/20 border border-danger/30">
+                <AlertCircle className="w-5 h-5 text-danger" />
+                <span className="font-medium text-danger">Trade Expired</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-3 flex-1">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                <Coins className="w-5 h-5 text-primary" />
-              </div>
+              {displayTokenMeta?.logoUrl ? (
+                <img
+                  src={displayTokenMeta.logoUrl}
+                  alt={displayTokenMeta.symbol}
+                  className="w-10 h-10 rounded-lg"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                  <span className="text-lg font-bold text-primary">
+                    {displayTokenMeta?.symbol?.[0] || '?'}
+                  </span>
+                </div>
+              )}
               <div>
                 <h3 className="font-semibold">
-                  {buyTokenMeta?.symbol || formatAddress(trade.data.buyToken)}
+                  {displayTokenMeta?.symbol || formatAddress(trade.data.buyToken)}
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  {buyTokenMeta?.name || 'Loading...'}
+                  {displayTokenMeta?.name || 'Loading...'}
                 </p>
               </div>
             </div>
@@ -81,7 +138,7 @@ export function TradeCard({ trade }: TradeCardProps) {
                 <Clock className="w-3 h-3" />
                 <CountdownTimer
                   expirationTimestamp={trade.data.expirationTimestamp}
-                  onExpire={() => {}}
+                  onExpire={handleExpire}
                 />
               </span>
             </div>
@@ -106,7 +163,7 @@ export function TradeCard({ trade }: TradeCardProps) {
 
       <InvestModal
         trade={trade}
-        buyTokenMeta={buyTokenMeta}
+        buyTokenMeta={displayTokenMeta}
         open={showModal}
         onClose={() => setShowModal(false)}
       />

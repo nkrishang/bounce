@@ -9,6 +9,9 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },
+  "dependencies": {
+    "viem": "^2.21.58"
+  },
   "devDependencies": {
     "typescript": "^5.3.3"
   }

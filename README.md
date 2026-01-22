@@ -50,6 +50,7 @@ escape-app/
    MONAD_RPC_URL=https://rpc.monad.xyz
    TRADE_ESCROW_FACTORY_ADDRESS=0x...
    USDC_ADDRESS=0x...
+   ZERO_X_API_KEY=your-0x-api-key
    PORT=3001
    FRONTEND_URL=http://localhost:3000
    ```
@@ -112,7 +113,7 @@ After deployment, update the contract addresses in the environment files.
 
 - **Frontend**: Next.js 14, React 18, TailwindCSS, Framer Motion
 - **Backend**: Fastify, Pino logger
-- **Blockchain**: viem, Privy
+- **Blockchain**: viem, Privy, 0x Swap API
 - **Contracts**: Solidity, Foundry, Solady
 
 ## License

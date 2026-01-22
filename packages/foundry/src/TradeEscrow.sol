@@ -6,20 +6,6 @@ import "lib/solady/src/utils/SafeTransferLib.sol";
 import "src/TradeData.sol";
 import "src/TradeEscrowFactory.sol";
 
-interface ISwapRouter {
-    struct ExactInputSingleParams {
-        address tokenIn;
-        address tokenOut;
-        uint24 fee;
-        address recipient;
-        uint256 amountIn;
-        uint256 amountOutMinimum;
-        uint160 sqrtPriceLimitX96;
-    }
-
-    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
-}
-
 contract TradeEscrow {
     ///// ERRORS /////
 
@@ -35,6 +21,8 @@ contract TradeEscrow {
     error TradeNotExpired();
     error AlreadyWithdrawn();
     error NothingToWithdraw();
+    error SwapFailed();
+    error InsufficientOutput();
 
     ///// EVENTS /////
 
@@ -44,8 +32,8 @@ contract TradeEscrow {
 
     ///// CONSTANTS /////
 
-    // Uniswap V3 SwapRouter02 on Monad
-    address public constant UNISWAP_V3_ROUTER = 0xfE31F71C1b106EAc32F1A19239c9a9A72ddfb900;
+    // 0x AllowanceHolder on Monad (Cancun hardfork chains)
+    address public constant ZERO_X_ALLOWANCE_HOLDER = 0x0000000000001fF3684f28c67538d4D072C22734;
 
     ///// IMMUTABLES /////
 
@@ -73,9 +61,64 @@ contract TradeEscrow {
         factory = _factory;
     }
 
+    ///// INTERNAL SWAP HELPER /////
+
+    /// @notice Execute a swap via 0x protocol
+    /// @param tokenIn The token to sell
+    /// @param tokenOut The token to buy
+    /// @param amountIn The amount of tokenIn to sell
+    /// @param amountOutMin The minimum amount of tokenOut to receive
+    /// @param swapTarget The 0x Settler contract address (from quote response)
+    /// @param swapCallData The swap calldata (from quote response)
+    /// @return amountOut The actual amount of tokenOut received
+    function _executeSwap(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address swapTarget,
+        bytes calldata swapCallData
+    ) internal returns (uint256 amountOut) {
+        // Record balances before swap
+        uint256 tokenInBefore = ERC20(tokenIn).balanceOf(address(this));
+        uint256 tokenOutBefore = ERC20(tokenOut).balanceOf(address(this));
+
+        // Approve 0x AllowanceHolder to spend tokenIn
+        // Reset to 0 first for USDT-like tokens that require it
+        SafeTransferLib.safeApprove(tokenIn, ZERO_X_ALLOWANCE_HOLDER, 0);
+        SafeTransferLib.safeApprove(tokenIn, ZERO_X_ALLOWANCE_HOLDER, amountIn);
+
+        // Execute swap via 0x Settler
+        (bool success, ) = swapTarget.call(swapCallData);
+        if (!success) {
+            revert SwapFailed();
+        }
+
+        // Calculate balances after swap
+        uint256 tokenInAfter = ERC20(tokenIn).balanceOf(address(this));
+        uint256 tokenOutAfter = ERC20(tokenOut).balanceOf(address(this));
+
+        // Verify output meets minimum
+        amountOut = tokenOutAfter - tokenOutBefore;
+        if (amountOut < amountOutMin) {
+            revert InsufficientOutput();
+        }
+
+        // Reset approval to 0 for safety
+        SafeTransferLib.safeApprove(tokenIn, ZERO_X_ALLOWANCE_HOLDER, 0);
+    }
+
     ///// BUY /////
 
-    function buy(uint256 amountOutMin, uint24 poolFee) external {
+    /// @notice Fund the trade by providing the funder's 80% contribution and executing the buy swap
+    /// @param amountOutMin Minimum amount of buyToken to receive (slippage protection)
+    /// @param swapTarget The 0x Settler contract address (from quote response)
+    /// @param swapCallData The swap calldata (from quote response)
+    function buy(
+        uint256 amountOutMin,
+        address swapTarget,
+        bytes calldata swapCallData
+    ) external {
         // Fetch trade data from factory
         TradeData memory td = TradeEscrowFactory(factory).getTradeEscrowData(address(this));
 
@@ -101,35 +144,30 @@ contract TradeEscrow {
         // Interactions: pull funder's 80% contribution
         SafeTransferLib.safeTransferFrom(td.sellToken, msg.sender, address(this), funderContribution);
 
-        // Approve router to spend sell tokens
-        SafeTransferLib.safeApprove(td.sellToken, UNISWAP_V3_ROUTER, totalSellIn);
-
-        // Get buyToken balance before swap
-        uint256 buyBalanceBefore = ERC20(td.buyToken).balanceOf(address(this));
-
-        // Execute swap via Uniswap V3
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: td.sellToken,
-            tokenOut: td.buyToken,
-            fee: poolFee,
-            recipient: address(this),
-            amountIn: totalSellIn,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: 0
-        });
-
-        ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(params);
-
-        // Calculate buyToken amount received
-        uint256 buyBalanceAfter = ERC20(td.buyToken).balanceOf(address(this));
-        buyTokenAmount = buyBalanceAfter - buyBalanceBefore;
+        // Execute swap via 0x
+        buyTokenAmount = _executeSwap(
+            td.sellToken,
+            td.buyToken,
+            totalSellIn,
+            amountOutMin,
+            swapTarget,
+            swapCallData
+        );
 
         emit BuyPerformed(funder, totalSellIn, buyTokenAmount);
     }
 
     ///// SELL /////
 
-    function sell(uint256 amountOutMin, uint24 poolFee) external {
+    /// @notice Sell the buyToken back to sellToken and compute payouts
+    /// @param amountOutMin Minimum amount of sellToken to receive (slippage protection)
+    /// @param swapTarget The 0x Settler contract address (from quote response)
+    /// @param swapCallData The swap calldata (from quote response)
+    function sell(
+        uint256 amountOutMin,
+        address swapTarget,
+        bytes calldata swapCallData
+    ) external {
         // Fetch trade data from factory
         TradeData memory td = TradeEscrowFactory(factory).getTradeEscrowData(address(this));
 
@@ -154,28 +192,15 @@ contract TradeEscrow {
         // Get current buyToken balance (use actual balance, not stored amount)
         uint256 buyTokenBalance = ERC20(td.buyToken).balanceOf(address(this));
 
-        // Approve router to spend buyToken
-        SafeTransferLib.safeApprove(td.buyToken, UNISWAP_V3_ROUTER, buyTokenBalance);
-
-        // Get sellToken balance before swap
-        uint256 sellBalanceBefore = ERC20(td.sellToken).balanceOf(address(this));
-
-        // Execute swap via Uniswap V3
-        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter.ExactInputSingleParams({
-            tokenIn: td.buyToken,
-            tokenOut: td.sellToken,
-            fee: poolFee,
-            recipient: address(this),
-            amountIn: buyTokenBalance,
-            amountOutMinimum: amountOutMin,
-            sqrtPriceLimitX96: 0
-        });
-
-        ISwapRouter(UNISWAP_V3_ROUTER).exactInputSingle(params);
-
-        // Calculate sellToken amount received
-        uint256 sellBalanceAfter = ERC20(td.sellToken).balanceOf(address(this));
-        finalSellAmount = sellBalanceAfter - sellBalanceBefore;
+        // Execute swap via 0x
+        finalSellAmount = _executeSwap(
+            td.buyToken,
+            td.sellToken,
+            buyTokenBalance,
+            amountOutMin,
+            swapTarget,
+            swapCallData
+        );
 
         // Compute payouts based on profit/loss
         _computePayouts();
@@ -196,15 +221,8 @@ contract TradeEscrow {
         if (R >= S) {
             // Profit scenario
             uint256 profit = R - S;
-            // Proposer gets original 20% + 30% of profit (10% carry + 20% share)
-            // Actually per requirements: proposer gets 30% of total return, funder gets 70%
-            // Wait, re-reading: "If profit, Bob gets his $20 + $10 carry" for 10% profit
-            // $20 is his 20% of $100 profit = $20, plus $10 carry (10% of $100 profit)
-            // So proposer gets: 20% of profit + 10% carry = 30% of profit
-            // Funder gets: 70% of profit + their original 80% minus the 10% carry to proposer
-            // Let me re-read: "Bob gets his $20 + $10 carry, and Alice gets $70"
-            // Total $100 profit distributed: Bob $30, Alice $70
-            // So proposer gets 30% of profit, funder gets 70% of profit
+            // Proposer gets 30% of profit (20% share + 10% carry)
+            // Funder gets 70% of profit
             // Plus they each get their principal back
             proposerPayout = P + (profit * 30) / 100;
             funderPayout = R - proposerPayout;

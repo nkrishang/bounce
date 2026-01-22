@@ -1,10 +1,12 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, Loader2, TrendingDown } from 'lucide-react';
+import { X, AlertTriangle, Loader2, TrendingDown, Check, XCircle } from 'lucide-react';
 import { type TradeView, type TokenMeta, formatAddress } from '@escape/shared';
 import { formatUnits } from 'viem';
 import { useSellTrade } from '@/hooks/use-sell-trade';
+import { parseTransactionError } from '@/lib/parse-transaction-error';
 
 interface SellModalProps {
   trade: TradeView;
@@ -14,7 +16,17 @@ interface SellModalProps {
 }
 
 export function SellModal({ trade, buyTokenMeta, open, onClose }: SellModalProps) {
-  const { sellTrade, isLoading, step, error } = useSellTrade();
+  const { sellTrade, isLoading, step } = useSellTrade();
+  const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null);
+
+  useEffect(() => {
+    if (step === 'success') {
+      const timer = setTimeout(() => {
+        onClose();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [step, onClose]);
 
   const totalPosition = formatUnits(BigInt(trade.data.sellAmount) * 5n, 6);
   const buyTokenAmount = formatUnits(
@@ -23,14 +35,17 @@ export function SellModal({ trade, buyTokenMeta, open, onClose }: SellModalProps
   );
 
   const handleSell = async () => {
+    setSubmitError(null);
     try {
       await sellTrade({
         escrowAddress: trade.escrow,
         buyToken: trade.data.buyToken,
+        sellToken: trade.data.sellToken,
+        buyTokenAmount: BigInt(trade.state.buyTokenAmount || '0'),
       });
-      onClose();
     } catch (err) {
       console.error('Failed to sell trade:', err);
+      setSubmitError(parseTransactionError(err));
     }
   };
 
@@ -49,9 +64,9 @@ export function SellModal({ trade, buyTokenMeta, open, onClose }: SellModalProps
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md z-50"
+            className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none"
           >
-            <div className="bg-muted border border-border rounded-xl shadow-2xl overflow-hidden">
+            <div className="bg-muted border border-border rounded-xl shadow-2xl overflow-hidden w-full max-w-md pointer-events-auto">
               <div className="flex items-center justify-between p-4 border-b border-border">
                 <h2 className="text-lg font-semibold">Sell Position</h2>
                 <button
@@ -100,34 +115,81 @@ export function SellModal({ trade, buyTokenMeta, open, onClose }: SellModalProps
                   </div>
                 </div>
 
-                {error && (
-                  <div className="p-3 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm">
-                    {error}
-                  </div>
-                )}
+                <AnimatePresence mode="wait">
+                  {submitError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="p-4 rounded-lg bg-danger/10 border border-danger/20"
+                    >
+                      <div className="flex items-start gap-3">
+                        <XCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
+                        <div className="text-sm">
+                          <p className="font-medium text-danger">{submitError.title}</p>
+                          <p className="text-danger/80 mt-1">{submitError.message}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 <div className="grid grid-cols-2 gap-3">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={onClose}
-                    className="py-3 rounded-lg border border-border font-medium hover:bg-background transition-colors"
+                    disabled={isLoading || step === 'success'}
+                    className="py-3 rounded-lg border border-border font-medium hover:bg-background transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancel
                   </motion.button>
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={!isLoading && step !== 'success' ? { scale: 1.02 } : {}}
+                    whileTap={!isLoading && step !== 'success' ? { scale: 0.98 } : {}}
+                    animate={
+                      submitError
+                        ? {
+                            x: [0, -8, 8, -8, 8, -4, 4, 0],
+                            transition: { duration: 0.5 },
+                          }
+                        : step === 'success'
+                        ? {
+                            scale: [1, 1.02, 1],
+                            transition: { duration: 0.3 },
+                          }
+                        : {}
+                    }
                     onClick={handleSell}
-                    disabled={isLoading}
-                    className="py-3 rounded-lg bg-warning text-black font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    disabled={isLoading || step === 'success'}
+                    className={`py-3 rounded-lg font-medium disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors ${
+                      step === 'success'
+                        ? 'bg-green-600 text-white'
+                        : submitError
+                        ? 'bg-danger text-white'
+                        : 'bg-warning text-black disabled:opacity-50'
+                    }`}
                   >
-                    {isLoading ? (
+                    {step === 'success' ? (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="flex items-center gap-2"
+                      >
+                        <Check className="w-5 h-5" />
+                        Sold!
+                      </motion.div>
+                    ) : isLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        {step === 'approve' && 'Approving...'}
+                        {step === 'fetching-quote' && 'Finding best route...'}
                         {step === 'sell' && 'Selling...'}
                         {step === 'confirming' && 'Confirming...'}
+                      </>
+                    ) : submitError ? (
+                      <>
+                        <XCircle className="w-5 h-5" />
+                        Try Again
                       </>
                     ) : (
                       'Confirm Sell'

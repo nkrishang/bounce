@@ -2,14 +2,20 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Coins, Clock, FileText, AlertCircle, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, Coins, Clock, FileText, AlertCircle, Check, Loader2, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { useCreateTrade } from '@/hooks/use-create-trade';
-import { formatUnits, parseUnits } from 'viem';
+import { parseUnits } from 'viem';
+import { TokenSelector } from '@/components/token-selector';
+import { ContributionInput } from '@/components/contribution-input';
+import { parseTransactionError } from '@/lib/parse-transaction-error';
+import type { TokenInfo } from '@/hooks/use-token-list';
+
+const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS;
 
 const EXPIRATION_OPTIONS = [
   { label: '5 minutes', value: 5 * 60 },
@@ -25,9 +31,25 @@ export default function CreateTradePage() {
   const { createTrade, isLoading, step, error } = useCreateTrade();
 
   const [buyToken, setBuyToken] = useState('');
+  const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(null);
   const [sellAmount, setSellAmount] = useState('');
   const [expirationSeconds, setExpirationSeconds] = useState(EXPIRATION_OPTIONS[2].value);
   const [thesis, setThesis] = useState('');
+  const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null);
+
+  useEffect(() => {
+    if (step === 'success') {
+      const timer = setTimeout(() => {
+        router.push('/my-trades');
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [step, router]);
+
+  const handleTokenChange = (tokenAddress: string, token?: TokenInfo) => {
+    setBuyToken(tokenAddress);
+    setSelectedToken(token ?? null);
+  };
 
   if (!isAuthenticated) {
     return (
@@ -59,6 +81,8 @@ export default function CreateTradePage() {
     e.preventDefault();
     if (!buyToken || !sellAmount || !address) return;
 
+    setSubmitError(null);
+
     try {
       await createTrade({
         buyToken: buyToken as `0x${string}`,
@@ -66,9 +90,9 @@ export default function CreateTradePage() {
         expirationSeconds,
         metadataUri: thesis ? JSON.stringify({ thesis }) : '',
       });
-      router.push('/my-trades');
     } catch (err) {
       console.error('Failed to create trade:', err);
+      setSubmitError(parseTransactionError(err));
     }
   };
 
@@ -105,38 +129,21 @@ export default function CreateTradePage() {
               <Coins className="w-4 h-4 text-muted-foreground" />
               Token to Buy
             </label>
-            <input
-              type="text"
-              placeholder="0x... (token contract address)"
+            <TokenSelector
               value={buyToken}
-              onChange={(e) => setBuyToken(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg bg-background border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
-              required
+              onChange={handleTokenChange}
+              usdcAddress={USDC_ADDRESS}
             />
             <p className="text-xs text-muted-foreground">
-              Enter the contract address of the token you want to purchase
+              Select from the list or add a custom token address
             </p>
           </div>
 
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <Coins className="w-4 h-4 text-muted-foreground" />
-              Your Contribution (USDC)
-            </label>
-            <input
-              type="number"
-              placeholder="100"
-              value={sellAmount}
-              onChange={(e) => setSellAmount(e.target.value)}
-              min="0"
-              step="0.01"
-              className="w-full px-4 py-3 rounded-lg bg-background border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              This is your 20% stake. You&apos;ll ask funders for 4x this amount.
-            </p>
-          </div>
+          <ContributionInput
+            value={sellAmount}
+            onChange={setSellAmount}
+            address={address}
+          />
 
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-medium">
@@ -166,16 +173,24 @@ export default function CreateTradePage() {
               <FileText className="w-4 h-4 text-muted-foreground" />
               Thesis (Optional)
             </label>
+            <p className="text-xs text-muted-foreground">
+              Funders will see this thesis if they click on your proposed trade.
+            </p>
             <textarea
-              placeholder="Why is this a good trade? (max 50 words)"
+              placeholder="Why is this a good trade?"
               value={thesis}
-              onChange={(e) => setThesis(e.target.value)}
-              maxLength={300}
-              rows={3}
+              onChange={(e) => {
+                const sanitized = e.target.value
+                  .replace(/<[^>]*>/g, '')
+                  .replace(/[<>]/g, '');
+                setThesis(sanitized.slice(0, 100));
+              }}
+              maxLength={100}
+              rows={2}
               className="w-full px-4 py-3 rounded-lg bg-background border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-none"
             />
             <p className="text-xs text-muted-foreground text-right">
-              {thesis.split(/\s+/).filter(Boolean).length}/50 words
+              {thesis.length}/100 characters
             </p>
           </div>
         </div>
@@ -188,6 +203,21 @@ export default function CreateTradePage() {
         >
           <h3 className="font-medium">Trade Summary</h3>
           <div className="space-y-2 text-sm">
+            {selectedToken && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Token</span>
+                <div className="flex items-center gap-2">
+                  {selectedToken.logoURI && (
+                    <img
+                      src={selectedToken.logoURI}
+                      alt={selectedToken.symbol}
+                      className="w-4 h-4 rounded-full"
+                    />
+                  )}
+                  <span className="font-medium">{selectedToken.symbol}</span>
+                </div>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Your Stake (20%)</span>
               <span className="font-mono">{sellAmount || '0'} USDC</span>
@@ -216,25 +246,71 @@ export default function CreateTradePage() {
           </div>
         </div>
 
-        {error && (
-          <div className="p-4 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm">
-            {error}
-          </div>
-        )}
+        <AnimatePresence mode="wait">
+          {submitError && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="p-4 rounded-lg bg-danger/10 border border-danger/20"
+            >
+              <div className="flex items-start gap-3">
+                <XCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium text-danger">{submitError.title}</p>
+                  <p className="text-danger/80 mt-1">{submitError.message}</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <motion.button
-          whileHover={{ scale: 1.01 }}
-          whileTap={{ scale: 0.99 }}
+          whileHover={!isLoading && step !== 'success' ? { scale: 1.01 } : {}}
+          whileTap={!isLoading && step !== 'success' ? { scale: 0.99 } : {}}
+          animate={
+            submitError
+              ? {
+                  x: [0, -8, 8, -8, 8, -4, 4, 0],
+                  transition: { duration: 0.5 },
+                }
+              : step === 'success'
+              ? {
+                  scale: [1, 1.02, 1],
+                  transition: { duration: 0.3 },
+                }
+              : {}
+          }
           type="submit"
-          disabled={isLoading || !buyToken || !sellAmount}
-          className="w-full py-4 rounded-lg bg-primary text-primary-foreground font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          disabled={isLoading || !buyToken || !sellAmount || step === 'success'}
+          className={`w-full py-4 rounded-lg font-medium disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors ${
+            step === 'success'
+              ? 'bg-green-600 text-white'
+              : submitError
+              ? 'bg-danger text-white'
+              : 'bg-primary text-primary-foreground disabled:opacity-50'
+          }`}
         >
-          {isLoading ? (
+          {step === 'success' ? (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="flex items-center gap-2"
+            >
+              <Check className="w-5 h-5" />
+              Trade Created!
+            </motion.div>
+          ) : isLoading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
               {step === 'approve' && 'Approving USDC...'}
               {step === 'create' && 'Creating Trade...'}
               {step === 'confirming' && 'Confirming...'}
+            </>
+          ) : submitError ? (
+            <>
+              <XCircle className="w-5 h-5" />
+              Try Again
             </>
           ) : (
             <>

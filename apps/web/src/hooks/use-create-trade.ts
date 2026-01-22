@@ -10,7 +10,7 @@ import { TradeEscrowFactoryAbi, ERC20Abi } from '@escape/contracts';
 const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_TRADE_ESCROW_FACTORY_ADDRESS as Address;
 const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;
 
-type Step = 'idle' | 'approve' | 'create' | 'confirming';
+type Step = 'idle' | 'approve' | 'create' | 'confirming' | 'success';
 
 interface CreateTradeParams {
   buyToken: Address;
@@ -28,8 +28,8 @@ export function useCreateTrade() {
 
   const createTrade = useCallback(
     async (params: CreateTradeParams) => {
-      const wallet = wallets[0];
-      if (!wallet) throw new Error('No wallet connected');
+      const wallet = wallets.find((w) => w.walletClientType === 'privy');
+      if (!wallet) throw new Error('No Privy embedded wallet connected');
 
       setIsLoading(true);
       setError(null);
@@ -77,15 +77,14 @@ export function useCreateTrade() {
         await queryClient.invalidateQueries({ queryKey: ['trades'] });
         await queryClient.invalidateQueries({ queryKey: ['userTrades'] });
 
-        setStep('idle');
+        setStep('success');
         return createHash;
       } catch (err) {
         console.error('Create trade error:', err);
         setError(err instanceof Error ? err.message : 'Failed to create trade');
-        throw err;
-      } finally {
         setIsLoading(false);
         setStep('idle');
+        throw err;
       }
     },
     [wallets, queryClient]

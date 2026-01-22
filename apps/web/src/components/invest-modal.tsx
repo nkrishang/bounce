@@ -1,23 +1,37 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, Loader2, Check, User, Clock, TrendingUp, Shield } from 'lucide-react';
+import { X, AlertTriangle, Loader2, Check, User, Clock, TrendingUp, Shield, ExternalLink, XCircle } from 'lucide-react';
 import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@escape/shared';
 import { formatUnits } from 'viem';
 import { useAuth } from '@/hooks/use-auth';
 import { useFundTrade } from '@/hooks/use-fund-trade';
 import { CountdownTimer } from './countdown-timer';
+import { LinkifyText } from './linkify-text';
+import { parseTransactionError } from '@/lib/parse-transaction-error';
 
 interface InvestModalProps {
   trade: TradeView;
   buyTokenMeta?: TokenMeta | null;
   open: boolean;
   onClose: () => void;
+  previewMode?: boolean;
 }
 
-export function InvestModal({ trade, buyTokenMeta, open, onClose }: InvestModalProps) {
+export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = false }: InvestModalProps) {
   const { isAuthenticated, login, address } = useAuth();
-  const { fundTrade, isLoading, step, error } = useFundTrade();
+  const { fundTrade, isLoading, step } = useFundTrade();
+  const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null);
+
+  useEffect(() => {
+    if (step === 'success') {
+      const timer = setTimeout(() => {
+        onClose();
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [step, onClose]);
 
   const sellAmount = formatUnits(BigInt(trade.data.sellAmount), 6);
   const fundingNeeded = formatUnits(
@@ -36,15 +50,18 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose }: InvestModalP
 
   const handleInvest = async () => {
     if (!address) return;
+    setSubmitError(null);
+
     try {
       await fundTrade({
         escrowAddress: trade.escrow,
         funderContribution: BigInt(calculateFunderContribution(trade.data.sellAmount)),
         sellToken: trade.data.sellToken,
+        buyToken: trade.data.buyToken,
       });
-      onClose();
     } catch (err) {
       console.error('Failed to fund trade:', err);
+      setSubmitError(parseTransactionError(err));
     }
   };
 
@@ -63,9 +80,9 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose }: InvestModalP
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg z-50 max-h-[90vh] overflow-y-auto"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div className="bg-muted border border-border rounded-xl shadow-2xl overflow-hidden">
+            <div className="bg-muted border border-border rounded-xl shadow-2xl overflow-hidden w-full max-w-lg max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between p-4 border-b border-border">
                 <h2 className="text-lg font-semibold">Invest in Trade</h2>
                 <button
@@ -78,11 +95,22 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose }: InvestModalP
 
               <div className="p-6 space-y-6">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                    <span className="text-xl font-bold text-primary">
-                      {buyTokenMeta?.symbol?.[0] || '?'}
-                    </span>
-                  </div>
+                  {buyTokenMeta?.logoUrl ? (
+                    <img
+                      src={buyTokenMeta.logoUrl}
+                      alt={buyTokenMeta.symbol}
+                      className="w-12 h-12 rounded-xl"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                      <span className="text-xl font-bold text-primary">
+                        {buyTokenMeta?.symbol?.[0] || '?'}
+                      </span>
+                    </div>
+                  )}
                   <div>
                     <h3 className="text-xl font-bold">
                       {buyTokenMeta?.symbol || formatAddress(trade.data.buyToken)}
@@ -94,7 +122,9 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose }: InvestModalP
                 {thesis && (
                   <div className="p-4 rounded-lg bg-background border border-border">
                     <p className="text-sm text-muted-foreground mb-1">Proposer&apos;s Thesis</p>
-                    <p className="text-sm italic">&ldquo;{thesis}&rdquo;</p>
+                    <p className="text-sm italic">
+                      &ldquo;<LinkifyText text={thesis} />&rdquo;
+                    </p>
                   </div>
                 )}
 
@@ -104,7 +134,15 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose }: InvestModalP
                       <User className="w-4 h-4" />
                       <span className="text-xs">Proposer</span>
                     </div>
-                    <p className="font-mono text-sm">{formatAddress(trade.data.proposer)}</p>
+                    <a
+                      href={`https://monadexplorer.com/address/${trade.data.proposer}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-sm text-primary hover:underline transition-colors inline-flex items-center gap-1"
+                    >
+                      {formatAddress(trade.data.proposer)}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   </div>
                   <div className="p-4 rounded-lg bg-background">
                     <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -162,13 +200,30 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose }: InvestModalP
                   </p>
                 </div>
 
-                {error && (
-                  <div className="p-3 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm">
-                    {error}
-                  </div>
-                )}
+                <AnimatePresence mode="wait">
+                  {submitError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="p-4 rounded-lg bg-danger/10 border border-danger/20"
+                    >
+                      <div className="flex items-start gap-3">
+                        <XCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
+                        <div className="text-sm">
+                          <p className="font-medium text-danger">{submitError.title}</p>
+                          <p className="text-danger/80 mt-1">{submitError.message}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-                {!isAuthenticated ? (
+                {previewMode ? (
+                  <div className="w-full py-4 rounded-lg bg-muted-foreground/20 text-muted-foreground font-medium text-center">
+                    Preview Mode
+                  </div>
+                ) : !isAuthenticated ? (
                   <motion.button
                     whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.99 }}
@@ -179,18 +234,52 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose }: InvestModalP
                   </motion.button>
                 ) : (
                   <motion.button
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
+                    whileHover={!isLoading && step !== 'success' ? { scale: 1.01 } : {}}
+                    whileTap={!isLoading && step !== 'success' ? { scale: 0.99 } : {}}
+                    animate={
+                      submitError
+                        ? {
+                            x: [0, -8, 8, -8, 8, -4, 4, 0],
+                            transition: { duration: 0.5 },
+                          }
+                        : step === 'success'
+                        ? {
+                            scale: [1, 1.02, 1],
+                            transition: { duration: 0.3 },
+                          }
+                        : {}
+                    }
                     onClick={handleInvest}
-                    disabled={isLoading}
-                    className="w-full py-4 rounded-lg bg-primary text-primary-foreground font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    disabled={isLoading || step === 'success'}
+                    className={`w-full py-4 rounded-lg font-medium disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors ${
+                      step === 'success'
+                        ? 'bg-green-600 text-white'
+                        : submitError
+                        ? 'bg-danger text-white'
+                        : 'bg-primary text-primary-foreground disabled:opacity-50'
+                    }`}
                   >
-                    {isLoading ? (
+                    {step === 'success' ? (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="flex items-center gap-2"
+                      >
+                        <Check className="w-5 h-5" />
+                        Trade Funded!
+                      </motion.div>
+                    ) : isLoading ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
                         {step === 'approve' && 'Approving USDC...'}
+                        {step === 'fetching-quote' && 'Finding best route...'}
                         {step === 'buy' && 'Executing Trade...'}
                         {step === 'confirming' && 'Confirming...'}
+                      </>
+                    ) : submitError ? (
+                      <>
+                        <XCircle className="w-5 h-5" />
+                        Try Again
                       </>
                     ) : (
                       <>

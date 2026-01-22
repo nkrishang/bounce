@@ -2,19 +2,15 @@ import type { Address } from './types.js';
 
 export const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
 
-export const UNISWAP_POOL_FEES = {
-  LOWEST: 100,
-  LOW: 500,
-  MEDIUM: 3000,
-  HIGH: 10000,
-} as const;
-
-export const DEFAULT_POOL_FEE = UNISWAP_POOL_FEES.MEDIUM;
-
-export const DEFAULT_SLIPPAGE_PERCENT = 1;
+export const DEFAULT_SLIPPAGE_BPS = 100; // 1%
 
 export const PROPOSER_PROFIT_SHARE_BPS = 3000;
 export const FUNDER_PROFIT_SHARE_BPS = 7000;
 
 export const PROPOSER_CONTRIBUTION_PERCENT = 20;
 export const FUNDER_CONTRIBUTION_PERCENT = 80;
+
+export const MONAD_TOKENS = {
+  USDC: '0x00000000eFE302BEAA2b3e6e1b18d08D69a9012a' as Address,
+  WMON: '0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A' as Address,
+} as const;

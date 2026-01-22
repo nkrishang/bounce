@@ -3,16 +3,40 @@
 import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { createWalletClient, custom, type Address } from 'viem';
+import { createWalletClient, createPublicClient, custom, http, type Address } from 'viem';
 import { monad } from 'viem/chains';
 import { TradeEscrowAbi } from '@escape/contracts';
-import { DEFAULT_POOL_FEE } from '@escape/shared';
+import type { SwapQuote } from '@escape/shared';
+import { api } from '../lib/api';
 
-type Step = 'idle' | 'approve' | 'sell' | 'confirming';
+type Step = 'idle' | 'fetching-quote' | 'sell' | 'confirming' | 'success';
 
 interface SellTradeParams {
   escrowAddress: Address;
   buyToken: Address;
+  sellToken: Address;
+  buyTokenAmount: bigint; // The amount of buyToken the escrow holds
+}
+
+async function getSwapQuote(params: {
+  sellToken: Address;
+  buyToken: Address;
+  sellAmount: string;
+  taker: Address;
+  slippageBps?: number;
+}): Promise<SwapQuote> {
+  const queryParams = new URLSearchParams({
+    sellToken: params.sellToken,
+    buyToken: params.buyToken,
+    sellAmount: params.sellAmount,
+    taker: params.taker,
+  });
+  
+  if (params.slippageBps) {
+    queryParams.append('slippageBps', params.slippageBps.toString());
+  }
+
+  return api.get<SwapQuote>(`/swap/quote?${queryParams.toString()}`);
 }
 
 export function useSellTrade() {
@@ -24,8 +48,8 @@ export function useSellTrade() {
 
   const sellTrade = useCallback(
     async (params: SellTradeParams) => {
-      const wallet = wallets[0];
-      if (!wallet) throw new Error('No wallet connected');
+      const wallet = wallets.find((w) => w.walletClientType === 'privy');
+      if (!wallet) throw new Error('No Privy embedded wallet connected');
 
       setIsLoading(true);
       setError(null);
@@ -37,33 +61,64 @@ export function useSellTrade() {
           transport: custom(provider),
         });
 
+        const publicClient = createPublicClient({
+          chain: monad,
+          transport: http(),
+        });
+
         const [address] = await walletClient.getAddresses();
 
+        // Step 1: Get swap quote from 0x API
+        // For sell, we're swapping buyToken -> sellToken
+        setStep('fetching-quote');
+        
+        const quote = await getSwapQuote({
+          sellToken: params.buyToken, // We're selling the buyToken
+          buyToken: params.sellToken, // To get back sellToken
+          sellAmount: params.buyTokenAmount.toString(),
+          taker: params.escrowAddress, // Escrow is the one making the swap
+          slippageBps: 100, // 1% slippage
+        });
+
+        console.log('0x Quote received for sell:', {
+          sellAmount: quote.sellAmount,
+          buyAmount: quote.buyAmount,
+          minBuyAmount: quote.minBuyAmount,
+          route: quote.route.fills.map(f => f.source).join(' -> '),
+        });
+
+        // Step 2: Execute sell with 0x quote
         setStep('sell');
         const sellHash = await walletClient.writeContract({
           address: params.escrowAddress,
           abi: TradeEscrowAbi,
           functionName: 'sell',
-          args: [0n, DEFAULT_POOL_FEE],
+          args: [
+            BigInt(quote.minBuyAmount),
+            quote.swapTarget,
+            quote.swapCallData,
+          ],
           account: address,
+          gas: 2000000n,
         });
 
         console.log('Sell tx:', sellHash);
 
         setStep('confirming');
+        await publicClient.waitForTransactionReceipt({ hash: sellHash });
+
         await queryClient.invalidateQueries({ queryKey: ['trades'] });
         await queryClient.invalidateQueries({ queryKey: ['userTrades'] });
         await queryClient.invalidateQueries({ queryKey: ['trade', params.escrowAddress] });
 
-        setStep('idle');
+        setStep('success');
+        setIsLoading(false);
         return sellHash;
       } catch (err) {
         console.error('Sell trade error:', err);
         setError(err instanceof Error ? err.message : 'Failed to sell trade');
-        throw err;
-      } finally {
         setIsLoading(false);
-        setStep('idle');
+        throw err;
       }
     },
     [wallets, queryClient]
