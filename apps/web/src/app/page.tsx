@@ -22,18 +22,8 @@ export default function HomePage() {
             className="space-y-8"
           >
             <div className="space-y-4">
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>Stake your conviction. Capital will follow.</span>
-              </motion.div>
-
-              <h1 className="text-5xl lg:text-6xl font-bold tracking-tight">
-                <span className="gradient-text">Next-Gen Betting</span>
+              <h1 className="text-3xl lg:text-5xl lg:font-semibold tracking-tight">
+                <span className="gradient-text">Conviction Meets Capital</span>
               </h1>
 
               <p className="text-lg text-muted-foreground max-w-md">

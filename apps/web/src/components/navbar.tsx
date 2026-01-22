@@ -1,23 +1,31 @@
-'use client';
+"use client";
 
-import { motion } from 'framer-motion';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Compass, PlusCircle, Briefcase, Wallet, LogOut, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
-import { useAuth } from '@/hooks/use-auth';
-import { WalletModal } from './wallet-modal';
-import { formatAddress } from '@thesis/shared';
+import { motion } from "framer-motion";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Compass,
+  PlusCircle,
+  Briefcase,
+  Wallet,
+  LogOut,
+  ChevronDown,
+} from "lucide-react";
+import { useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { WalletModal } from "./wallet-modal";
+import { formatAddress } from "@thesis/shared";
 
 const navLinks = [
-  { href: '/', label: 'Explore', icon: Compass },
-  { href: '/my-trades', label: 'My Trades', icon: Briefcase },
-  { href: '/create-trade', label: 'Create', icon: PlusCircle },
+  { href: "/", label: "Explore", icon: Compass },
+  { href: "/my-trades", label: "My Trades", icon: Briefcase },
+  { href: "/create-trade", label: "Create", icon: PlusCircle },
 ];
 
 export function Navbar() {
   const pathname = usePathname();
-  const { isReady, isAuthenticated, login, logout, address, walletsLoading } = useAuth();
+  const { isReady, isAuthenticated, login, logout, address, walletsLoading } =
+    useAuth();
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -27,14 +35,16 @@ export function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-8">
-              <Link href="/" className="flex items-center gap-2">
+              <Link href="/" className="flex items-center gap-0.5">
                 <motion.div
                   whileHover={{ rotate: 10 }}
                   className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center"
                 >
-                  <span className="text-white font-bold">E</span>
+                  <span className="text-white font-bold">T</span>
                 </motion.div>
-                <span className="font-semibold text-lg hidden sm:inline">thesis</span>
+                <span className="font-semibold text-lg hidden sm:inline">
+                  Thesis
+                </span>
               </Link>
 
               <div className="hidden md:flex items-center gap-1">
@@ -47,8 +57,8 @@ export function Navbar() {
                         whileTap={{ scale: 0.98 }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                           isActive
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
                         }`}
                       >
                         <link.icon className="w-4 h-4" />
@@ -63,7 +73,9 @@ export function Navbar() {
             <div className="flex items-center gap-3">
               {!isReady ? (
                 <div className="px-4 py-2 rounded-lg bg-muted border border-border">
-                  <span className="text-sm text-muted-foreground">Loading...</span>
+                  <span className="text-sm text-muted-foreground">
+                    Loading...
+                  </span>
                 </div>
               ) : isAuthenticated ? (
                 <div className="relative">
@@ -75,7 +87,11 @@ export function Navbar() {
                   >
                     <Wallet className="w-4 h-4 text-primary" />
                     <span className="font-mono text-sm">
-                      {walletsLoading ? 'Loading...' : address ? formatAddress(address) : 'No wallet'}
+                      {walletsLoading
+                        ? "Loading..."
+                        : address
+                          ? formatAddress(address)
+                          : "No wallet"}
                     </span>
                     <ChevronDown className="w-4 h-4 text-muted-foreground" />
                   </motion.button>
@@ -124,7 +140,10 @@ export function Navbar() {
         </div>
       </nav>
 
-      <WalletModal open={showWalletModal} onClose={() => setShowWalletModal(false)} />
+      <WalletModal
+        open={showWalletModal}
+        onClose={() => setShowWalletModal(false)}
+      />
     </>
   );
 }
