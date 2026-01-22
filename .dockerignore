@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.build
+.cache
+.pnpm-store
+.DS_Store
+.git
+.gitignore
+.env
+**/. env
+README.md
+packages/foundry
