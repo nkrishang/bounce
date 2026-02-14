@@ -1,14 +1,14 @@
 import type { Address } from './types.js';
 
-// 0x Contract Addresses for Monad (Cancun hardfork chain)
+// 0x Contract Addresses for Polygon
 export const ZERO_X_CONTRACTS = {
   // AllowanceHolder - where tokens are approved for spending
   ALLOWANCE_HOLDER: '0x0000000000001fF3684f28c67538d4D072C22734' as Address,
   // Note: Settler address is returned dynamically in quote response as transaction.to
 } as const;
 
-// Monad chain ID
-export const MONAD_CHAIN_ID = 143;
+// Polygon chain ID
+export const POLYGON_CHAIN_ID = 137;
 
 // 0x API base URL
 export const ZERO_X_API_URL = 'https://api.0x.org';

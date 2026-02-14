@@ -135,7 +135,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                       <span className="text-xs">Proposer</span>
                     </div>
                     <a
-                      href={`https://monadexplorer.com/address/${trade.data.proposer}`}
+                      href={`https://polygonscan.com/address/${trade.data.proposer}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-sm text-primary hover:underline transition-colors inline-flex items-center gap-1"

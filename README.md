@@ -1,8 +1,8 @@
-# Thesis
+# Bounce
 
 ## Overview
 
-Thesis is a DeFi application that enables collaborative trading on Monad. Trade proposers put up 20% of the position and invite funders to provide the remaining 80%.
+Bounce is a collaborative trading app for active trenchers and passive investors. Trade proposers put up 20% of the position and invite funders to provide the remaining 80%.
 
 **Profit sharing:**
 

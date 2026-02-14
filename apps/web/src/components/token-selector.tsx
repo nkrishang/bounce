@@ -7,7 +7,7 @@ import { useTokenList, type TokenInfo } from '@/hooks/use-token-list';
 import { useVerifyToken, type VerificationStatus } from '@/hooks/use-verify-token';
 import type { Address } from 'viem';
 
-const MONAD_EXPLORER_URL = 'https://monadexplorer.com';
+const POLYGON_EXPLORER_URL = 'https://polygonscan.com';
 
 interface TokenSelectorProps {
   value: string;
@@ -117,7 +117,7 @@ export function TokenSelector({ value, onChange, usdcAddress }: TokenSelectorPro
 
       {value && (
         <a
-          href={`${MONAD_EXPLORER_URL}/address/${value}`}
+          href={`${POLYGON_EXPLORER_URL}/address/${value}`}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"

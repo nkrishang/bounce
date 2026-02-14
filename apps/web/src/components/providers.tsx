@@ -3,7 +3,7 @@
 import { PrivyProvider } from "@privy-io/react-auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
-import { monad } from "viem/chains";
+import { polygon } from "viem/chains";
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "";
 
@@ -53,8 +53,8 @@ function PrivyWrapper({ children }: { children: React.ReactNode }) {
         embeddedWallets: {
           createOnLogin: "all-users",
         },
-        defaultChain: monad,
-        supportedChains: [monad],
+        defaultChain: polygon,
+        supportedChains: [polygon],
       }}
     >
       {children}

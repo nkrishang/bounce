@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, createPublicClient, custom, http, type Address } from 'viem';
-import { monad } from 'viem/chains';
+import { polygon } from 'viem/chains';
 import { TradeEscrowAbi } from '@thesis/contracts';
 import type { SwapQuote } from '@thesis/shared';
 import { api } from '../lib/api';
@@ -57,12 +57,12 @@ export function useSellTrade() {
       try {
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: monad,
+          chain: polygon,
           transport: custom(provider),
         });
 
         const publicClient = createPublicClient({
-          chain: monad,
+          chain: polygon,
           transport: http(),
         });
 

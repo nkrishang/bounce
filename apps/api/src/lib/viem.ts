@@ -1,14 +1,14 @@
 import { createPublicClient, http, type Address } from 'viem';
-import { monad } from '@thesis/contracts';
+import { polygon } from '@thesis/contracts';
 import { logger } from './logger.js';
 
-const MONAD_RPC_URL = process.env.MONAD_RPC_URL || 'https://rpc.monad.xyz';
+const POLYGON_RPC_URL = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com';
 
-logger.info({ rpcUrl: MONAD_RPC_URL }, 'Initializing viem client');
+logger.info({ rpcUrl: POLYGON_RPC_URL }, 'Initializing viem client');
 
 export const publicClient = createPublicClient({
-  chain: monad,
-  transport: http(MONAD_RPC_URL),
+  chain: polygon,
+  transport: http(POLYGON_RPC_URL),
 });
 
 export function getFactoryAddress(): Address {

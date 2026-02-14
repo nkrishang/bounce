@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, custom, type Address } from 'viem';
-import { monad } from 'viem/chains';
+import { polygon } from 'viem/chains';
 import { TradeEscrowFactoryAbi, ERC20Abi } from '@thesis/contracts';
 
 const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_TRADE_ESCROW_FACTORY_ADDRESS as Address;
@@ -37,7 +37,7 @@ export function useCreateTrade() {
       try {
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: monad,
+          chain: polygon,
           transport: custom(provider),
         });
 

@@ -23,7 +23,7 @@ interface TokenList {
 }
 
 const TOKEN_LIST_URL =
-  'https://raw.githubusercontent.com/monad-crypto/token-list/refs/heads/main/tokenlist-mainnet.json';
+  'https://tokens.coingecko.com/polygon-pos/all.json';
 
 export function useTokenList() {
   return useQuery({

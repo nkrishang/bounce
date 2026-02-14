@@ -310,7 +310,7 @@ export function TradeRow({ trade, role }: TradeRowProps) {
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Token</span>
                 <a
-                  href={`https://monadexplorer.com/address/${trade.data.buyToken}`}
+                  href={`https://polygonscan.com/address/${trade.data.buyToken}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-muted-foreground/80 hover:text-primary transition-colors inline-flex items-center gap-1"
@@ -323,7 +323,7 @@ export function TradeRow({ trade, role }: TradeRowProps) {
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Escrow</span>
                 <a
-                  href={`https://monadexplorer.com/address/${trade.escrow}`}
+                  href={`https://polygonscan.com/address/${trade.escrow}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-muted-foreground/80 hover:text-primary transition-colors inline-flex items-center gap-1"

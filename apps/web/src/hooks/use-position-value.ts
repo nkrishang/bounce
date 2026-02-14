@@ -2,9 +2,9 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, http, type Address, formatUnits } from 'viem';
-import { monad } from 'viem/chains';
+import { polygon } from 'viem/chains';
 import { ERC20Abi } from '@thesis/contracts';
-import { MONAD_TOKENS } from '@thesis/shared';
+import { POLYGON_TOKENS } from '@thesis/shared';
 import { api } from '@/lib/api';
 
 interface IndicativePriceResponse {
@@ -34,7 +34,7 @@ export interface PositionValue {
 }
 
 const publicClient = createPublicClient({
-  chain: monad,
+  chain: polygon,
   transport: http(),
 });
 
@@ -106,7 +106,7 @@ export function usePositionValue(
         // Use the new indicative-price endpoint which handles small amounts via reference pricing
         const params = new URLSearchParams({
           sellToken: buyToken,
-          buyToken: MONAD_TOKENS.USDC,
+          buyToken: POLYGON_TOKENS.USDC,
           sellAmount: tokenBalance.toString(),
           taker: escrowAddress, // Use actual escrow address, same as sell action
           tokenDecimals: buyTokenDecimals.toString(),

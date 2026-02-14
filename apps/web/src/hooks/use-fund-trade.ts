@@ -10,7 +10,7 @@ import {
   http,
   type Address,
 } from "viem";
-import { monad } from "viem/chains";
+import { polygon } from "viem/chains";
 import { TradeEscrowAbi, ERC20Abi } from "@thesis/contracts";
 import type { SwapQuote } from "@thesis/shared";
 import { api } from "../lib/api";
@@ -63,12 +63,12 @@ export function useFundTrade() {
       try {
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: monad,
+          chain: polygon,
           transport: custom(provider),
         });
 
         const publicClient = createPublicClient({
-          chain: monad,
+          chain: polygon,
           transport: http(),
         });
 

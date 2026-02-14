@@ -131,7 +131,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                       from an external wallet or exchange.
                     </p>
                     <a
-                      href={`https://monadexplorer.com/address/${displayAddress}`}
+                      href={`https://polygonscan.com/address/${displayAddress}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 text-sm text-primary hover:underline"

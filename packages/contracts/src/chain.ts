@@ -1,5 +1,5 @@
-import { monad } from 'viem/chains';
+import { polygon } from 'viem/chains';
 
-export { monad };
+export { polygon };
 
-export const MONAD_CHAIN_ID = 143;
+export const POLYGON_CHAIN_ID = 137;

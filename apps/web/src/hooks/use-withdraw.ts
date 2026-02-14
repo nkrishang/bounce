@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, custom, type Address } from 'viem';
-import { monad } from 'viem/chains';
+import { polygon } from 'viem/chains';
 import { TradeEscrowAbi } from '@thesis/contracts';
 
 export function useWithdraw() {
@@ -24,7 +24,7 @@ export function useWithdraw() {
       try {
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: monad,
+          chain: polygon,
           transport: custom(provider),
         });
 
@@ -67,7 +67,7 @@ export function useWithdraw() {
       try {
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: monad,
+          chain: polygon,
           transport: custom(provider),
         });
 

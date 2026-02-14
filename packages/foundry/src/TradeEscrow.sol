@@ -32,7 +32,7 @@ contract TradeEscrow {
 
     ///// CONSTANTS /////
 
-    // 0x AllowanceHolder on Monad (Cancun hardfork chains)
+    // 0x AllowanceHolder on Polygon
     address public constant ZERO_X_ALLOWANCE_HOLDER = 0x0000000000001fF3684f28c67538d4D072C22734;
 
     ///// IMMUTABLES /////

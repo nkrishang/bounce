@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createPublicClient, http, isAddress, type Address } from 'viem';
-import { monad } from 'viem/chains';
+import { polygon } from 'viem/chains';
 import { api } from '../lib/api';
 
 const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;
@@ -77,7 +77,7 @@ export function useVerifyToken(tokenAddress: string | undefined) {
       setTokenData(null);
 
       const client = createPublicClient({
-        chain: monad,
+        chain: polygon,
         transport: http(),
       });
 

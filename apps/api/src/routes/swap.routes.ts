@@ -2,8 +2,8 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   ZERO_X_API_URL,
   ZERO_X_CONTRACTS,
-  MONAD_CHAIN_ID,
-  MONAD_TOKENS,
+  POLYGON_CHAIN_ID,
+  POLYGON_TOKENS,
   type SwapQuote,
   type ZeroXQuoteResponse,
   type Address,
@@ -67,7 +67,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
       try {
         // Build 0x API URL with query params
         const params = new URLSearchParams({
-          chainId: MONAD_CHAIN_ID.toString(),
+          chainId: POLYGON_CHAIN_ID.toString(),
           sellToken,
           buyToken,
           sellAmount,
@@ -163,7 +163,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
 
       try {
         const params = new URLSearchParams({
-          chainId: MONAD_CHAIN_ID.toString(),
+          chainId: POLYGON_CHAIN_ID.toString(),
           sellToken,
           buyToken,
           sellAmount,
@@ -229,7 +229,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
       // Helper to fetch 0x price/quote with extensive logging
       const fetch0xPrice = async (sell: string, buy: string, amount: string): Promise<{ buyAmount: string; sellAmount: string; liquidityAvailable: boolean } | null> => {
         const params = new URLSearchParams({
-          chainId: MONAD_CHAIN_ID.toString(),
+          chainId: POLYGON_CHAIN_ID.toString(),
           sellToken: sell,
           buyToken: buy,
           sellAmount: amount,
@@ -349,7 +349,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
           referenceAmount: REFERENCE_USDC_AMOUNT,
         }, '[indicative-price] Step 2: Trying reference quote USDC → TOKEN');
         
-        const referenceQuote = await fetch0xPrice(MONAD_TOKENS.USDC, sellToken, REFERENCE_USDC_AMOUNT);
+        const referenceQuote = await fetch0xPrice(POLYGON_TOKENS.USDC, sellToken, REFERENCE_USDC_AMOUNT);
         
         logger.info({ 
           ...requestContext, 
@@ -358,29 +358,29 @@ export async function swapRoutes(fastify: FastifyInstance) {
         }, '[indicative-price] Reference quote USDC → TOKEN result');
         
         if (!referenceQuote?.liquidityAvailable || !referenceQuote.buyAmount || referenceQuote.buyAmount === '0') {
-          // Try routing through WMON: USDC -> WMON -> TOKEN
+          // Try routing through WMATIC: USDC -> WMATIC -> TOKEN
           logger.info({ 
             ...requestContext, 
             step: 'reference-wmon',
-          }, '[indicative-price] Step 3: Reference failed, trying USDC → WMON → TOKEN route');
+          }, '[indicative-price] Step 3: Reference failed, trying USDC → WMATIC → TOKEN route');
           
-          const usdcToWmon = await fetch0xPrice(MONAD_TOKENS.USDC, MONAD_TOKENS.WMON, REFERENCE_USDC_AMOUNT);
+          const usdcToWmon = await fetch0xPrice(POLYGON_TOKENS.USDC, POLYGON_TOKENS.WMATIC, REFERENCE_USDC_AMOUNT);
           
           logger.info({ 
             ...requestContext, 
             step: 'reference-wmon-1',
             result: usdcToWmon,
-          }, '[indicative-price] USDC → WMON result');
+          }, '[indicative-price] USDC → WMATIC result');
           
           if (usdcToWmon?.liquidityAvailable && usdcToWmon.buyAmount) {
-            const wmonToToken = await fetch0xPrice(MONAD_TOKENS.WMON, sellToken, usdcToWmon.buyAmount);
+            const wmonToToken = await fetch0xPrice(POLYGON_TOKENS.WMATIC, sellToken, usdcToWmon.buyAmount);
             
             logger.info({ 
               ...requestContext, 
               step: 'reference-wmon-2',
               wmonAmount: usdcToWmon.buyAmount,
               result: wmonToToken,
-            }, '[indicative-price] WMON → TOKEN result');
+            }, '[indicative-price] WMATIC → TOKEN result');
             
             if (wmonToToken?.liquidityAvailable && wmonToToken.buyAmount && wmonToToken.buyAmount !== '0') {
               // Calculate: pricePerToken = referenceUsdc / tokensReceived
@@ -414,7 +414,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
                 tokensReceived: tokensReceived.toString(),
                 pricePerToken: pricePerToken.toString(), 
                 valueUsdc: valueUsdc.toString(),
-              }, '[indicative-price] ✓ Derived price via WMON route');
+              }, '[indicative-price] ✓ Derived price via WMATIC route');
               return reply.send(result);
             }
           }
