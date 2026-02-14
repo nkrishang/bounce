@@ -1,10 +1,22 @@
 import { FastifyInstance } from 'fastify';
 import { type Address } from 'viem';
 import { getTokenMeta, getTokenBalance } from '../services/token.service.js';
+import { getTrendingTokens } from '../services/trending.service.js';
 import { isValidAddress } from '@thesis/shared';
 import { logger } from '../lib/logger.js';
 
 export async function tokenRoutes(fastify: FastifyInstance) {
+  // Must be registered before /:address to avoid param collision
+  fastify.get('/trending', async (_request, reply) => {
+    try {
+      const tokens = await getTrendingTokens();
+      return { data: tokens };
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch trending tokens');
+      reply.status(500).send({ error: 'Failed to fetch trending tokens' });
+    }
+  });
+
   fastify.get<{ Params: { address: string } }>('/:address', async (request, reply) => {
     const { address } = request.params;
 

@@ -32,7 +32,7 @@ export function TradeCard({ trade }: TradeCardProps) {
         address: tokenFromList.address,
         symbol: tokenFromList.symbol,
         name: tokenFromList.name,
-        decimals: tokenFromList.decimals,
+        decimals: buyTokenMeta?.decimals ?? 18,
         logoUrl: tokenFromList.logoURI,
       };
     }

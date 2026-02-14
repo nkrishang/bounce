@@ -1,39 +1,49 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import type { Address } from 'viem';
 
 export interface TokenInfo {
-  chainId: number;
   address: Address;
   name: string;
   symbol: string;
-  decimals: number;
   logoURI?: string;
+  priceUsd?: number | null;
+  priceChangeH24?: number | null;
+  volume24h?: number | null;
+  marketCap?: number | null;
 }
 
-interface TokenList {
-  name: string;
-  tokens: TokenInfo[];
-  version: {
-    major: number;
-    minor: number;
-    patch: number;
-  };
+interface TrendingResponse {
+  data: Array<{
+    address: string;
+    name: string;
+    symbol: string;
+    logoURI: string | null;
+    priceUsd: number | null;
+    priceChangeH24: number | null;
+    volume24h: number | null;
+    marketCap: number | null;
+  }>;
 }
-
-const TOKEN_LIST_URL =
-  'https://tokens.coingecko.com/polygon-pos/all.json';
 
 export function useTokenList() {
   return useQuery({
-    queryKey: ['tokenList'],
+    queryKey: ['trendingTokens'],
     queryFn: async (): Promise<TokenInfo[]> => {
-      const response = await fetch(TOKEN_LIST_URL);
-      if (!response.ok) throw new Error('Failed to fetch token list');
-      const data: TokenList = await response.json();
-      return data.tokens;
+      const res = await api.get<TrendingResponse>('/tokens/trending');
+      return res.data.map((t) => ({
+        address: t.address as Address,
+        name: t.name,
+        symbol: t.symbol,
+        logoURI: t.logoURI ?? undefined,
+        priceUsd: t.priceUsd,
+        priceChangeH24: t.priceChangeH24,
+        volume24h: t.volume24h,
+        marketCap: t.marketCap,
+      }));
     },
-    staleTime: 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 }

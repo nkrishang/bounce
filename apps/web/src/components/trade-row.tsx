@@ -31,7 +31,7 @@ export function TradeRow({ trade, role }: TradeRowProps) {
     );
   }, [tokenList, trade.data.buyToken]);
 
-  const tokenDecimals = tokenFromList?.decimals ?? buyTokenMeta?.decimals ?? 18;
+  const tokenDecimals = buyTokenMeta?.decimals ?? 18;
 
   const { data: positionValue, isLoading: positionLoading } = usePositionValue(
     trade.status === 'FUNDED' ? trade.escrow as Address : undefined,
@@ -46,7 +46,7 @@ export function TradeRow({ trade, role }: TradeRowProps) {
         address: tokenFromList.address,
         symbol: tokenFromList.symbol,
         name: tokenFromList.name,
-        decimals: tokenFromList.decimals,
+        decimals: buyTokenMeta?.decimals ?? 18,
         logoUrl: tokenFromList.logoURI,
       };
     }
