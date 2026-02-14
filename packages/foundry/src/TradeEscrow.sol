@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import "lib/solady/src/tokens/ERC20.sol";
-import "lib/solady/src/utils/SafeTransferLib.sol";
-import "src/TradeData.sol";
-import "src/TradeEscrowFactory.sol";
+import {ERC20} from "lib/solady/src/tokens/ERC20.sol";
+import {SafeTransferLib} from "lib/solady/src/utils/SafeTransferLib.sol";
+import {TradeData} from "src/TradeData.sol";
+import {TradeEscrowFactory} from "src/TradeEscrowFactory.sol";
 
 contract TradeEscrow {
     ///// ERRORS /////
@@ -89,7 +89,7 @@ contract TradeEscrow {
         SafeTransferLib.safeApprove(tokenIn, ZERO_X_ALLOWANCE_HOLDER, amountIn);
 
         // Execute swap via 0x Settler
-        (bool success, ) = swapTarget.call(swapCallData);
+        (bool success,) = swapTarget.call(swapCallData);
         if (!success) {
             revert SwapFailed();
         }
@@ -114,11 +114,7 @@ contract TradeEscrow {
     /// @param amountOutMin Minimum amount of buyToken to receive (slippage protection)
     /// @param swapTarget The 0x Settler contract address (from quote response)
     /// @param swapCallData The swap calldata (from quote response)
-    function buy(
-        uint256 amountOutMin,
-        address swapTarget,
-        bytes calldata swapCallData
-    ) external {
+    function buy(uint256 amountOutMin, address swapTarget, bytes calldata swapCallData) external {
         // Fetch trade data from factory
         TradeData memory td = TradeEscrowFactory(factory).getTradeEscrowData(address(this));
 
@@ -145,14 +141,7 @@ contract TradeEscrow {
         SafeTransferLib.safeTransferFrom(td.sellToken, msg.sender, address(this), funderContribution);
 
         // Execute swap via 0x
-        buyTokenAmount = _executeSwap(
-            td.sellToken,
-            td.buyToken,
-            totalSellIn,
-            amountOutMin,
-            swapTarget,
-            swapCallData
-        );
+        buyTokenAmount = _executeSwap(td.sellToken, td.buyToken, totalSellIn, amountOutMin, swapTarget, swapCallData);
 
         emit BuyPerformed(funder, totalSellIn, buyTokenAmount);
     }
@@ -163,11 +152,7 @@ contract TradeEscrow {
     /// @param amountOutMin Minimum amount of sellToken to receive (slippage protection)
     /// @param swapTarget The 0x Settler contract address (from quote response)
     /// @param swapCallData The swap calldata (from quote response)
-    function sell(
-        uint256 amountOutMin,
-        address swapTarget,
-        bytes calldata swapCallData
-    ) external {
+    function sell(uint256 amountOutMin, address swapTarget, bytes calldata swapCallData) external {
         // Fetch trade data from factory
         TradeData memory td = TradeEscrowFactory(factory).getTradeEscrowData(address(this));
 
@@ -193,14 +178,8 @@ contract TradeEscrow {
         uint256 buyTokenBalance = ERC20(td.buyToken).balanceOf(address(this));
 
         // Execute swap via 0x
-        finalSellAmount = _executeSwap(
-            td.buyToken,
-            td.sellToken,
-            buyTokenBalance,
-            amountOutMin,
-            swapTarget,
-            swapCallData
-        );
+        finalSellAmount =
+            _executeSwap(td.buyToken, td.sellToken, buyTokenBalance, amountOutMin, swapTarget, swapCallData);
 
         // Compute payouts based on profit/loss
         _computePayouts();
