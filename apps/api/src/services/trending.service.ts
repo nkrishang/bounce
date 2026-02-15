@@ -1,99 +1,99 @@
 import { logger } from '../lib/logger.js';
 
-const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
-const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY || '';
+const CODEX_ENDPOINT = 'https://graph.codex.io/graphql';
 
-// Cache trending results for 5 minutes (demo tier: 30 req/min, 10k/month)
-const TRENDING_CACHE_TTL_MS = 5 * 60 * 1000;
-// Cache the coin list for 24 hours (it rarely changes)
-const COIN_LIST_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// Cache trending results for 10 minutes (free tier)
+const TRENDING_CACHE_TTL_MS = 600_000;
 
-// Stablecoins to exclude from results
-const EXCLUDED_SYMBOLS = new Set([
-  'usdc', 'usdt', 'dai', 'busd', 'tusd', 'usdc.e', 'usdd', 'usdt0',
-  'crvusd', 'usdq', 'ausd',
-]);
+export interface TrendingTokenSocialLinks {
+  twitter?: string | null;
+  telegram?: string | null;
+  website?: string | null;
+  discord?: string | null;
+}
 
-export interface TrendingToken {
+export interface TrendingTokenInfo {
+  imageThumbUrl?: string | null;
+  imageSmallUrl?: string | null;
+  imageLargeUrl?: string | null;
+}
+
+export interface TrendingTokenEnhanced {
   address: string;
   name: string;
   symbol: string;
-  logoURI: string | null;
-  priceUsd: number | null;
-  priceChangeH24: number | null;
-  volume24h: number | null;
-  marketCap: number | null;
+  networkId: number;
+  imageThumbUrl?: string | null;
+  socialLinks?: TrendingTokenSocialLinks | null;
+  info?: TrendingTokenInfo | null;
 }
 
-// --- CoinGecko types ---
-
-interface CoinListEntry {
-  id: string;
-  symbol: string;
-  name: string;
-  platforms: Record<string, string>;
+export interface TrendingToken {
+  priceUSD: string | null;
+  change5m: string | null;
+  change1: string | null;
+  change4: string | null;
+  change24: string | null;
+  volume24: string | null;
+  marketCap: string | null;
+  holders: number | null;
+  liquidity: string | null;
+  token: TrendingTokenEnhanced;
 }
 
-interface CoinMarketEntry {
-  id: string;
-  symbol: string;
-  name: string;
-  image: string;
-  current_price: number | null;
-  market_cap: number | null;
-  total_volume: number | null;
-  price_change_percentage_24h: number | null;
-}
-
-// --- Caches ---
+// --- Cache ---
 
 let trendingCache: TrendingToken[] | null = null;
 let trendingCacheTime = 0;
 
-let coinListCache: Map<string, string> | null = null; // coingecko id -> polygon address
-let coinListCacheTime = 0;
-
-function cgHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (COINGECKO_API_KEY) {
-    headers['x-cg-demo-api-key'] = COINGECKO_API_KEY;
-  }
-  return headers;
-}
-
-/**
- * Fetch and cache the full CoinGecko coin list with platform addresses.
- * Returns a map of coingecko_id -> polygon-pos contract address.
- */
-async function getPolygonAddressMap(): Promise<Map<string, string>> {
-  if (coinListCache && Date.now() - coinListCacheTime < COIN_LIST_CACHE_TTL_MS) {
-    return coinListCache;
-  }
-
-  logger.info('Fetching CoinGecko coin list with platforms');
-  const res = await fetch(`${COINGECKO_BASE}/coins/list?include_platform=true`, {
-    headers: cgHeaders(),
-  });
-
-  if (!res.ok) {
-    throw new Error(`CoinGecko coins/list error: ${res.status} ${res.statusText}`);
-  }
-
-  const coins: CoinListEntry[] = await res.json();
-  const map = new Map<string, string>();
-
-  for (const coin of coins) {
-    const polygonAddr = coin.platforms['polygon-pos'];
-    if (polygonAddr) {
-      map.set(coin.id, polygonAddr);
+const FILTER_TOKENS_QUERY = `
+query FilterTrendingTokens($filters: TokenFilters, $statsType: TokenPairStatisticsType, $rankings: [TokenRanking], $limit: Int) {
+  filterTokens(filters: $filters, statsType: $statsType, rankings: $rankings, limit: $limit) {
+    results {
+      priceUSD
+      change5m
+      change1
+      change4
+      change24
+      volume24
+      marketCap
+      holders
+      liquidity
+      token {
+        address
+        name
+        symbol
+        networkId
+        imageThumbUrl
+        socialLinks {
+          twitter
+          telegram
+          website
+          discord
+        }
+        info {
+          imageThumbUrl
+          imageSmallUrl
+          imageLargeUrl
+        }
+      }
     }
   }
-
-  logger.info({ entries: map.size }, 'Built Polygon address map');
-  coinListCache = map;
-  coinListCacheTime = Date.now();
-  return map;
 }
+`;
+
+const FILTER_TOKENS_VARIABLES = {
+  filters: {
+    network: [137, 8453, 143],
+    trendingIgnored: false,
+    liquidity: { gt: 5000 },
+    volume24: { gt: 1000 },
+    marketCap: { gt: 1_000_000 },
+  },
+  statsType: 'FILTERED',
+  rankings: [{ attribute: 'trendingScore24', direction: 'DESC' }],
+  limit: 50,
+};
 
 export async function getTrendingTokens(): Promise<TrendingToken[]> {
   if (trendingCache && Date.now() - trendingCacheTime < TRENDING_CACHE_TTL_MS) {
@@ -101,41 +101,42 @@ export async function getTrendingTokens(): Promise<TrendingToken[]> {
     return trendingCache;
   }
 
-  // Fetch address map and market data in parallel
-  const [addressMap, marketsRes] = await Promise.all([
-    getPolygonAddressMap(),
-    fetch(
-      `${COINGECKO_BASE}/coins/markets?vs_currency=usd&category=polygon-ecosystem&order=volume_desc&per_page=50&page=1`,
-      { headers: cgHeaders() }
-    ),
-  ]);
-
-  if (!marketsRes.ok) {
-    throw new Error(`CoinGecko coins/markets error: ${marketsRes.status} ${marketsRes.statusText}`);
+  const apiKey = process.env.CODEX_IO_API_KEY;
+  if (!apiKey) {
+    logger.warn('CODEX_IO_API_KEY is not set — returning empty trending list');
+    return [];
   }
 
-  const markets: CoinMarketEntry[] = await marketsRes.json();
-  const tokens: TrendingToken[] = [];
+  logger.info('Fetching trending tokens from Codex.io');
 
-  for (const coin of markets) {
-    if (EXCLUDED_SYMBOLS.has(coin.symbol.toLowerCase())) continue;
+  const res = await fetch(CODEX_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: apiKey,
+    },
+    body: JSON.stringify({
+      query: FILTER_TOKENS_QUERY,
+      variables: FILTER_TOKENS_VARIABLES,
+    }),
+  });
 
-    const address = addressMap.get(coin.id);
-    if (!address) continue; // No Polygon contract address — skip
-
-    tokens.push({
-      address,
-      name: coin.name,
-      symbol: coin.symbol.toUpperCase(),
-      logoURI: coin.image,
-      priceUsd: coin.current_price,
-      priceChangeH24: coin.price_change_percentage_24h,
-      volume24h: coin.total_volume,
-      marketCap: coin.market_cap,
-    });
+  if (!res.ok) {
+    throw new Error(`Codex API error: ${res.status} ${res.statusText}`);
   }
 
-  logger.info({ count: tokens.length }, 'Fetched trending Polygon tokens');
+  const json = await res.json() as {
+    data?: { filterTokens?: { results?: TrendingToken[] } };
+    errors?: { message: string }[];
+  };
+
+  if (json.errors?.length) {
+    throw new Error(`Codex GraphQL error: ${json.errors[0].message}`);
+  }
+
+  const tokens: TrendingToken[] = json.data?.filterTokens?.results ?? [];
+
+  logger.info({ count: tokens.length }, 'Fetched trending tokens from Codex.io');
   trendingCache = tokens;
   trendingCacheTime = Date.now();
 

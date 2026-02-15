@@ -3,20 +3,24 @@
 @tailwind utilities;
 
 :root {
-  --background: #0a0a0b;
-  --foreground: #fafafa;
-  --muted: #1a1a1c;
-  --muted-foreground: #71717a;
-  --border: #27272a;
-  --primary: #8b5cf6;
-  --primary-foreground: #fafafa;
-  --secondary: #18181b;
-  --secondary-foreground: #a1a1aa;
-  --accent: #6366f1;
-  --accent-foreground: #fafafa;
+  --background: #F3F1EE;
+  --foreground: #1a1a1a;
+  --muted: #E8E5E0;
+  --muted-foreground: #6B6B6B;
+  --border: #D8D3CC;
+  --primary: #C8A93E;
+  --primary-foreground: #1a1a1a;
+  --secondary: #2A2A2A;
+  --secondary-foreground: #E8E5E0;
+  --accent: #C8A93E;
+  --accent-foreground: #1a1a1a;
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
+
+  --dark-surface: #1a1a1e;
+  --dark-surface-foreground: #fafafa;
+  --dark-border: #2a2a2e;
   
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
@@ -47,7 +51,7 @@ a {
   }
   
   .gradient-text {
-    background: linear-gradient(135deg, #8b5cf6, #6366f1, #8b5cf6);
+    background: linear-gradient(135deg, #C8A93E, #A8892E, #C8A93E);
     background-size: 200% 200%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -55,13 +59,19 @@ a {
   }
   
   .glass {
-    background: rgba(26, 26, 28, 0.7);
+    background: rgba(26, 26, 30, 0.85);
     backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .dark-surface {
+    background: var(--dark-surface);
+    color: var(--dark-surface-foreground);
+    border-color: var(--dark-border);
   }
   
   .glow {
-    box-shadow: 0 0 40px -10px rgba(139, 92, 246, 0.3);
+    box-shadow: 0 0 40px -10px rgba(200, 169, 62, 0.3);
   }
 }
 

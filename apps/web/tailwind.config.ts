@@ -23,6 +23,9 @@ const config: Config = {
         success: 'var(--success)',
         warning: 'var(--warning)',
         danger: 'var(--danger)',
+        'dark-surface': 'var(--dark-surface)',
+        'dark-surface-foreground': 'var(--dark-surface-foreground)',
+        'dark-border': 'var(--dark-border)',
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],

@@ -17,8 +17,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Thesis - Next-Gen Betting.",
-  description: "Stake your conviction. Capital will follow.",
+  title: "BOUNCE.CAPITAL",
+  description: "Leverage for Believers. Protection for Backers.",
 };
 
 export default function RootLayout({
