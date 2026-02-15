@@ -7,10 +7,10 @@ interface TrendingTokensTableProps {
   onBoostedBuy?: (token: TokenInfo) => void;
 }
 
-const CHAIN_COLORS: Record<number, { color: string; label: string }> = {
-  137: { color: '#8247E5', label: 'P' },
-  8453: { color: '#0052FF', label: 'B' },
-  143: { color: '#7B3FE4', label: 'M' },
+const CHAIN_META: Record<number, { logo: string; name: string }> = {
+  137: { logo: '/logos/polygon-logo.svg', name: 'Polygon' },
+  8453: { logo: '/logos/base-logo.svg', name: 'Base' },
+  143: { logo: '/logos/monad-logo.svg', name: 'Monad' },
 };
 
 function formatPrice(price: number | null | undefined): string {
@@ -139,47 +139,55 @@ export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) 
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-xl border border-border bg-muted">
       <table className="w-full min-w-[900px]">
         <thead>
-          <tr className="text-xs text-muted-foreground">
-            <th className="py-3 px-2 text-left font-medium w-8" />
-            <th className="py-3 px-2 text-left font-medium">Token</th>
-            <th className="py-3 px-2 text-right font-medium">Price</th>
-            <th className="py-3 px-2 text-right font-medium">5m</th>
-            <th className="py-3 px-2 text-right font-medium">1h</th>
-            <th className="py-3 px-2 text-right font-medium">4h</th>
-            <th className="py-3 px-2 text-right font-medium">24h</th>
-            <th className="py-3 px-2 text-right font-medium">Volume</th>
-            <th className="py-3 px-2 text-right font-medium">Mkt Cap</th>
-            <th className="py-3 px-2 text-right font-medium">Holders</th>
-            <th className="py-3 px-2 text-right font-medium">Trade</th>
+          <tr className="text-xs text-muted-foreground border-b border-border">
+            <th className="py-3 px-3 text-left font-medium w-14" />
+            <th className="py-3 px-3 text-left font-medium">Token</th>
+            <th className="py-3 px-3 text-right font-medium">Price</th>
+            <th className="py-3 px-3 text-right font-medium">5m</th>
+            <th className="py-3 px-3 text-right font-medium">1h</th>
+            <th className="py-3 px-3 text-right font-medium">4h</th>
+            <th className="py-3 px-3 text-right font-medium">24h</th>
+            <th className="py-3 px-3 text-right font-medium">Volume</th>
+            <th className="py-3 px-3 text-right font-medium">Mkt Cap</th>
+            <th className="py-3 px-3 text-right font-medium">Holders</th>
+            <th className="py-3 px-3 text-right font-medium">Trade</th>
           </tr>
         </thead>
         <tbody>
           {tokens.map((token) => {
-            const chain = CHAIN_COLORS[token.networkId];
+            const chain = CHAIN_META[token.networkId];
             const isPolygon = token.networkId === 137;
             const logoSrc = token.logoURI || token.imageThumbUrl;
 
             return (
               <tr
                 key={`${token.networkId}-${token.address}`}
-                className="border-b border-border/50 hover:bg-muted/50 transition-colors"
+                className="border-b border-border/50 hover:bg-white/5 transition-colors"
               >
                 {/* Chain icon */}
-                <td className="py-3 px-2">
-                  <div
-                    className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
-                    style={{ backgroundColor: chain?.color ?? '#888' }}
-                    title={`Network ${token.networkId}`}
-                  >
-                    {chain?.label ?? '?'}
-                  </div>
+                <td className="py-4 px-3">
+                  {chain ? (
+                    <img
+                      src={chain.logo}
+                      alt={chain.name}
+                      title={chain.name}
+                      className="w-8 h-8 object-contain flex-shrink-0"
+                    />
+                  ) : (
+                    <div
+                      className="w-5 h-5 rounded-full bg-muted-foreground/30 flex items-center justify-center text-[9px] font-bold text-white"
+                      title={`Network ${token.networkId}`}
+                    >
+                      ?
+                    </div>
+                  )}
                 </td>
 
                 {/* Token */}
-                <td className="py-3 px-2">
+                <td className="py-4 px-3">
                   <div className="flex items-center gap-3">
                     {logoSrc ? (
                       <img
@@ -197,7 +205,7 @@ export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) 
                     )}
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-sm">{token.name}</span>
+                        <span className="font-semibold text-sm text-foreground">{token.name}</span>
                         <span className="text-xs text-muted-foreground">{token.symbol}</span>
                       </div>
                       <SocialLinks links={token.socialLinks} />
@@ -206,51 +214,51 @@ export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) 
                 </td>
 
                 {/* Price */}
-                <td className="py-3 px-2 text-right text-sm font-mono">
+                <td className="py-4 px-3 text-right text-sm font-mono text-foreground">
                   {formatPrice(token.priceUSD)}
                 </td>
 
                 {/* 5m */}
-                <td className="py-3 px-2 text-right text-sm font-mono">
+                <td className="py-4 px-3 text-right text-sm font-mono">
                   <PctCell value={token.change5m} />
                 </td>
 
                 {/* 1h */}
-                <td className="py-3 px-2 text-right text-sm font-mono">
+                <td className="py-4 px-3 text-right text-sm font-mono">
                   <PctCell value={token.change1h} />
                 </td>
 
                 {/* 4h */}
-                <td className="py-3 px-2 text-right text-sm font-mono">
+                <td className="py-4 px-3 text-right text-sm font-mono">
                   <PctCell value={token.change4h} />
                 </td>
 
                 {/* 24h */}
-                <td className="py-3 px-2 text-right text-sm font-mono">
+                <td className="py-4 px-3 text-right text-sm font-mono">
                   <PctCell value={token.change24h} />
                 </td>
 
                 {/* Volume */}
-                <td className="py-3 px-2 text-right text-sm font-mono">
+                <td className="py-4 px-3 text-right text-sm font-mono text-foreground">
                   {formatCompact(token.volume24h)}
                 </td>
 
                 {/* Mkt Cap */}
-                <td className="py-3 px-2 text-right text-sm font-mono">
+                <td className="py-4 px-3 text-right text-sm font-mono text-foreground">
                   {formatCompact(token.marketCap)}
                 </td>
 
                 {/* Holders */}
-                <td className="py-3 px-2 text-right text-sm font-mono">
+                <td className="py-4 px-3 text-right text-sm font-mono text-foreground">
                   {formatHolders(token.holders)}
                 </td>
 
                 {/* Trade */}
-                <td className="py-3 px-2 text-right">
+                <td className="py-4 px-3 text-right">
                   <button
                     onClick={() => isPolygon && onBoostedBuy?.(token)}
                     disabled={!isPolygon}
-                    className="px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Boosted Buy
                   </button>

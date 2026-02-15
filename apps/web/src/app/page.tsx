@@ -18,15 +18,15 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen">
-      {/* Trade Proposals Section - Dark background */}
-      <section className="bg-dark-surface py-6">
+    <div className="min-h-screen bg-background">
+      {/* Trade Proposals Section */}
+      <section className="py-6">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <TradeProposalsCarousel />
         </div>
       </section>
 
-      {/* Trending Tokens Section - Light background */}
+      {/* Trending Tokens Section */}
       <section className="py-6">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <TrendingTokensTable onBoostedBuy={handleBoostedBuy} />
