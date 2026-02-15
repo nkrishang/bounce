@@ -1,17 +1,20 @@
-import type { Address } from './types.js';
-
-// 0x Contract Addresses for Polygon
-export const ZERO_X_CONTRACTS = {
-  // AllowanceHolder - where tokens are approved for spending
-  ALLOWANCE_HOLDER: '0x0000000000001fF3684f28c67538d4D072C22734' as Address,
-  // Note: Settler address is returned dynamically in quote response as transaction.to
-} as const;
-
-// Polygon chain ID
-export const POLYGON_CHAIN_ID = 137;
+import type { Address, SupportedChainId } from './types';
 
 // 0x API base URL
 export const ZERO_X_API_URL = 'https://api.0x.org';
+
+// Per-chain 0x config
+export const ZERO_X_CONFIG_BY_CHAIN: Record<SupportedChainId, {
+  allowanceHolder: Address;
+}> = {
+  137: { allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734' as Address },
+  8453: { allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734' as Address },
+  143: { allowanceHolder: '0x0000000000001fF3684f28c67538d4D072C22734' as Address },
+} as const;
+
+export function getZeroXAllowanceHolder(chainId: SupportedChainId): Address {
+  return ZERO_X_CONFIG_BY_CHAIN[chainId].allowanceHolder;
+}
 
 // Types for 0x API responses
 export interface ZeroXQuoteRequest {

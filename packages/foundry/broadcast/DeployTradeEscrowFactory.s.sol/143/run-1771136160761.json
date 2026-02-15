@@ -1,7 +1,7 @@
 {
   "transactions": [
     {
-      "hash": "0x002d4c68fcd9ef0e207766721677df9eb1f9cf06dd33c5b89549cad729c3fb4b",
+      "hash": null,
       "transactionType": "CREATE",
       "contractName": "TradeEscrowFactory",
       "contractAddress": "0x48a8a4ff66582785f21834eefe1144f0475d46d9",
@@ -28,45 +28,11 @@
       "isFixedGasLimit": false
     }
   ],
-  "receipts": [
-    {
-      "status": "0x1",
-      "cumulativeGasUsed": "0x44fd28",
-      "logs": [
-        {
-          "address": "0x48a8a4ff66582785f21834eefe1144f0475d46d9",
-          "topics": [
-            "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0",
-            "0x0000000000000000000000000000000000000000000000000000000000000000",
-            "0x000000000000000000000000567e62e9de992362448e8bc19752736bef061d99"
-          ],
-          "data": "0x",
-          "blockHash": "0x3e6c2db8b4bde22e63566e22110f8aad9a28a65ea7c877009b2737b2a1758afc",
-          "blockNumber": "0x34ea1f2",
-          "blockTimestamp": "0x69916531",
-          "transactionHash": "0x002d4c68fcd9ef0e207766721677df9eb1f9cf06dd33c5b89549cad729c3fb4b",
-          "transactionIndex": "0x2",
-          "logIndex": "0x5",
-          "removed": false
-        }
-      ],
-      "logsBloom": "0x00000000000000000000000000000000000000000000000000800000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000001000000000000000000000000020004000000000000000800000400400000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000100000000000000000000000000000000",
-      "type": "0x2",
-      "transactionHash": "0x002d4c68fcd9ef0e207766721677df9eb1f9cf06dd33c5b89549cad729c3fb4b",
-      "transactionIndex": "0x2",
-      "blockHash": "0x3e6c2db8b4bde22e63566e22110f8aad9a28a65ea7c877009b2737b2a1758afc",
-      "blockNumber": "0x34ea1f2",
-      "gasUsed": "0x40a09c",
-      "effectiveGasPrice": "0x17bfac7c02",
-      "from": "0x567e62e9de992362448e8bc19752736bef061d99",
-      "to": null,
-      "contractAddress": "0x48a8a4ff66582785f21834eefe1144f0475d46d9"
-    }
-  ],
+  "receipts": [],
   "libraries": [],
   "pending": [],
   "returns": {},
-  "timestamp": 1771136306759,
+  "timestamp": 1771136160761,
   "chain": 143,
   "commit": "8795f7d"
 }

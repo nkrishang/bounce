@@ -1,6 +1,6 @@
 import { type Address } from 'viem';
-import { publicClient, getFactoryAddress } from '../lib/viem.js';
-import { TradeEscrowFactoryAbi, TradeEscrowAbi } from '@thesis/contracts';
+import { getPublicClient, getFactoryAddress } from '../lib/viem.js';
+import { TradeEscrowFactoryAbi, TradeEscrowAbi, SUPPORTED_CHAIN_IDS, type ChainId } from '@thesis/contracts';
 import {
   type TradeData,
   type TradeEscrowState,
@@ -36,16 +36,17 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
-export async function getAllTradeEscrows(): Promise<Address[]> {
-  const cacheKey = 'all-escrows';
+export async function getAllTradeEscrows(chainId: ChainId): Promise<Address[]> {
+  const cacheKey = `all-escrows-${chainId}`;
   const cached = cache.get<Address[]>(cacheKey);
   if (cached) return cached;
 
-  logger.info('Fetching all trade escrows from factory');
+  logger.info({ chainId }, 'Fetching all trade escrows from factory');
 
   try {
-    const factoryAddress = getFactoryAddress();
-    const escrows = await publicClient.readContract({
+    const factoryAddress = getFactoryAddress(chainId);
+    const client = getPublicClient(chainId);
+    const escrows = await client.readContract({
       address: factoryAddress,
       abi: TradeEscrowFactoryAbi,
       functionName: 'getAllTradeEscrows',
@@ -56,24 +57,25 @@ export async function getAllTradeEscrows(): Promise<Address[]> {
     );
 
     cache.set(cacheKey, filtered);
-    logger.info({ count: filtered.length }, 'Fetched trade escrows');
+    logger.info({ chainId, count: filtered.length }, 'Fetched trade escrows');
     return filtered;
   } catch (error) {
-    logger.error(error, 'Failed to fetch trade escrows');
+    logger.error({ chainId, error }, 'Failed to fetch trade escrows');
     throw error;
   }
 }
 
-export async function getTradeData(escrowAddress: Address): Promise<TradeData> {
-  const cacheKey = `trade-data-${escrowAddress}`;
+export async function getTradeData(chainId: ChainId, escrowAddress: Address): Promise<TradeData> {
+  const cacheKey = `trade-data-${chainId}-${escrowAddress}`;
   const cached = cache.get<TradeData>(cacheKey);
   if (cached) return cached;
 
-  logger.debug({ escrowAddress }, 'Fetching trade data');
+  logger.debug({ chainId, escrowAddress }, 'Fetching trade data');
 
   try {
-    const factoryAddress = getFactoryAddress();
-    const data = await publicClient.readContract({
+    const factoryAddress = getFactoryAddress(chainId);
+    const client = getPublicClient(chainId);
+    const data = await client.readContract({
       address: factoryAddress,
       abi: TradeEscrowFactoryAbi,
       functionName: 'getTradeEscrowData',
@@ -92,26 +94,27 @@ export async function getTradeData(escrowAddress: Address): Promise<TradeData> {
     cache.set(cacheKey, tradeData);
     return tradeData;
   } catch (error) {
-    logger.error({ escrowAddress, error }, 'Failed to fetch trade data');
+    logger.error({ chainId, escrowAddress, error }, 'Failed to fetch trade data');
     throw error;
   }
 }
 
-export async function getEscrowState(escrowAddress: Address): Promise<TradeEscrowState> {
-  const cacheKey = `escrow-state-${escrowAddress}`;
+export async function getEscrowState(chainId: ChainId, escrowAddress: Address): Promise<TradeEscrowState> {
+  const cacheKey = `escrow-state-${chainId}-${escrowAddress}`;
   const cached = cache.get<TradeEscrowState>(cacheKey);
   if (cached) return cached;
 
-  logger.debug({ escrowAddress }, 'Fetching escrow state via multicall');
+  logger.debug({ chainId, escrowAddress }, 'Fetching escrow state via multicall');
 
   try {
+    const client = getPublicClient(chainId);
     const contracts = ESCROW_STATE_FNS.map((functionName) => ({
       address: escrowAddress,
       abi: TradeEscrowAbi,
       functionName,
     }));
 
-    const results = await publicClient.multicall({
+    const results = await client.multicall({
       contracts,
       allowFailure: false,
     });
@@ -150,18 +153,19 @@ export async function getEscrowState(escrowAddress: Address): Promise<TradeEscro
     cache.set(cacheKey, state);
     return state;
   } catch (error) {
-    logger.error({ escrowAddress, error }, 'Failed to fetch escrow state');
+    logger.error({ chainId, escrowAddress, error }, 'Failed to fetch escrow state');
     throw error;
   }
 }
 
-async function getMultipleTradeDatas(escrows: Address[]): Promise<Map<Address, TradeData>> {
-  const factoryAddress = getFactoryAddress();
+async function getMultipleTradeDatas(chainId: ChainId, escrows: Address[]): Promise<Map<Address, TradeData>> {
+  const factoryAddress = getFactoryAddress(chainId);
+  const client = getPublicClient(chainId);
   const map = new Map<Address, TradeData>();
 
   const uncachedEscrows: Address[] = [];
   for (const escrow of escrows) {
-    const cached = cache.get<TradeData>(`trade-data-${escrow}`);
+    const cached = cache.get<TradeData>(`trade-data-${chainId}-${escrow}`);
     if (cached) {
       map.set(escrow, cached);
     } else {
@@ -173,7 +177,7 @@ async function getMultipleTradeDatas(escrows: Address[]): Promise<Map<Address, T
     return map;
   }
 
-  logger.debug({ count: uncachedEscrows.length }, 'Fetching multiple trade datas via multicall');
+  logger.debug({ chainId, count: uncachedEscrows.length }, 'Fetching multiple trade datas via multicall');
 
   const contracts = uncachedEscrows.map((escrow) => ({
     address: factoryAddress,
@@ -193,7 +197,7 @@ async function getMultipleTradeDatas(escrows: Address[]): Promise<Map<Address, T
   }> = [];
 
   for (const batch of batches) {
-    const results = await publicClient.multicall({
+    const results = await client.multicall({
       contracts: batch,
       allowFailure: false,
     });
@@ -214,18 +218,19 @@ async function getMultipleTradeDatas(escrows: Address[]): Promise<Map<Address, T
     };
 
     map.set(escrow, tradeData);
-    cache.set(`trade-data-${escrow}`, tradeData);
+    cache.set(`trade-data-${chainId}-${escrow}`, tradeData);
   }
 
   return map;
 }
 
-async function getMultipleEscrowStates(escrows: Address[]): Promise<Map<Address, TradeEscrowState>> {
+async function getMultipleEscrowStates(chainId: ChainId, escrows: Address[]): Promise<Map<Address, TradeEscrowState>> {
+  const client = getPublicClient(chainId);
   const map = new Map<Address, TradeEscrowState>();
 
   const uncachedEscrows: Address[] = [];
   for (const escrow of escrows) {
-    const cached = cache.get<TradeEscrowState>(`escrow-state-${escrow}`);
+    const cached = cache.get<TradeEscrowState>(`escrow-state-${chainId}-${escrow}`);
     if (cached) {
       map.set(escrow, cached);
     } else {
@@ -237,7 +242,7 @@ async function getMultipleEscrowStates(escrows: Address[]): Promise<Map<Address,
     return map;
   }
 
-  logger.debug({ count: uncachedEscrows.length }, 'Fetching multiple escrow states via multicall');
+  logger.debug({ chainId, count: uncachedEscrows.length }, 'Fetching multiple escrow states via multicall');
 
   const calls = uncachedEscrows.flatMap((escrow) =>
     ESCROW_STATE_FNS.map((functionName) => ({
@@ -251,7 +256,7 @@ async function getMultipleEscrowStates(escrows: Address[]): Promise<Map<Address,
   const allResults: unknown[] = [];
 
   for (const batch of batches) {
-    const results = await publicClient.multicall({
+    const results = await client.multicall({
       contracts: batch,
       allowFailure: false,
     });
@@ -279,19 +284,20 @@ async function getMultipleEscrowStates(escrows: Address[]): Promise<Map<Address,
     };
 
     map.set(escrow, state);
-    cache.set(`escrow-state-${escrow}`, state);
+    cache.set(`escrow-state-${chainId}-${escrow}`, state);
   }
 
   return map;
 }
 
 async function getMultipleTradeViews(
+  chainId: ChainId,
   escrows: Address[],
   userAddress?: Address
 ): Promise<TradeView[]> {
   const [dataByEscrow, stateByEscrow] = await Promise.all([
-    getMultipleTradeDatas(escrows),
-    getMultipleEscrowStates(escrows),
+    getMultipleTradeDatas(chainId, escrows),
+    getMultipleEscrowStates(chainId, escrows),
   ]);
 
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -302,32 +308,41 @@ async function getMultipleTradeViews(
     if (!data || !state) {
       throw new Error(`Missing trade info for escrow ${escrow}`);
     }
-    return deriveTradeView(escrow, data, state, nowSeconds, userAddress);
+    return deriveTradeView(chainId, escrow, data, state, nowSeconds, userAddress);
   });
 }
 
 export async function getTradeView(
+  chainId: ChainId,
   escrowAddress: Address,
   userAddress?: Address
 ): Promise<TradeView> {
   const [data, state] = await Promise.all([
-    getTradeData(escrowAddress),
-    getEscrowState(escrowAddress),
+    getTradeData(chainId, escrowAddress),
+    getEscrowState(chainId, escrowAddress),
   ]);
 
   const nowSeconds = Math.floor(Date.now() / 1000);
-  return deriveTradeView(escrowAddress, data, state, nowSeconds, userAddress);
+  return deriveTradeView(chainId, escrowAddress, data, state, nowSeconds, userAddress);
 }
 
 export async function getAllTrades(userAddress?: Address): Promise<TradeView[]> {
-  const escrows = await getAllTradeEscrows();
-  
-  if (escrows.length === 0) {
-    return [];
-  }
+  const chainIds: ChainId[] = [...SUPPORTED_CHAIN_IDS];
 
-  logger.info({ count: escrows.length }, 'Fetching all trades via multicall');
-  return getMultipleTradeViews(escrows, userAddress);
+  const perChainTrades = await Promise.all(
+    chainIds.map(async (chainId) => {
+      try {
+        const escrows = await getAllTradeEscrows(chainId);
+        if (escrows.length === 0) return [];
+        return getMultipleTradeViews(chainId, escrows, userAddress);
+      } catch (error) {
+        logger.error({ chainId, error }, 'Failed to fetch trades for chain');
+        return [];
+      }
+    })
+  );
+
+  return perChainTrades.flat();
 }
 
 export async function getUserTrades(userAddress: Address): Promise<{

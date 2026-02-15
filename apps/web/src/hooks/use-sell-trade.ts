@@ -4,21 +4,27 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, createPublicClient, custom, http, type Address } from 'viem';
-import { polygon } from 'viem/chains';
-import { TradeEscrowAbi } from '@thesis/contracts';
+import { TradeEscrowAbi, getChain, type ChainId } from '@thesis/contracts';
 import type { SwapQuote } from '@thesis/shared';
 import { api } from '../lib/api';
 
 type Step = 'idle' | 'fetching-quote' | 'sell' | 'confirming' | 'success';
 
+const RPC_URLS: Record<number, string> = {
+  137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',
+  8453: process.env.NEXT_PUBLIC_BASE_RPC_URL || '',
+  143: process.env.NEXT_PUBLIC_MONAD_RPC_URL || '',
+};
+
 interface SellTradeParams {
+  chainId: ChainId;
   escrowAddress: Address;
   buyToken: Address;
   sellToken: Address;
   buyTokenAmount: bigint; // The amount of buyToken the escrow holds
 }
 
-async function getSwapQuote(params: {
+async function getSwapQuote(chainId: number, params: {
   sellToken: Address;
   buyToken: Address;
   sellAmount: string;
@@ -26,6 +32,7 @@ async function getSwapQuote(params: {
   slippageBps?: number;
 }): Promise<SwapQuote> {
   const queryParams = new URLSearchParams({
+    chainId: chainId.toString(),
     sellToken: params.sellToken,
     buyToken: params.buyToken,
     sellAmount: params.sellAmount,
@@ -55,15 +62,17 @@ export function useSellTrade() {
       setError(null);
 
       try {
+        await wallet.switchChain(params.chainId);
+
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: polygon,
+          chain: getChain(params.chainId),
           transport: custom(provider),
         });
 
         const publicClient = createPublicClient({
-          chain: polygon,
-          transport: http(),
+          chain: getChain(params.chainId),
+          transport: http(RPC_URLS[params.chainId] || undefined),
         });
 
         const [address] = await walletClient.getAddresses();
@@ -72,7 +81,7 @@ export function useSellTrade() {
         // For sell, we're swapping buyToken -> sellToken
         setStep('fetching-quote');
         
-        const quote = await getSwapQuote({
+        const quote = await getSwapQuote(params.chainId, {
           sellToken: params.buyToken, // We're selling the buyToken
           buyToken: params.sellToken, // To get back sellToken
           sellAmount: params.buyTokenAmount.toString(),

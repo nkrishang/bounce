@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Loader2, Check, User, Clock, TrendingUp, Shield, ExternalLink, XCircle } from 'lucide-react';
 import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@thesis/shared';
+import { EXPLORER_URLS } from '@thesis/contracts';
 import { formatUnits } from 'viem';
 import { useAuth } from '@/hooks/use-auth';
 import { useFundTrade } from '@/hooks/use-fund-trade';
@@ -54,6 +55,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
 
     try {
       await fundTrade({
+        chainId: trade.chainId,
         escrowAddress: trade.escrow,
         funderContribution: BigInt(calculateFunderContribution(trade.data.sellAmount)),
         sellToken: trade.data.sellToken,
@@ -135,7 +137,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                       <span className="text-xs">Proposer</span>
                     </div>
                     <a
-                      href={`https://polygonscan.com/address/${trade.data.proposer}`}
+                      href={`${EXPLORER_URLS[trade.chainId]}/address/${trade.data.proposer}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-sm text-primary hover:underline transition-colors inline-flex items-center gap-1"

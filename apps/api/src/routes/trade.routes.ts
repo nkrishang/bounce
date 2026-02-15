@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { type Address } from 'viem';
+import { type ChainId } from '@thesis/contracts';
 import {
   getAllTrades,
   getTradeView,
@@ -32,15 +33,19 @@ export async function tradeRoutes(fastify: FastifyInstance) {
 
   fastify.get<{ Params: { escrow: string } }>('/:escrow', async (request, reply) => {
     const { escrow } = request.params;
-    const { userAddress } = request.query as { userAddress?: string };
+    const { userAddress, chainId } = request.query as { userAddress?: string; chainId?: string };
 
     if (!isValidAddress(escrow)) {
       return reply.status(400).send({ error: 'Invalid escrow address' });
     }
 
+    if (!chainId) {
+      return reply.status(400).send({ error: 'chainId query parameter is required' });
+    }
+
     try {
-      logger.info({ escrow }, 'Fetching trade details');
-      const trade = await getTradeView(escrow as Address, userAddress as Address | undefined);
+      logger.info({ escrow, chainId }, 'Fetching trade details');
+      const trade = await getTradeView(Number(chainId) as ChainId, escrow as Address, userAddress as Address | undefined);
       return { data: trade };
     } catch (error) {
       logger.error({ escrow, error }, 'Failed to fetch trade');

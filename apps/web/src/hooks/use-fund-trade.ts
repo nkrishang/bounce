@@ -10,21 +10,27 @@ import {
   http,
   type Address,
 } from "viem";
-import { polygon } from "viem/chains";
-import { TradeEscrowAbi, ERC20Abi } from "@thesis/contracts";
+import { TradeEscrowAbi, ERC20Abi, getChain, type ChainId } from "@thesis/contracts";
 import type { SwapQuote } from "@thesis/shared";
 import { api } from "../lib/api";
 
 type Step = "idle" | "fetching-quote" | "approve" | "buy" | "confirming" | "success";
 
+const RPC_URLS: Record<number, string> = {
+  137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',
+  8453: process.env.NEXT_PUBLIC_BASE_RPC_URL || '',
+  143: process.env.NEXT_PUBLIC_MONAD_RPC_URL || '',
+};
+
 interface FundTradeParams {
+  chainId: ChainId;
   escrowAddress: Address;
   funderContribution: bigint;
   sellToken: Address;
   buyToken: Address;
 }
 
-async function getSwapQuote(params: {
+async function getSwapQuote(chainId: number, params: {
   sellToken: Address;
   buyToken: Address;
   sellAmount: string;
@@ -32,6 +38,7 @@ async function getSwapQuote(params: {
   slippageBps?: number;
 }): Promise<SwapQuote> {
   const queryParams = new URLSearchParams({
+    chainId: chainId.toString(),
     sellToken: params.sellToken,
     buyToken: params.buyToken,
     sellAmount: params.sellAmount,
@@ -61,15 +68,17 @@ export function useFundTrade() {
       setError(null);
 
       try {
+        await wallet.switchChain(params.chainId);
+
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: polygon,
+          chain: getChain(params.chainId),
           transport: custom(provider),
         });
 
         const publicClient = createPublicClient({
-          chain: polygon,
-          transport: http(),
+          chain: getChain(params.chainId),
+          transport: http(RPC_URLS[params.chainId] || undefined),
         });
 
         const [address] = await walletClient.getAddresses();
@@ -92,7 +101,7 @@ export function useFundTrade() {
         setStep("fetching-quote");
         const totalSellAmount = (params.funderContribution * 5n) / 4n; // funder is 80%, total is 100%
         
-        const quote = await getSwapQuote({
+        const quote = await getSwapQuote(params.chainId, {
           sellToken: params.sellToken,
           buyToken: params.buyToken,
           sellAmount: totalSellAmount.toString(),

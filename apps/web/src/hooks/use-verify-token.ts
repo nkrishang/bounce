@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { createPublicClient, http, isAddress, type Address } from 'viem';
-import { polygon } from 'viem/chains';
+import { getChain } from '@thesis/contracts';
+import { TOKENS_BY_CHAIN, type SupportedChainId } from '@thesis/shared';
 import { api } from '../lib/api';
-
-const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;
 
 const ERC20Abi = [
   {
@@ -44,7 +43,7 @@ interface PriceResponse {
   buyAmount: string;
 }
 
-export function useVerifyToken(tokenAddress: string | undefined) {
+export function useVerifyToken(chainId: SupportedChainId, tokenAddress: string | undefined) {
   const [status, setStatus] = useState<VerificationStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [tokenData, setTokenData] = useState<TokenData | null>(null);
@@ -64,7 +63,9 @@ export function useVerifyToken(tokenAddress: string | undefined) {
       return;
     }
 
-    if (tokenAddress.toLowerCase() === USDC_ADDRESS?.toLowerCase()) {
+    const usdcAddress = TOKENS_BY_CHAIN[chainId].USDC;
+
+    if (tokenAddress.toLowerCase() === usdcAddress?.toLowerCase()) {
       setStatus('invalid');
       setError('Cannot trade USDC for USDC');
       setTokenData(null);
@@ -77,7 +78,7 @@ export function useVerifyToken(tokenAddress: string | undefined) {
       setTokenData(null);
 
       const client = createPublicClient({
-        chain: polygon,
+        chain: getChain(chainId),
         transport: http(),
       });
 
@@ -105,7 +106,8 @@ export function useVerifyToken(tokenAddress: string | undefined) {
         // Verify tradability via 0x API (small test amount: 1 USDC = 1e6)
         const testAmount = '1000000';
         const params = new URLSearchParams({
-          sellToken: USDC_ADDRESS,
+          chainId: chainId.toString(),
+          sellToken: usdcAddress,
           buyToken: tokenAddress,
           sellAmount: testAmount,
           taker: '0x0000000000000000000000000000000000000001', // Dummy taker for price check
@@ -131,7 +133,7 @@ export function useVerifyToken(tokenAddress: string | undefined) {
 
     const timer = setTimeout(verify, 500);
     return () => clearTimeout(timer);
-  }, [tokenAddress]);
+  }, [chainId, tokenAddress]);
 
   return { status, error, tokenData };
 }

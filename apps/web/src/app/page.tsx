@@ -45,6 +45,7 @@ export default function HomePage() {
           name: selectedToken.name,
           symbol: selectedToken.symbol,
           logoURI: selectedToken.logoURI,
+          networkId: selectedToken.networkId,
         } : null}
       />
     </div>

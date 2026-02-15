@@ -4,8 +4,7 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, custom, type Address } from 'viem';
-import { polygon } from 'viem/chains';
-import { TradeEscrowAbi } from '@thesis/contracts';
+import { TradeEscrowAbi, getChain, type ChainId } from '@thesis/contracts';
 
 export function useWithdraw() {
   const { wallets } = useWallets();
@@ -14,7 +13,7 @@ export function useWithdraw() {
   const [error, setError] = useState<string | null>(null);
 
   const withdrawProposer = useCallback(
-    async (escrowAddress: Address) => {
+    async (chainId: ChainId, escrowAddress: Address) => {
       const wallet = wallets.find((w) => w.walletClientType === 'privy');
       if (!wallet) throw new Error('No Privy embedded wallet connected');
 
@@ -22,9 +21,11 @@ export function useWithdraw() {
       setError(null);
 
       try {
+        await wallet.switchChain(chainId);
+
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: polygon,
+          chain: getChain(chainId),
           transport: custom(provider),
         });
 
@@ -57,7 +58,7 @@ export function useWithdraw() {
   );
 
   const withdrawFunder = useCallback(
-    async (escrowAddress: Address) => {
+    async (chainId: ChainId, escrowAddress: Address) => {
       const wallet = wallets.find((w) => w.walletClientType === 'privy');
       if (!wallet) throw new Error('No Privy embedded wallet connected');
 
@@ -65,9 +66,11 @@ export function useWithdraw() {
       setError(null);
 
       try {
+        await wallet.switchChain(chainId);
+
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: polygon,
+          chain: getChain(chainId),
           transport: custom(provider),
         });
 

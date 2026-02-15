@@ -1,5 +1,6 @@
 import { type Address } from 'viem';
-import { publicClient } from '../lib/viem.js';
+import { getPublicClient } from '../lib/viem.js';
+import { type ChainId } from '@thesis/contracts';
 import { ERC20Abi } from '@thesis/contracts';
 import { type TokenMeta } from '@thesis/shared';
 import { cache } from '../lib/cache.js';
@@ -7,26 +8,27 @@ import { logger } from '../lib/logger.js';
 
 const TOKEN_CACHE_PREFIX = 'token-meta-';
 
-export async function getTokenMeta(tokenAddress: Address): Promise<TokenMeta> {
-  const cacheKey = `${TOKEN_CACHE_PREFIX}${tokenAddress}`;
+export async function getTokenMeta(chainId: ChainId, tokenAddress: Address): Promise<TokenMeta> {
+  const cacheKey = `${TOKEN_CACHE_PREFIX}${chainId}-${tokenAddress}`;
   const cached = cache.get<TokenMeta>(cacheKey);
   if (cached) return cached;
 
-  logger.debug({ tokenAddress }, 'Fetching token metadata');
+  logger.debug({ chainId, tokenAddress }, 'Fetching token metadata');
 
   try {
+    const client = getPublicClient(chainId);
     const [name, symbol, decimals] = await Promise.all([
-      publicClient.readContract({
+      client.readContract({
         address: tokenAddress,
         abi: ERC20Abi,
         functionName: 'name',
       }),
-      publicClient.readContract({
+      client.readContract({
         address: tokenAddress,
         abi: ERC20Abi,
         functionName: 'symbol',
       }),
-      publicClient.readContract({
+      client.readContract({
         address: tokenAddress,
         abi: ERC20Abi,
         functionName: 'decimals',
@@ -41,20 +43,22 @@ export async function getTokenMeta(tokenAddress: Address): Promise<TokenMeta> {
     };
 
     cache.set(cacheKey, meta);
-    logger.debug({ tokenAddress, symbol }, 'Fetched token metadata');
+    logger.debug({ chainId, tokenAddress, symbol }, 'Fetched token metadata');
     return meta;
   } catch (error) {
-    logger.error({ tokenAddress, error }, 'Failed to fetch token metadata');
+    logger.error({ chainId, tokenAddress, error }, 'Failed to fetch token metadata');
     throw error;
   }
 }
 
 export async function getTokenBalance(
+  chainId: ChainId,
   tokenAddress: Address,
   accountAddress: Address
 ): Promise<string> {
   try {
-    const balance = await publicClient.readContract({
+    const client = getPublicClient(chainId);
+    const balance = await client.readContract({
       address: tokenAddress,
       abi: ERC20Abi,
       functionName: 'balanceOf',
@@ -62,7 +66,7 @@ export async function getTokenBalance(
     });
     return (balance as bigint).toString();
   } catch (error) {
-    logger.error({ tokenAddress, accountAddress, error }, 'Failed to fetch token balance');
+    logger.error({ chainId, tokenAddress, accountAddress, error }, 'Failed to fetch token balance');
     throw error;
   }
 }

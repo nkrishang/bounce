@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Loader2, Eye, Wallet, CheckCircle, Coins, ExternalLink } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { type TradeView, type TokenMeta, formatAddress, calculateProfitLoss, calculateFunderContribution } from '@thesis/shared';
+import { EXPLORER_URLS } from '@thesis/contracts';
 import { formatUnits, type Address } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';
@@ -21,7 +22,7 @@ interface TradeRowProps {
 export function TradeRow({ trade, role }: TradeRowProps) {
   const [showSellModal, setShowSellModal] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const { data: buyTokenMeta } = useTokenMeta(trade.data.buyToken);
+  const { data: buyTokenMeta } = useTokenMeta(trade.chainId, trade.data.buyToken);
   const { data: tokenList = [] } = useTokenList();
   const { withdrawProposer, withdrawFunder, isLoading: withdrawLoading } = useWithdraw();
 
@@ -34,6 +35,7 @@ export function TradeRow({ trade, role }: TradeRowProps) {
   const tokenDecimals = buyTokenMeta?.decimals ?? 18;
 
   const { data: positionValue, isLoading: positionLoading } = usePositionValue(
+    trade.chainId,
     trade.status === 'FUNDED' ? trade.escrow as Address : undefined,
     trade.status === 'FUNDED' ? trade.data.buyToken as Address : undefined,
     tokenDecimals,
@@ -122,9 +124,9 @@ export function TradeRow({ trade, role }: TradeRowProps) {
 
   const handleWithdraw = async () => {
     if (role === 'proposer') {
-      await withdrawProposer(trade.escrow);
+      await withdrawProposer(trade.chainId, trade.escrow);
     } else {
-      await withdrawFunder(trade.escrow);
+      await withdrawFunder(trade.chainId, trade.escrow);
     }
   };
 
@@ -310,7 +312,7 @@ export function TradeRow({ trade, role }: TradeRowProps) {
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Token</span>
                 <a
-                  href={`https://polygonscan.com/address/${trade.data.buyToken}`}
+                  href={`${EXPLORER_URLS[trade.chainId]}/address/${trade.data.buyToken}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-muted-foreground/80 hover:text-primary transition-colors inline-flex items-center gap-1"
@@ -323,7 +325,7 @@ export function TradeRow({ trade, role }: TradeRowProps) {
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Escrow</span>
                 <a
-                  href={`https://polygonscan.com/address/${trade.escrow}`}
+                  href={`${EXPLORER_URLS[trade.chainId]}/address/${trade.escrow}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-muted-foreground/80 hover:text-primary transition-colors inline-flex items-center gap-1"

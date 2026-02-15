@@ -1,13 +1,14 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   ZERO_X_API_URL,
-  ZERO_X_CONTRACTS,
-  POLYGON_CHAIN_ID,
-  POLYGON_TOKENS,
+  getZeroXAllowanceHolder,
+  TOKENS_BY_CHAIN,
+  type SupportedChainId,
   type SwapQuote,
   type ZeroXQuoteResponse,
   type Address,
 } from '@thesis/shared';
+import { SUPPORTED_CHAIN_IDS } from '@thesis/contracts';
 import { logger } from '../lib/logger.js';
 
 const ZERO_X_API_KEY = process.env.ZERO_X_API_KEY;
@@ -36,6 +37,7 @@ interface IndicativePriceResponse {
 }
 
 interface GetQuoteQuery {
+  chainId: string;
   sellToken: string;
   buyToken: string;
   sellAmount: string;
@@ -48,7 +50,15 @@ export async function swapRoutes(fastify: FastifyInstance) {
   fastify.get<{ Querystring: GetQuoteQuery }>(
     '/quote',
     async (request: FastifyRequest<{ Querystring: GetQuoteQuery }>, reply: FastifyReply) => {
-      const { sellToken, buyToken, sellAmount, taker, slippageBps } = request.query;
+      const { chainId: chainIdStr, sellToken, buyToken, sellAmount, taker, slippageBps } = request.query;
+
+      const chainId = Number(chainIdStr);
+      if (!chainIdStr || !SUPPORTED_CHAIN_IDS.includes(chainId as any)) {
+        return reply.status(400).send({
+          error: 'Invalid or missing chainId',
+          message: `chainId must be one of: ${SUPPORTED_CHAIN_IDS.join(', ')}`,
+        });
+      }
 
       if (!sellToken || !buyToken || !sellAmount || !taker) {
         return reply.status(400).send({
@@ -67,7 +77,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
       try {
         // Build 0x API URL with query params
         const params = new URLSearchParams({
-          chainId: POLYGON_CHAIN_ID.toString(),
+          chainId: chainId.toString(),
           sellToken,
           buyToken,
           sellAmount,
@@ -111,7 +121,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
           minBuyAmount: quoteResponse.minBuyAmount,
           swapTarget: quoteResponse.transaction.to,
           swapCallData: quoteResponse.transaction.data,
-          allowanceTarget: ZERO_X_CONTRACTS.ALLOWANCE_HOLDER,
+          allowanceTarget: getZeroXAllowanceHolder(chainId as SupportedChainId),
           gas: quoteResponse.gas,
           liquidityAvailable: quoteResponse.liquidityAvailable,
           route: {
@@ -145,7 +155,15 @@ export async function swapRoutes(fastify: FastifyInstance) {
   fastify.get<{ Querystring: GetQuoteQuery }>(
     '/price',
     async (request: FastifyRequest<{ Querystring: GetQuoteQuery }>, reply: FastifyReply) => {
-      const { sellToken, buyToken, sellAmount, taker, slippageBps } = request.query;
+      const { chainId: chainIdStr, sellToken, buyToken, sellAmount, taker, slippageBps } = request.query;
+
+      const chainId = Number(chainIdStr);
+      if (!chainIdStr || !SUPPORTED_CHAIN_IDS.includes(chainId as any)) {
+        return reply.status(400).send({
+          error: 'Invalid or missing chainId',
+          message: `chainId must be one of: ${SUPPORTED_CHAIN_IDS.join(', ')}`,
+        });
+      }
 
       if (!sellToken || !buyToken || !sellAmount || !taker) {
         return reply.status(400).send({
@@ -163,7 +181,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
 
       try {
         const params = new URLSearchParams({
-          chainId: POLYGON_CHAIN_ID.toString(),
+          chainId: chainId.toString(),
           sellToken,
           buyToken,
           sellAmount,
@@ -209,8 +227,16 @@ export async function swapRoutes(fastify: FastifyInstance) {
   fastify.get<{ Querystring: GetQuoteQuery & { tokenDecimals?: string } }>(
     '/indicative-price',
     async (request: FastifyRequest<{ Querystring: GetQuoteQuery & { tokenDecimals?: string } }>, reply: FastifyReply) => {
-      const { sellToken, buyToken, sellAmount, taker, tokenDecimals: tokenDecimalsStr } = request.query;
+      const { chainId: chainIdStr, sellToken, buyToken, sellAmount, taker, tokenDecimals: tokenDecimalsStr } = request.query;
       const tokenDecimals = parseInt(tokenDecimalsStr || '18', 10);
+
+      const chainId = Number(chainIdStr);
+      if (!chainIdStr || !SUPPORTED_CHAIN_IDS.includes(chainId as any)) {
+        return reply.status(400).send({
+          error: 'Invalid or missing chainId',
+          message: `chainId must be one of: ${SUPPORTED_CHAIN_IDS.join(', ')}`,
+        });
+      }
 
       if (!sellToken || !buyToken || !sellAmount || !taker) {
         return reply.status(400).send({
@@ -229,7 +255,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
       // Helper to fetch 0x price/quote with extensive logging
       const fetch0xPrice = async (sell: string, buy: string, amount: string): Promise<{ buyAmount: string; sellAmount: string; liquidityAvailable: boolean } | null> => {
         const params = new URLSearchParams({
-          chainId: POLYGON_CHAIN_ID.toString(),
+          chainId: chainId.toString(),
           sellToken: sell,
           buyToken: buy,
           sellAmount: amount,
@@ -290,7 +316,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
 
       try {
         // Check cache for reference price (AUSD -> TOKEN)
-        const cacheKey = `ref:${sellToken}`;
+        const cacheKey = `ref:${chainId}:${sellToken}`;
         const now = Date.now();
         const cached = priceCache.get(cacheKey);
         
@@ -349,7 +375,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
           referenceAmount: REFERENCE_USDC_AMOUNT,
         }, '[indicative-price] Step 2: Trying reference quote USDC → TOKEN');
         
-        const referenceQuote = await fetch0xPrice(POLYGON_TOKENS.USDC, sellToken, REFERENCE_USDC_AMOUNT);
+        const referenceQuote = await fetch0xPrice(TOKENS_BY_CHAIN[chainId as SupportedChainId].USDC, sellToken, REFERENCE_USDC_AMOUNT);
         
         logger.info({ 
           ...requestContext, 
@@ -364,7 +390,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
             step: 'reference-wmon',
           }, '[indicative-price] Step 3: Reference failed, trying USDC → WMATIC → TOKEN route');
           
-          const usdcToWmon = await fetch0xPrice(POLYGON_TOKENS.USDC, POLYGON_TOKENS.WMATIC, REFERENCE_USDC_AMOUNT);
+          const usdcToWmon = await fetch0xPrice(TOKENS_BY_CHAIN[chainId as SupportedChainId].USDC, TOKENS_BY_CHAIN[chainId as SupportedChainId].WRAPPED_NATIVE, REFERENCE_USDC_AMOUNT);
           
           logger.info({ 
             ...requestContext, 
@@ -373,7 +399,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
           }, '[indicative-price] USDC → WMATIC result');
           
           if (usdcToWmon?.liquidityAvailable && usdcToWmon.buyAmount) {
-            const wmonToToken = await fetch0xPrice(POLYGON_TOKENS.WMATIC, sellToken, usdcToWmon.buyAmount);
+            const wmonToToken = await fetch0xPrice(TOKENS_BY_CHAIN[chainId as SupportedChainId].WRAPPED_NATIVE, sellToken, usdcToWmon.buyAmount);
             
             logger.info({ 
               ...requestContext, 

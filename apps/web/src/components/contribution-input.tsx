@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Coins, Wallet } from 'lucide-react';
 import { formatUnits } from 'viem';
-import { useWalletBalance } from '@/hooks/use-wallet';
+import { useWalletBalances } from '@/hooks/use-wallet';
 import type { Address } from 'viem';
 
 interface ContributionInputProps {
@@ -21,10 +21,11 @@ const PRESET_PERCENTAGES = [
 
 export function ContributionInput({ value, onChange, address }: ContributionInputProps) {
   const [isCustom, setIsCustom] = useState(true);
-  const { data: balanceRaw, isLoading: balanceLoading } = useWalletBalance(address);
+  const { data: balances, isLoading: balanceLoading } = useWalletBalances(address);
+  const balanceRaw = balances?.[137] ?? '0';
 
   const balance = useMemo(() => {
-    if (!balanceRaw) return 0;
+    if (!balanceRaw || balanceRaw === '0') return 0;
     return parseFloat(formatUnits(BigInt(balanceRaw), 6));
   }, [balanceRaw]);
 

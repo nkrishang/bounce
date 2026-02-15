@@ -1,4 +1,4 @@
-import type { TradeData, TradeEscrowState, TradeStatus, TradeView, Address } from './types.js';
+import type { TradeData, TradeEscrowState, TradeStatus, TradeView, Address, SupportedChainId } from './types';
 
 export function bigintToString(value: bigint): string {
   return value.toString();
@@ -26,6 +26,7 @@ export function deriveTradeStatus(
 }
 
 export function deriveTradeView(
+  chainId: SupportedChainId,
   escrow: Address,
   data: TradeData,
   state: TradeEscrowState,
@@ -52,6 +53,7 @@ export function deriveTradeView(
     BigInt(state.funderPayout) > 0n;
 
   return {
+    chainId,
     escrow,
     data,
     state,

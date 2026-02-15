@@ -159,7 +159,7 @@ export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) 
         <tbody>
           {tokens.map((token) => {
             const chain = CHAIN_META[token.networkId];
-            const isPolygon = token.networkId === 137;
+            const isSupported = [137, 8453, 143].includes(token.networkId);
             const logoSrc = token.logoURI || token.imageThumbUrl;
 
             return (
@@ -256,8 +256,8 @@ export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) 
                 {/* Trade */}
                 <td className="py-4 px-3 text-right">
                   <button
-                    onClick={() => isPolygon && onBoostedBuy?.(token)}
-                    disabled={!isPolygon}
+                    onClick={() => isSupported && onBoostedBuy?.(token)}
+                    disabled={!isSupported}
                     className="px-5 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Boosted Buy

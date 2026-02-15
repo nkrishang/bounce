@@ -4,9 +4,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Copy, ExternalLink, RefreshCw, Check, Wallet } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useWalletBalance } from "@/hooks/use-wallet";
+import { useWalletBalances } from "@/hooks/use-wallet";
 import { formatAddress } from "@thesis/shared";
 import { formatUnits } from "viem";
+
+const CHAIN_META: Record<number, { name: string; logo: string; explorer: string }> = {
+  137: { name: "Polygon", logo: "/logos/polygon-logo.svg", explorer: "https://polygonscan.com" },
+  8453: { name: "Base", logo: "/logos/base-logo.svg", explorer: "https://basescan.org" },
+  143: { name: "Monad", logo: "/logos/monad-logo.svg", explorer: "https://explorer.monad.xyz" },
+};
 
 interface WalletModalProps {
   open: boolean;
@@ -17,10 +23,10 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
   const { embeddedWalletAddress, externalWalletAddress, address } = useAuth();
   const displayAddress = embeddedWalletAddress ?? address;
   const {
-    data: balance,
+    data: balances,
     isLoading: balanceLoading,
     refetch,
-  } = useWalletBalance(displayAddress);
+  } = useWalletBalances(displayAddress);
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -29,8 +35,6 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const formattedBalance = balance ? formatUnits(BigInt(balance), 6) : "0";
 
   return (
     <AnimatePresence>
@@ -87,10 +91,10 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/20">
-                    <div className="flex items-center justify-between mb-2">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">
-                        USDC Balance
+                        USDC Balances
                       </span>
                       <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -104,13 +108,35 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                         />
                       </motion.button>
                     </div>
-                    <div className="text-3xl font-bold font-mono">
-                      $
-                      {parseFloat(formattedBalance).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </div>
+                    {([137, 8453, 143] as const).map((chainId) => {
+                      const chain = CHAIN_META[chainId];
+                      const bal = balances?.[chainId] ?? "0";
+                      const formatted = formatUnits(BigInt(bal), 6);
+                      return (
+                        <div
+                          key={chainId}
+                          className="flex items-center justify-between p-3 rounded-lg bg-background border border-border"
+                        >
+                          <div className="flex items-center gap-2">
+                            <img
+                              src={chain.logo}
+                              alt={chain.name}
+                              className="w-5 h-5"
+                            />
+                            <span className="text-sm font-medium">
+                              {chain.name}
+                            </span>
+                          </div>
+                          <span className="font-mono text-sm">
+                            $
+                            {parseFloat(formatted).toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {externalWalletAddress && embeddedWalletAddress && (
@@ -125,20 +151,33 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                     </div>
                   )}
 
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">
                       To fund your wallet, send USDC to your deposit address
                       from an external wallet or exchange.
                     </p>
-                    <a
-                      href={`https://polygonscan.com/address/${displayAddress}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-primary hover:underline"
-                    >
-                      View on Explorer
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
+                    <div className="flex flex-wrap gap-3">
+                      {([137, 8453, 143] as const).map((chainId) => {
+                        const chain = CHAIN_META[chainId];
+                        return (
+                          <a
+                            key={chainId}
+                            href={`${chain.explorer}/address/${displayAddress}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 text-sm text-primary hover:underline"
+                          >
+                            <img
+                              src={chain.logo}
+                              alt={chain.name}
+                              className="w-3.5 h-3.5"
+                            />
+                            {chain.name}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>

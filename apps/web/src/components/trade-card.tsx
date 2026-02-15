@@ -17,7 +17,7 @@ interface TradeCardProps {
 export function TradeCard({ trade }: TradeCardProps) {
   const [showModal, setShowModal] = useState(false);
   const [justExpired, setJustExpired] = useState(false);
-  const { data: buyTokenMeta } = useTokenMeta(trade.data.buyToken);
+  const { data: buyTokenMeta } = useTokenMeta(trade.chainId, trade.data.buyToken);
   const { data: tokenList = [] } = useTokenList();
 
   const tokenFromList = useMemo(() => {

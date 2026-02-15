@@ -1,15 +1,15 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { type TokenMeta, type Address } from '@thesis/shared';
+import { type TokenMeta, type Address, type SupportedChainId } from '@thesis/shared';
 import { api } from '@/lib/api';
 
-export function useTokenMeta(tokenAddress: Address | undefined) {
+export function useTokenMeta(chainId: SupportedChainId, tokenAddress: Address | undefined) {
   return useQuery({
-    queryKey: ['token', tokenAddress],
+    queryKey: ['token', chainId, tokenAddress],
     queryFn: async () => {
       if (!tokenAddress) throw new Error('No token address');
-      const response = await api.get<{ data: TokenMeta }>(`/tokens/${tokenAddress}`);
+      const response = await api.get<{ data: TokenMeta }>(`/tokens/${tokenAddress}?chainId=${chainId}`);
       return response.data;
     },
     enabled: !!tokenAddress,

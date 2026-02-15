@@ -38,6 +38,7 @@ export function SellModal({ trade, buyTokenMeta, open, onClose }: SellModalProps
     setSubmitError(null);
     try {
       await sellTrade({
+        chainId: trade.chainId,
         escrowAddress: trade.escrow,
         buyToken: trade.data.buyToken,
         sellToken: trade.data.sellToken,

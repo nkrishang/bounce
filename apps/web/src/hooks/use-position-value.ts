@@ -2,10 +2,15 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, http, type Address, formatUnits } from 'viem';
-import { polygon } from 'viem/chains';
-import { ERC20Abi } from '@thesis/contracts';
-import { POLYGON_TOKENS } from '@thesis/shared';
+import { ERC20Abi, getChain } from '@thesis/contracts';
+import { TOKENS_BY_CHAIN, type SupportedChainId } from '@thesis/shared';
 import { api } from '@/lib/api';
+
+const RPC_URLS: Record<number, string | undefined> = {
+  137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || undefined,
+  8453: process.env.NEXT_PUBLIC_BASE_RPC_URL || undefined,
+  143: process.env.NEXT_PUBLIC_MONAD_RPC_URL || undefined,
+};
 
 interface IndicativePriceResponse {
   sellAmount: string;
@@ -33,19 +38,15 @@ export interface PositionValue {
   noLiquidity: boolean;
 }
 
-const publicClient = createPublicClient({
-  chain: polygon,
-  transport: http(),
-});
-
 export function usePositionValue(
+  chainId: SupportedChainId,
   escrowAddress: Address | undefined,
   buyToken: Address | undefined,
   buyTokenDecimals: number = 18,
   totalSellIn: string | undefined
 ) {
   return useQuery({
-    queryKey: ['positionValue', escrowAddress, buyToken, totalSellIn],
+    queryKey: ['positionValue', chainId, escrowAddress, buyToken, totalSellIn],
     queryFn: async (): Promise<PositionValue> => {
       const buyPriceUsdc = BigInt(totalSellIn || '0');
       
@@ -71,11 +72,17 @@ export function usePositionValue(
         return baseResult;
       }
 
+      const rpcUrl = RPC_URLS[chainId] || undefined;
+      const client = createPublicClient({
+        chain: getChain(chainId),
+        transport: http(rpcUrl),
+      });
+
       let tokenBalance: bigint | null = null;
       let balanceError = false;
 
       try {
-        tokenBalance = await publicClient.readContract({
+        tokenBalance = await client.readContract({
           address: buyToken,
           abi: ERC20Abi,
           functionName: 'balanceOf',
@@ -105,8 +112,9 @@ export function usePositionValue(
       try {
         // Use the new indicative-price endpoint which handles small amounts via reference pricing
         const params = new URLSearchParams({
+          chainId: chainId.toString(),
           sellToken: buyToken,
-          buyToken: POLYGON_TOKENS.USDC,
+          buyToken: TOKENS_BY_CHAIN[chainId].USDC,
           sellAmount: tokenBalance.toString(),
           taker: escrowAddress, // Use actual escrow address, same as sell action
           tokenDecimals: buyTokenDecimals.toString(),

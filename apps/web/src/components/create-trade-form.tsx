@@ -9,9 +9,8 @@ import { parseUnits } from 'viem';
 import { TokenSelector } from '@/components/token-selector';
 import { ContributionInput } from '@/components/contribution-input';
 import { parseTransactionError } from '@/lib/parse-transaction-error';
+import { TOKENS_BY_CHAIN, type SupportedChainId } from '@thesis/shared';
 import type { TokenInfo } from '@/hooks/use-token-list';
-
-const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS;
 
 const EXPIRATION_OPTIONS = [
   { label: '5 minutes', value: 5 * 60 },
@@ -27,6 +26,7 @@ interface CreateTradeFormProps {
     name: string;
     symbol: string;
     logoURI?: string;
+    networkId?: number;
   } | null;
   onSuccess?: () => void;
 }
@@ -35,6 +35,7 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
   const { address } = useAuth();
   const { createTrade, isLoading, step, error } = useCreateTrade();
 
+  const [chainId, setChainId] = useState<SupportedChainId>((initialToken?.networkId ?? 137) as SupportedChainId);
   const [buyToken, setBuyToken] = useState(initialToken?.address ?? '');
   const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(
     initialToken ? {
@@ -42,7 +43,7 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
       name: initialToken.name,
       symbol: initialToken.symbol,
       logoURI: initialToken.logoURI,
-      networkId: 137,
+      networkId: initialToken.networkId ?? 137,
     } : null
   );
   const [sellAmount, setSellAmount] = useState('');
@@ -62,6 +63,7 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
   const handleTokenChange = (tokenAddress: string, token?: TokenInfo) => {
     setBuyToken(tokenAddress);
     setSelectedToken(token ?? null);
+    setChainId((token?.networkId ?? 137) as SupportedChainId);
   };
 
   const fundingNeeded = sellAmount ? (parseFloat(sellAmount) * 4).toFixed(2) : '0';
@@ -75,6 +77,7 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
 
     try {
       await createTrade({
+        chainId,
         buyToken: buyToken as `0x${string}`,
         sellAmount: parseUnits(sellAmount, 6),
         expirationSeconds,
@@ -101,9 +104,10 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
             Token to Buy
           </label>
           <TokenSelector
+            chainId={chainId}
             value={buyToken}
             onChange={handleTokenChange}
-            usdcAddress={USDC_ADDRESS}
+            usdcAddress={TOKENS_BY_CHAIN[chainId].USDC}
           />
           <p className="text-xs text-muted-foreground">
             Select from the list or add a custom token address

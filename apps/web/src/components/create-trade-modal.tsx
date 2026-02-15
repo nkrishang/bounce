@@ -13,6 +13,7 @@ interface CreateTradeModalProps {
     name: string;
     symbol: string;
     logoURI?: string;
+    networkId?: number;
   } | null;
 }
 

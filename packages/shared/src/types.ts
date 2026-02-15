@@ -1,5 +1,7 @@
 export type Address = `0x${string}`;
 
+export type SupportedChainId = 137 | 8453 | 143;
+
 export interface TradeData {
   proposer: Address;
   expirationTimestamp: number;
@@ -28,6 +30,7 @@ export interface TradeEscrowState {
 export type TradeStatus = 'OPEN' | 'FUNDED' | 'SOLD' | 'EXPIRED_UNFUNDED';
 
 export interface TradeView {
+  chainId: SupportedChainId;
   escrow: Address;
   data: TradeData;
   state: TradeEscrowState;

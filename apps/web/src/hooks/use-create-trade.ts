@@ -4,15 +4,13 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, custom, type Address } from 'viem';
-import { polygon } from 'viem/chains';
-import { TradeEscrowFactoryAbi, ERC20Abi } from '@thesis/contracts';
-
-const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_TRADE_ESCROW_FACTORY_ADDRESS as Address;
-const USDC_ADDRESS = process.env.NEXT_PUBLIC_USDC_ADDRESS as Address;
+import { TradeEscrowFactoryAbi, ERC20Abi, getChain, ADDRESSES_BY_CHAIN, type ChainId } from '@thesis/contracts';
+import { TOKENS_BY_CHAIN } from '@thesis/shared';
 
 type Step = 'idle' | 'approve' | 'create' | 'confirming' | 'success';
 
 interface CreateTradeParams {
+  chainId: ChainId;
   buyToken: Address;
   sellAmount: bigint;
   expirationSeconds: number;
@@ -35,20 +33,25 @@ export function useCreateTrade() {
       setError(null);
 
       try {
+        await wallet.switchChain(params.chainId);
+
         const provider = await wallet.getEthereumProvider();
         const walletClient = createWalletClient({
-          chain: polygon,
+          chain: getChain(params.chainId),
           transport: custom(provider),
         });
+
+        const factoryAddress = ADDRESSES_BY_CHAIN[params.chainId].TRADE_ESCROW_FACTORY;
+        const usdcAddress = TOKENS_BY_CHAIN[params.chainId].USDC;
 
         const [address] = await walletClient.getAddresses();
 
         setStep('approve');
         const approveHash = await walletClient.writeContract({
-          address: USDC_ADDRESS,
+          address: usdcAddress,
           abi: ERC20Abi,
           functionName: 'approve',
-          args: [FACTORY_ADDRESS, params.sellAmount],
+          args: [factoryAddress, params.sellAmount],
           account: address,
         });
 
@@ -58,12 +61,12 @@ export function useCreateTrade() {
         const expirationTimestamp = BigInt(Math.floor(Date.now() / 1000) + params.expirationSeconds);
 
         const createHash = await walletClient.writeContract({
-          address: FACTORY_ADDRESS,
+          address: factoryAddress,
           abi: TradeEscrowFactoryAbi,
           functionName: 'createTradeEscrow',
           args: [
             expirationTimestamp,
-            USDC_ADDRESS,
+            usdcAddress,
             params.buyToken,
             params.sellAmount,
             params.metadataUri,

@@ -5,17 +5,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ChevronDown, Check, X, Loader2, Plus, ExternalLink } from 'lucide-react';
 import { useTokenList, type TokenInfo } from '@/hooks/use-token-list';
 import { useVerifyToken, type VerificationStatus } from '@/hooks/use-verify-token';
+import { EXPLORER_URLS } from '@thesis/contracts';
+import type { SupportedChainId } from '@thesis/shared';
 import type { Address } from 'viem';
 
-const POLYGON_EXPLORER_URL = 'https://polygonscan.com';
-
 interface TokenSelectorProps {
+  chainId: SupportedChainId;
   value: string;
   onChange: (address: string, token?: TokenInfo) => void;
   usdcAddress?: string;
 }
 
-export function TokenSelector({ value, onChange, usdcAddress }: TokenSelectorProps) {
+export function TokenSelector({ chainId, value, onChange, usdcAddress }: TokenSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [isCustomMode, setIsCustomMode] = useState(false);
@@ -23,7 +24,7 @@ export function TokenSelector({ value, onChange, usdcAddress }: TokenSelectorPro
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { data: tokens = [], isLoading: tokensLoading } = useTokenList();
-  const { status, error, tokenData } = useVerifyToken(isCustomMode ? customAddress : undefined);
+  const { status, error, tokenData } = useVerifyToken(chainId, isCustomMode ? customAddress : undefined);
 
   const filteredTokens = useMemo(() => {
     const lowercaseSearch = search.toLowerCase();
@@ -117,7 +118,7 @@ export function TokenSelector({ value, onChange, usdcAddress }: TokenSelectorPro
 
       {value && (
         <a
-          href={`${POLYGON_EXPLORER_URL}/address/${value}`}
+          href={`${EXPLORER_URLS[chainId]}/address/${value}`}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
