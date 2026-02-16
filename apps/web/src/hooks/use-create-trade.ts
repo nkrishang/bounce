@@ -64,16 +64,27 @@ export function useCreateTrade() {
 
         const [address] = await walletClient.getAddresses();
 
-        setStep('approve');
-        const approveHash = await walletClient.writeContract({
+        // Check existing allowance to skip redundant approval
+        const existingAllowance = await publicClient.readContract({
           address: usdcAddress,
           abi: ERC20Abi,
-          functionName: 'approve',
-          args: [factoryAddress, params.sellAmount],
-          account: address,
+          functionName: 'allowance',
+          args: [address, factoryAddress],
         });
 
-        console.log('Approve tx:', approveHash);
+        if (existingAllowance < params.sellAmount) {
+          setStep('approve');
+          const approveHash = await walletClient.writeContract({
+            address: usdcAddress,
+            abi: ERC20Abi,
+            functionName: 'approve',
+            args: [factoryAddress, params.sellAmount],
+            account: address,
+          });
+          console.log('Approve tx:', approveHash);
+        } else {
+          console.log('Sufficient USDC allowance already exists, skipping approval');
+        }
 
         setStep('create');
         const expirationTimestamp = BigInt(Math.floor(Date.now() / 1000) + params.expirationSeconds);

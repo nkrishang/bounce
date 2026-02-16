@@ -172,7 +172,7 @@ export default function MyTradesPage() {
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
-      ) : error ? (
+      ) : error && !userTrades ? (
         <div className="text-center py-20 text-danger">
           Failed to load trades. Please try again.
         </div>

@@ -138,10 +138,6 @@ export function useSellTrade() {
           },
         }));
 
-        queryClient.invalidateQueries({ queryKey: ['trades'] });
-        queryClient.invalidateQueries({ queryKey: ['userTrades'] });
-        queryClient.invalidateQueries({ queryKey: ['trade', params.escrowAddress] });
-
         setStep('success');
         setIsLoading(false);
         return sellHash;

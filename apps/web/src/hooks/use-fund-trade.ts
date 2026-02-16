@@ -90,18 +90,28 @@ export function useFundTrade() {
 
         const [address] = await walletClient.getAddresses();
 
-        // Step 1: Approve escrow to pull funder's contribution
-        setStep("approve");
-        const approveHash = await walletClient.writeContract({
+        // Step 1: Approve escrow to pull funder's contribution (skip if sufficient allowance exists)
+        const existingAllowance = await publicClient.readContract({
           address: params.sellToken,
           abi: ERC20Abi,
-          functionName: "approve",
-          args: [params.escrowAddress, params.funderContribution],
-          account: address,
+          functionName: "allowance",
+          args: [address, params.escrowAddress],
         });
 
-        console.log("Approve tx:", approveHash);
-        await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        if (existingAllowance < params.funderContribution) {
+          setStep("approve");
+          const approveHash = await walletClient.writeContract({
+            address: params.sellToken,
+            abi: ERC20Abi,
+            functionName: "approve",
+            args: [params.escrowAddress, params.funderContribution],
+            account: address,
+          });
+          console.log("Approve tx:", approveHash);
+          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        } else {
+          console.log("Sufficient allowance already exists, skipping approval");
+        }
 
         // Step 2: Get swap quote from 0x API
         // Total swap amount = proposer (20%) + funder (80%) = funderContribution * 1.25
@@ -169,12 +179,6 @@ export function useFundTrade() {
             },
           }));
         }, 1000);
-
-        queryClient.invalidateQueries({ queryKey: ["trades"] });
-        queryClient.invalidateQueries({ queryKey: ["userTrades"] });
-        queryClient.invalidateQueries({
-          queryKey: ["trade", params.escrowAddress],
-        });
 
         return buyHash;
       } catch (err) {
