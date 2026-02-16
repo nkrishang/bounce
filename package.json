@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "pnpm run --parallel dev",
+    "dev": "docker compose up -d redis && pnpm run --parallel dev",
+    "dev:no-redis": "pnpm run --parallel dev",
     "build": "pnpm run -r build",
     "lint": "pnpm run -r lint",
     "typecheck": "pnpm run -r typecheck"

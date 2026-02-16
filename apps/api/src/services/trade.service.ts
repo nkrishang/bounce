@@ -8,7 +8,7 @@ import {
   deriveTradeView,
   ZERO_ADDRESS,
 } from '@thesis/shared';
-import { cache } from '../lib/cache.js';
+import { cache, TTL } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
 
 const ESCROW_STATE_FNS = [
@@ -38,36 +38,35 @@ function chunk<T>(arr: T[], size: number): T[][] {
 
 export async function getAllTradeEscrows(chainId: ChainId): Promise<Address[]> {
   const cacheKey = `all-escrows-${chainId}`;
-  const cached = cache.get<Address[]>(cacheKey);
-  if (cached) return cached;
 
-  logger.info({ chainId }, 'Fetching all trade escrows from factory');
+  return cache.getOrFetch(cacheKey, async () => {
+    logger.info({ chainId }, 'Fetching all trade escrows from factory');
 
-  try {
-    const factoryAddress = getFactoryAddress(chainId);
-    const client = getPublicClient(chainId);
-    const escrows = await client.readContract({
-      address: factoryAddress,
-      abi: TradeEscrowFactoryAbi,
-      functionName: 'getAllTradeEscrows',
-    });
+    try {
+      const factoryAddress = getFactoryAddress(chainId);
+      const client = getPublicClient(chainId);
+      const escrows = await client.readContract({
+        address: factoryAddress,
+        abi: TradeEscrowFactoryAbi,
+        functionName: 'getAllTradeEscrows',
+      });
 
-    const filtered = (escrows as Address[]).filter(
-      (addr) => addr.toLowerCase() !== ZERO_ADDRESS.toLowerCase()
-    );
+      const filtered = (escrows as Address[]).filter(
+        (addr) => addr.toLowerCase() !== ZERO_ADDRESS.toLowerCase()
+      );
 
-    cache.set(cacheKey, filtered);
-    logger.info({ chainId, count: filtered.length }, 'Fetched trade escrows');
-    return filtered;
-  } catch (error) {
-    logger.error({ chainId, error }, 'Failed to fetch trade escrows');
-    throw error;
-  }
+      logger.info({ chainId, count: filtered.length }, 'Fetched trade escrows');
+      return filtered;
+    } catch (error) {
+      logger.error({ chainId, error }, 'Failed to fetch trade escrows');
+      throw error;
+    }
+  }, TTL.ESCROW_LIST);
 }
 
 export async function getTradeData(chainId: ChainId, escrowAddress: Address): Promise<TradeData> {
   const cacheKey = `trade-data-${chainId}-${escrowAddress}`;
-  const cached = cache.get<TradeData>(cacheKey);
+  const cached = await cache.get<TradeData>(cacheKey);
   if (cached) return cached;
 
   logger.debug({ chainId, escrowAddress }, 'Fetching trade data');
@@ -91,7 +90,7 @@ export async function getTradeData(chainId: ChainId, escrowAddress: Address): Pr
       metadataUri: data.metadataUri,
     };
 
-    cache.set(cacheKey, tradeData);
+    await cache.set(cacheKey, tradeData, TTL.IMMUTABLE);
     return tradeData;
   } catch (error) {
     logger.error({ chainId, escrowAddress, error }, 'Failed to fetch trade data');
@@ -101,7 +100,7 @@ export async function getTradeData(chainId: ChainId, escrowAddress: Address): Pr
 
 export async function getEscrowState(chainId: ChainId, escrowAddress: Address): Promise<TradeEscrowState> {
   const cacheKey = `escrow-state-${chainId}-${escrowAddress}`;
-  const cached = cache.get<TradeEscrowState>(cacheKey);
+  const cached = await cache.get<TradeEscrowState>(cacheKey);
   if (cached) return cached;
 
   logger.debug({ chainId, escrowAddress }, 'Fetching escrow state via multicall');
@@ -150,7 +149,7 @@ export async function getEscrowState(chainId: ChainId, escrowAddress: Address): 
       funderPayout: (funderPayout as bigint).toString(),
     };
 
-    cache.set(cacheKey, state);
+    await cache.set(cacheKey, state, TTL.ESCROW_STATE);
     return state;
   } catch (error) {
     logger.error({ chainId, escrowAddress, error }, 'Failed to fetch escrow state');
@@ -165,7 +164,7 @@ async function getMultipleTradeDatas(chainId: ChainId, escrows: Address[]): Prom
 
   const uncachedEscrows: Address[] = [];
   for (const escrow of escrows) {
-    const cached = cache.get<TradeData>(`trade-data-${chainId}-${escrow}`);
+    const cached = await cache.get<TradeData>(`trade-data-${chainId}-${escrow}`);
     if (cached) {
       map.set(escrow, cached);
     } else {
@@ -218,7 +217,7 @@ async function getMultipleTradeDatas(chainId: ChainId, escrows: Address[]): Prom
     };
 
     map.set(escrow, tradeData);
-    cache.set(`trade-data-${chainId}-${escrow}`, tradeData);
+    await cache.set(`trade-data-${chainId}-${escrow}`, tradeData, TTL.IMMUTABLE);
   }
 
   return map;
@@ -230,7 +229,7 @@ async function getMultipleEscrowStates(chainId: ChainId, escrows: Address[]): Pr
 
   const uncachedEscrows: Address[] = [];
   for (const escrow of escrows) {
-    const cached = cache.get<TradeEscrowState>(`escrow-state-${chainId}-${escrow}`);
+    const cached = await cache.get<TradeEscrowState>(`escrow-state-${chainId}-${escrow}`);
     if (cached) {
       map.set(escrow, cached);
     } else {
@@ -284,7 +283,7 @@ async function getMultipleEscrowStates(chainId: ChainId, escrows: Address[]): Pr
     };
 
     map.set(escrow, state);
-    cache.set(`escrow-state-${chainId}-${escrow}`, state);
+    await cache.set(`escrow-state-${chainId}-${escrow}`, state, TTL.ESCROW_STATE);
   }
 
   return map;

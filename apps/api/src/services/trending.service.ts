@@ -1,9 +1,7 @@
 import { logger } from '../lib/logger.js';
+import { cache, TTL } from '../lib/cache.js';
 
 const CODEX_ENDPOINT = 'https://graph.codex.io/graphql';
-
-// Cache trending results for 10 minutes (free tier)
-const TRENDING_CACHE_TTL_MS = 600_000;
 
 export interface TrendingTokenSocialLinks {
   twitter?: string | null;
@@ -40,11 +38,6 @@ export interface TrendingToken {
   liquidity: string | null;
   token: TrendingTokenEnhanced;
 }
-
-// --- Cache ---
-
-let trendingCache: TrendingToken[] | null = null;
-let trendingCacheTime = 0;
 
 const FILTER_TOKENS_QUERY = `
 query FilterTrendingTokens($filters: TokenFilters, $statsType: TokenPairStatisticsType, $rankings: [TokenRanking], $limit: Int) {
@@ -95,50 +88,46 @@ const FILTER_TOKENS_VARIABLES = {
   limit: 50,
 };
 
+const TRENDING_CACHE_KEY = 'trending-tokens';
+
 export async function getTrendingTokens(): Promise<TrendingToken[]> {
-  if (trendingCache && Date.now() - trendingCacheTime < TRENDING_CACHE_TTL_MS) {
-    logger.debug('Returning cached trending tokens');
-    return trendingCache;
-  }
+  return cache.getOrFetch(TRENDING_CACHE_KEY, async () => {
+    const apiKey = process.env.CODEX_IO_API_KEY;
+    if (!apiKey) {
+      logger.warn('CODEX_IO_API_KEY is not set — returning empty trending list');
+      return [];
+    }
 
-  const apiKey = process.env.CODEX_IO_API_KEY;
-  if (!apiKey) {
-    logger.warn('CODEX_IO_API_KEY is not set — returning empty trending list');
-    return [];
-  }
+    logger.info('Fetching trending tokens from Codex.io');
 
-  logger.info('Fetching trending tokens from Codex.io');
+    const res = await fetch(CODEX_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: apiKey,
+      },
+      body: JSON.stringify({
+        query: FILTER_TOKENS_QUERY,
+        variables: FILTER_TOKENS_VARIABLES,
+      }),
+    });
 
-  const res = await fetch(CODEX_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: apiKey,
-    },
-    body: JSON.stringify({
-      query: FILTER_TOKENS_QUERY,
-      variables: FILTER_TOKENS_VARIABLES,
-    }),
-  });
+    if (!res.ok) {
+      throw new Error(`Codex API error: ${res.status} ${res.statusText}`);
+    }
 
-  if (!res.ok) {
-    throw new Error(`Codex API error: ${res.status} ${res.statusText}`);
-  }
+    const json = await res.json() as {
+      data?: { filterTokens?: { results?: TrendingToken[] } };
+      errors?: { message: string }[];
+    };
 
-  const json = await res.json() as {
-    data?: { filterTokens?: { results?: TrendingToken[] } };
-    errors?: { message: string }[];
-  };
+    if (json.errors?.length) {
+      throw new Error(`Codex GraphQL error: ${json.errors[0].message}`);
+    }
 
-  if (json.errors?.length) {
-    throw new Error(`Codex GraphQL error: ${json.errors[0].message}`);
-  }
+    const tokens: TrendingToken[] = json.data?.filterTokens?.results ?? [];
 
-  const tokens: TrendingToken[] = json.data?.filterTokens?.results ?? [];
-
-  logger.info({ count: tokens.length }, 'Fetched trending tokens from Codex.io');
-  trendingCache = tokens;
-  trendingCacheTime = Date.now();
-
-  return tokens;
+    logger.info({ count: tokens.length }, 'Fetched trending tokens from Codex.io');
+    return tokens;
+  }, TTL.TRENDING);
 }

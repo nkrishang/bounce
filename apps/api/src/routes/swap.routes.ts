@@ -10,20 +10,13 @@ import {
 } from '@thesis/shared';
 import { SUPPORTED_CHAIN_IDS } from '@thesis/contracts';
 import { logger } from '../lib/logger.js';
+import { cache, TTL } from '../lib/cache.js';
 
 const ZERO_X_API_KEY = process.env.ZERO_X_API_KEY;
 
 if (!ZERO_X_API_KEY) {
   logger.warn('ZERO_X_API_KEY not set - swap quotes will fail');
 }
-
-// Simple TTL cache for reference pricing
-interface CacheEntry {
-  data: IndicativePriceResponse;
-  expiresAt: number;
-}
-const priceCache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 30000; // 30 seconds
 
 // Reference amount for deriving token prices (10 USDC = 10_000_000 in 6 decimals)
 const REFERENCE_USDC_AMOUNT = '10000000';
@@ -317,33 +310,31 @@ export async function swapRoutes(fastify: FastifyInstance) {
       try {
         // Check cache for reference price (AUSD -> TOKEN)
         const cacheKey = `ref:${chainId}:${sellToken}`;
-        const now = Date.now();
-        const cached = priceCache.get(cacheKey);
-        
-        if (cached && cached.expiresAt > now) {
+        const cached = await cache.get<IndicativePriceResponse>(cacheKey);
+
+        if (cached) {
           // Use cached reference price to calculate value
-          const pricePerToken = BigInt(cached.data.pricePerToken || '0');
+          const pricePerToken = BigInt(cached.pricePerToken || '0');
           const balance = BigInt(sellAmount);
           const tokenDecimalsFactor = BigInt(10) ** BigInt(tokenDecimals);
           const valueAusd = (balance * pricePerToken) / tokenDecimalsFactor;
-          
-          logger.info({ 
-            ...requestContext, 
+
+          logger.info({
+            ...requestContext,
             cacheHit: true,
             pricePerToken: pricePerToken.toString(),
             valueAusd: valueAusd.toString(),
-            cacheExpiresIn: cached.expiresAt - now,
           }, '[indicative-price] Using cached reference price');
-          
+
           return reply.send({
             sellAmount,
             buyAmount: valueAusd.toString(),
             liquidityAvailable: true,
-            pricePerToken: cached.data.pricePerToken,
+            pricePerToken: cached.pricePerToken,
             derivedFromReference: true,
           });
         }
-        
+
         logger.info({ ...requestContext, cacheHit: false }, '[indicative-price] Cache miss, fetching fresh price');
 
         // First, try direct price for the exact amount (TOKEN -> AUSD)
@@ -431,10 +422,10 @@ export async function swapRoutes(fastify: FastifyInstance) {
                 derivedFromReference: true,
               };
               
-              priceCache.set(cacheKey, { data: result, expiresAt: now + CACHE_TTL_MS });
-              
-              logger.info({ 
-                ...requestContext, 
+              await cache.set(cacheKey, result, TTL.PRICE_REF);
+
+              logger.info({
+                ...requestContext,
                 step: 'reference-wmon',
                 success: true,
                 tokensReceived: tokensReceived.toString(),
@@ -479,10 +470,10 @@ export async function swapRoutes(fastify: FastifyInstance) {
           derivedFromReference: true,
         };
         
-        priceCache.set(cacheKey, { data: result, expiresAt: now + CACHE_TTL_MS });
-        
-        logger.info({ 
-          ...requestContext, 
+        await cache.set(cacheKey, result, TTL.PRICE_REF);
+
+        logger.info({
+          ...requestContext,
           step: 'reference-direct',
           success: true,
           tokensReceived: tokensReceived.toString(),

@@ -3,12 +3,18 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { registerRoutes } from './routes/index.js';
 import { logger } from './lib/logger.js';
+import { getRedisClient, disconnectRedis } from './lib/redis.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 async function main() {
+  const redis = getRedisClient();
+  if (!redis) {
+    logger.warn('Redis unavailable — using in-memory cache fallback');
+  }
+
   const fastify = Fastify({
     logger: {
       level: 'info',
@@ -29,6 +35,16 @@ async function main() {
   });
 
   registerRoutes(fastify);
+
+  const shutdown = async () => {
+    logger.info('Shutting down...');
+    await disconnectRedis();
+    await fastify.close();
+    process.exit(0);
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
   try {
     await fastify.listen({ port: PORT, host: HOST });
