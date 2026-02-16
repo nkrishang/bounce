@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, createPublicClient, custom, http, type Address } from 'viem';
 import { TradeEscrowFactoryAbi, ERC20Abi, getChain, ADDRESSES_BY_CHAIN, type ChainId } from '@thesis/contracts';
 import { TOKENS_BY_CHAIN } from '@thesis/shared';
+import { api } from '../lib/api';
 
 const RPC_URLS: Record<number, string> = {
   137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',
@@ -95,6 +96,8 @@ export function useCreateTrade() {
 
         setStep('confirming');
         await publicClient.waitForTransactionReceipt({ hash: createHash });
+
+        await api.post('/trades/refresh', { chainId: params.chainId }).catch(() => {});
 
         await queryClient.invalidateQueries({ queryKey: ['trades'] });
         await queryClient.invalidateQueries({ queryKey: ['userTrades'] });

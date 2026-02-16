@@ -1,10 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { type Address } from 'viem';
-import { type ChainId } from '@thesis/contracts';
+import { SUPPORTED_CHAIN_IDS, type ChainId } from '@thesis/contracts';
 import {
   getAllTrades,
   getTradeView,
   getUserTrades,
+  invalidateTradeCache,
 } from '../services/trade.service.js';
 import { isValidAddress } from '@thesis/shared';
 import { logger } from '../lib/logger.js';
@@ -28,6 +29,32 @@ export async function tradeRoutes(fastify: FastifyInstance) {
     } catch (error) {
       logger.error(error, 'Failed to fetch trades');
       reply.status(500).send({ error: 'Failed to fetch trades' });
+    }
+  });
+
+  fastify.post('/refresh', async (request, reply) => {
+    const { chainId, escrowAddress } = request.body as {
+      chainId?: number;
+      escrowAddress?: string;
+    };
+
+    if (!chainId || !SUPPORTED_CHAIN_IDS.includes(chainId as any)) {
+      return reply.status(400).send({
+        error: 'Invalid or missing chainId',
+        message: `chainId must be one of: ${SUPPORTED_CHAIN_IDS.join(', ')}`,
+      });
+    }
+
+    if (escrowAddress && !isValidAddress(escrowAddress)) {
+      return reply.status(400).send({ error: 'Invalid escrow address' });
+    }
+
+    try {
+      await invalidateTradeCache(chainId as ChainId, escrowAddress as Address | undefined);
+      return { success: true };
+    } catch (error) {
+      logger.error({ chainId, escrowAddress, error }, 'Failed to invalidate trade cache');
+      reply.status(500).send({ error: 'Failed to refresh' });
     }
   });
 

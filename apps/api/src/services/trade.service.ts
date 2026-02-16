@@ -370,6 +370,14 @@ export async function getAllTrades(userAddress?: Address): Promise<TradeView[]> 
   return perChainTrades.flat();
 }
 
+export async function invalidateTradeCache(chainId: ChainId, escrowAddress?: Address): Promise<void> {
+  await cache.invalidate(`all-escrows-${chainId}`);
+  if (escrowAddress) {
+    await cache.invalidate(`escrow-state-${chainId}-${escrowAddress}`);
+  }
+  logger.info({ chainId, escrowAddress }, 'Trade cache invalidated');
+}
+
 export async function getUserTrades(userAddress: Address): Promise<{
   asProposer: TradeView[];
   asFunder: TradeView[];

@@ -6,12 +6,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { createWalletClient, createPublicClient, custom, http, type Address } from 'viem';
 import { TradeEscrowAbi, getChain, type ChainId } from '@thesis/contracts';
 
+import { api } from '../lib/api';
+import { patchTradeInCache } from '@/lib/trade-cache';
+
 const RPC_URLS: Record<number, string> = {
   137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',
   8453: process.env.NEXT_PUBLIC_BASE_RPC_URL || '',
   143: process.env.NEXT_PUBLIC_MONAD_RPC_URL || '',
 };
-import { patchTradeInCache } from '@/lib/trade-cache';
 
 export function useWithdraw() {
   const { wallets } = useWallets();
@@ -53,7 +55,9 @@ export function useWithdraw() {
         console.log('Withdraw proposer tx:', hash);
         await publicClient.waitForTransactionReceipt({ hash });
 
-        const stopGuard = patchTradeInCache(queryClient, escrowAddress, (trade) => ({
+        await api.post('/trades/refresh', { chainId, escrowAddress }).catch(() => {});
+
+        patchTradeInCache(queryClient, escrowAddress, (trade) => ({
           ...trade,
           canWithdrawProposer: false,
           state: {
@@ -62,15 +66,10 @@ export function useWithdraw() {
           },
         }));
 
-        // Delay invalidation so the API cache (15s TTL) has expired
-        // and refetch returns fresh data instead of overwriting the optimistic patch.
-        setTimeout(() => {
-          stopGuard();
-          queryClient.invalidateQueries({ queryKey: ['trades'] });
-          queryClient.invalidateQueries({ queryKey: ['userTrades'] });
-          queryClient.invalidateQueries({ queryKey: ['trade', escrowAddress] });
-          queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
-        }, 16000);
+        queryClient.invalidateQueries({ queryKey: ['trades'] });
+        queryClient.invalidateQueries({ queryKey: ['userTrades'] });
+        queryClient.invalidateQueries({ queryKey: ['trade', escrowAddress] });
+        queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
 
         return hash;
       } catch (err) {
@@ -118,7 +117,9 @@ export function useWithdraw() {
         console.log('Withdraw funder tx:', hash);
         await publicClient.waitForTransactionReceipt({ hash });
 
-        const stopGuard = patchTradeInCache(queryClient, escrowAddress, (trade) => ({
+        await api.post('/trades/refresh', { chainId, escrowAddress }).catch(() => {});
+
+        patchTradeInCache(queryClient, escrowAddress, (trade) => ({
           ...trade,
           canWithdrawFunder: false,
           state: {
@@ -127,13 +128,10 @@ export function useWithdraw() {
           },
         }));
 
-        setTimeout(() => {
-          stopGuard();
-          queryClient.invalidateQueries({ queryKey: ['trades'] });
-          queryClient.invalidateQueries({ queryKey: ['userTrades'] });
-          queryClient.invalidateQueries({ queryKey: ['trade', escrowAddress] });
-          queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
-        }, 16000);
+        queryClient.invalidateQueries({ queryKey: ['trades'] });
+        queryClient.invalidateQueries({ queryKey: ['userTrades'] });
+        queryClient.invalidateQueries({ queryKey: ['trade', escrowAddress] });
+        queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
 
         return hash;
       } catch (err) {

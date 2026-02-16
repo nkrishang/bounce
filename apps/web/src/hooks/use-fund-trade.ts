@@ -143,15 +143,19 @@ export function useFundTrade() {
         setStep("confirming");
         await publicClient.waitForTransactionReceipt({ hash: buyHash });
 
+        await api.post('/trades/refresh', {
+          chainId: params.chainId,
+          escrowAddress: params.escrowAddress,
+        }).catch(() => {});
+
         setStep("success");
 
         // Delay optimistic patch so the modal's success effect fires before
         // the trade is removed from the OPEN list (which unmounts the modal).
         const proposerContribution = totalSellAmount - params.funderContribution;
-        let stopGuard: (() => void) | undefined;
 
         setTimeout(() => {
-          stopGuard = patchTradeInCache(queryClient, params.escrowAddress, (trade) => ({
+          patchTradeInCache(queryClient, params.escrowAddress, (trade) => ({
             ...trade,
             status: 'FUNDED',
             canBuy: false,
@@ -166,14 +170,11 @@ export function useFundTrade() {
           }));
         }, 1000);
 
-        setTimeout(() => {
-          stopGuard?.();
-          queryClient.invalidateQueries({ queryKey: ["trades"] });
-          queryClient.invalidateQueries({ queryKey: ["userTrades"] });
-          queryClient.invalidateQueries({
-            queryKey: ["trade", params.escrowAddress],
-          });
-        }, 16000);
+        queryClient.invalidateQueries({ queryKey: ["trades"] });
+        queryClient.invalidateQueries({ queryKey: ["userTrades"] });
+        queryClient.invalidateQueries({
+          queryKey: ["trade", params.escrowAddress],
+        });
 
         return buyHash;
       } catch (err) {

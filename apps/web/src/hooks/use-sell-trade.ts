@@ -123,7 +123,12 @@ export function useSellTrade() {
         setStep('confirming');
         await publicClient.waitForTransactionReceipt({ hash: sellHash });
 
-        const stopGuard = patchTradeInCache(queryClient, params.escrowAddress, (trade) => ({
+        await api.post('/trades/refresh', {
+          chainId: params.chainId,
+          escrowAddress: params.escrowAddress,
+        }).catch(() => {});
+
+        patchTradeInCache(queryClient, params.escrowAddress, (trade) => ({
           ...trade,
           status: 'SOLD',
           canSell: false,
@@ -133,12 +138,9 @@ export function useSellTrade() {
           },
         }));
 
-        setTimeout(() => {
-          stopGuard();
-          queryClient.invalidateQueries({ queryKey: ['trades'] });
-          queryClient.invalidateQueries({ queryKey: ['userTrades'] });
-          queryClient.invalidateQueries({ queryKey: ['trade', params.escrowAddress] });
-        }, 16000);
+        queryClient.invalidateQueries({ queryKey: ['trades'] });
+        queryClient.invalidateQueries({ queryKey: ['userTrades'] });
+        queryClient.invalidateQueries({ queryKey: ['trade', params.escrowAddress] });
 
         setStep('success');
         setIsLoading(false);
