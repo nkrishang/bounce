@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Loader2, Check, User, Clock, TrendingUp, Shield, ExternalLink, XCircle } from 'lucide-react';
 import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@thesis/shared';
@@ -21,18 +22,31 @@ interface InvestModalProps {
 }
 
 export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = false }: InvestModalProps) {
+  const router = useRouter();
   const { isAuthenticated, login, address } = useAuth();
-  const { fundTrade, isLoading, step } = useFundTrade();
+  const { fundTrade, reset, isLoading, step } = useFundTrade();
   const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
-    if (step === 'success') {
-      const timer = setTimeout(() => {
-        onClose();
-      }, 800);
-      return () => clearTimeout(timer);
+    if (!open) {
+      setSubmitError(null);
+      reset();
     }
-  }, [step, onClose]);
+  }, [open, reset]);
+
+  useEffect(() => {
+    if (!open) return;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    };
+  }, [open]);
+
 
   const sellAmount = formatUnits(BigInt(trade.data.sellAmount), 6);
   const fundingNeeded = formatUnits(
@@ -61,6 +75,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
         sellToken: trade.data.sellToken,
         buyToken: trade.data.buyToken,
       });
+      router.push('/my-trades?tab=active');
     } catch (err) {
       console.error('Failed to fund trade:', err);
       setSubmitError(parseTransactionError(err));
@@ -84,7 +99,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div className="bg-muted border border-border rounded-xl shadow-2xl overflow-hidden w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="bg-muted border border-border rounded-xl shadow-2xl overflow-hidden w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain">
               <div className="flex items-center justify-between p-4 border-b border-border">
                 <h2 className="text-lg font-semibold">Invest in Trade</h2>
                 <button

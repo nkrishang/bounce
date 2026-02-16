@@ -6,11 +6,13 @@ import { Coins, Wallet } from 'lucide-react';
 import { formatUnits } from 'viem';
 import { useWalletBalances } from '@/hooks/use-wallet';
 import type { Address } from 'viem';
+import type { SupportedChainId } from '@thesis/shared';
 
 interface ContributionInputProps {
   value: string;
   onChange: (value: string) => void;
   address: Address | undefined;
+  chainId: SupportedChainId;
 }
 
 const PRESET_PERCENTAGES = [
@@ -19,10 +21,10 @@ const PRESET_PERCENTAGES = [
   { label: '50%', value: 0.5 },
 ] as const;
 
-export function ContributionInput({ value, onChange, address }: ContributionInputProps) {
+export function ContributionInput({ value, onChange, address, chainId }: ContributionInputProps) {
   const [isCustom, setIsCustom] = useState(true);
   const { data: balances, isLoading: balanceLoading } = useWalletBalances(address);
-  const balanceRaw = balances?.[137] ?? '0';
+  const balanceRaw = balances?.[chainId] ?? '0';
 
   const balance = useMemo(() => {
     if (!balanceRaw || balanceRaw === '0') return 0;

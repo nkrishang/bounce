@@ -15,7 +15,7 @@ export default function CreateTradePage() {
   const { isAuthenticated, login } = useAuth();
 
   const handleSuccess = useCallback(() => {
-    router.push('/my-trades');
+    router.push('/my-trades?tab=proposed');
   }, [router]);
 
   if (!isAuthenticated) {

@@ -7,6 +7,7 @@ import { createWalletClient, createPublicClient, custom, http, type Address } fr
 import { TradeEscrowAbi, getChain, type ChainId } from '@thesis/contracts';
 import type { SwapQuote } from '@thesis/shared';
 import { api } from '../lib/api';
+import { patchTradeInCache } from '@/lib/trade-cache';
 
 type Step = 'idle' | 'fetching-quote' | 'sell' | 'confirming' | 'success';
 
@@ -52,6 +53,12 @@ export function useSellTrade() {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<Step>('idle');
   const [error, setError] = useState<string | null>(null);
+
+  const reset = useCallback(() => {
+    setStep('idle');
+    setIsLoading(false);
+    setError(null);
+  }, []);
 
   const sellTrade = useCallback(
     async (params: SellTradeParams) => {
@@ -116,9 +123,22 @@ export function useSellTrade() {
         setStep('confirming');
         await publicClient.waitForTransactionReceipt({ hash: sellHash });
 
-        await queryClient.invalidateQueries({ queryKey: ['trades'] });
-        await queryClient.invalidateQueries({ queryKey: ['userTrades'] });
-        await queryClient.invalidateQueries({ queryKey: ['trade', params.escrowAddress] });
+        const stopGuard = patchTradeInCache(queryClient, params.escrowAddress, (trade) => ({
+          ...trade,
+          status: 'SOLD',
+          canSell: false,
+          state: {
+            ...trade.state,
+            sellPerformed: true,
+          },
+        }));
+
+        setTimeout(() => {
+          stopGuard();
+          queryClient.invalidateQueries({ queryKey: ['trades'] });
+          queryClient.invalidateQueries({ queryKey: ['userTrades'] });
+          queryClient.invalidateQueries({ queryKey: ['trade', params.escrowAddress] });
+        }, 16000);
 
         setStep('success');
         setIsLoading(false);
@@ -135,6 +155,7 @@ export function useSellTrade() {
 
   return {
     sellTrade,
+    reset,
     isLoading,
     step,
     error,

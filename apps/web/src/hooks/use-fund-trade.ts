@@ -13,6 +13,7 @@ import {
 import { TradeEscrowAbi, ERC20Abi, getChain, type ChainId } from "@thesis/contracts";
 import type { SwapQuote } from "@thesis/shared";
 import { api } from "../lib/api";
+import { patchTradeInCache } from "@/lib/trade-cache";
 
 type Step = "idle" | "fetching-quote" | "approve" | "buy" | "confirming" | "success";
 
@@ -58,6 +59,12 @@ export function useFundTrade() {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<Step>("idle");
   const [error, setError] = useState<string | null>(null);
+
+  const reset = useCallback(() => {
+    setStep("idle");
+    setIsLoading(false);
+    setError(null);
+  }, []);
 
   const fundTrade = useCallback(
     async (params: FundTradeParams) => {
@@ -136,13 +143,38 @@ export function useFundTrade() {
         setStep("confirming");
         await publicClient.waitForTransactionReceipt({ hash: buyHash });
 
-        await queryClient.invalidateQueries({ queryKey: ["trades"] });
-        await queryClient.invalidateQueries({ queryKey: ["userTrades"] });
-        await queryClient.invalidateQueries({
-          queryKey: ["trade", params.escrowAddress],
-        });
-
         setStep("success");
+
+        // Delay optimistic patch so the modal's success effect fires before
+        // the trade is removed from the OPEN list (which unmounts the modal).
+        const proposerContribution = totalSellAmount - params.funderContribution;
+        let stopGuard: (() => void) | undefined;
+
+        setTimeout(() => {
+          stopGuard = patchTradeInCache(queryClient, params.escrowAddress, (trade) => ({
+            ...trade,
+            status: 'FUNDED',
+            canBuy: false,
+            state: {
+              ...trade.state,
+              buyPerformed: true,
+              funder: address,
+              funderContribution: params.funderContribution.toString(),
+              proposerContribution: proposerContribution.toString(),
+              totalSellIn: totalSellAmount.toString(),
+            },
+          }));
+        }, 1000);
+
+        setTimeout(() => {
+          stopGuard?.();
+          queryClient.invalidateQueries({ queryKey: ["trades"] });
+          queryClient.invalidateQueries({ queryKey: ["userTrades"] });
+          queryClient.invalidateQueries({
+            queryKey: ["trade", params.escrowAddress],
+          });
+        }, 16000);
+
         return buyHash;
       } catch (err) {
         console.error("Fund trade error:", err);
@@ -157,6 +189,7 @@ export function useFundTrade() {
 
   return {
     fundTrade,
+    reset,
     isLoading,
     step,
     error,

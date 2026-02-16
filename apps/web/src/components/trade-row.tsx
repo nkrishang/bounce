@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Loader2, Eye, Wallet, CheckCircle, Coins, ExternalLink } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { type TradeView, type TokenMeta, formatAddress, calculateProfitLoss, calculateFunderContribution } from '@thesis/shared';
+import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@thesis/shared';
 import { EXPLORER_URLS } from '@thesis/contracts';
 import { formatUnits, type Address } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
@@ -93,26 +93,55 @@ export function TradeRow({ trade, role }: TradeRowProps) {
 
   const getPnL = () => {
     if (!trade.state.sellPerformed) return null;
-    
-    const pnl = calculateProfitLoss(
-      trade.state.totalSellIn,
-      trade.state.finalSellAmount
-    );
 
-    const myPayout = role === 'proposer' 
-      ? trade.state.proposerPayout 
-      : trade.state.funderPayout;
+    const totalSellIn = BigInt(trade.state.totalSellIn);
+    const finalSellAmount = BigInt(trade.state.finalSellAmount);
 
-    const myContribution = role === 'proposer'
+    // Position P&L (overall trade performance)
+    const positionPnl = finalSellAmount - totalSellIn;
+    const positionPnlAbs = positionPnl < 0n ? -positionPnl : positionPnl;
+    const positionPnlPercent = totalSellIn > 0n
+      ? Number((positionPnlAbs * 10000n) / totalSellIn) / 100
+      : 0;
+
+    // My P&L (personal gain/loss)
+    const myPayout = BigInt(role === 'proposer'
+      ? trade.state.proposerPayout
+      : trade.state.funderPayout);
+    const myContribution = BigInt(role === 'proposer'
       ? trade.state.proposerContribution
-      : trade.state.funderContribution;
+      : trade.state.funderContribution);
+    const myPnl = myPayout - myContribution;
+    const myPnlAbs = myPnl < 0n ? -myPnl : myPnl;
+    const myPnlPercent = myContribution > 0n
+      ? Number((myPnlAbs * 10000n) / myContribution) / 100
+      : 0;
 
-    const myPnL = BigInt(myPayout) - BigInt(myContribution);
-    const myPnLFormatted = formatUnits(myPnL < 0n ? -myPnL : myPnL, 6);
+    // Protection (loss absorbed by proposer's stake)
+    const proposerContribution = BigInt(trade.state.proposerContribution);
+    const proposerPayout = BigInt(trade.state.proposerPayout);
+    const proposerLoss = proposerContribution - proposerPayout;
+    const protection = proposerLoss > 0n ? proposerLoss : 0n;
+    const protectionPercent = totalSellIn > 0n
+      ? Number((protection * 10000n) / totalSellIn) / 100
+      : 0;
 
     return {
-      isProfit: myPnL >= 0n,
-      amount: myPnLFormatted,
+      position: {
+        isProfit: positionPnl >= 0n,
+        amount: formatUnits(positionPnlAbs, 6),
+        percent: positionPnlPercent,
+      },
+      personal: {
+        isProfit: myPnl >= 0n,
+        amount: formatUnits(myPnlAbs, 6),
+        percent: myPnlPercent,
+      },
+      protection: {
+        amount: formatUnits(protection, 6),
+        percent: protectionPercent,
+        hasProtection: protection > 0n,
+      },
     };
   };
 
@@ -437,13 +466,39 @@ export function TradeRow({ trade, role }: TradeRowProps) {
             )}
 
             {pnl && (
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">Your P&L</p>
-                <p className={`text-sm font-mono flex items-center gap-1 ${pnl.isProfit ? 'text-success' : 'text-danger'}`}>
-                  {pnl.isProfit ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                  {pnl.isProfit ? '+' : '-'}${parseFloat(pnl.amount).toLocaleString()}
-                </p>
-              </div>
+              <>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">Position P&L</p>
+                  <p className={`text-sm font-mono flex items-center justify-end gap-1 ${pnl.position.isProfit ? 'text-success' : 'text-danger'}`}>
+                    {pnl.position.isProfit ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                    {pnl.position.isProfit ? '+' : '-'}${parseFloat(pnl.position.amount).toLocaleString()}
+                  </p>
+                  <p className={`text-xs font-mono ${pnl.position.isProfit ? 'text-success/70' : 'text-danger/70'}`}>
+                    {pnl.position.isProfit ? '+' : '-'}{pnl.position.percent.toFixed(2)}%
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">Your P&L</p>
+                  <p className={`text-sm font-mono flex items-center justify-end gap-1 ${pnl.personal.isProfit ? 'text-success' : 'text-danger'}`}>
+                    {pnl.personal.isProfit ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                    {pnl.personal.isProfit ? '+' : '-'}${parseFloat(pnl.personal.amount).toLocaleString()}
+                  </p>
+                  <p className={`text-xs font-mono ${pnl.personal.isProfit ? 'text-success/70' : 'text-danger/70'}`}>
+                    {pnl.personal.isProfit ? '+' : '-'}{pnl.personal.percent.toFixed(2)}%
+                  </p>
+                </div>
+                {role === 'funder' && pnl.protection.hasProtection && (
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Protection</p>
+                    <p className="text-sm font-mono text-primary flex items-center justify-end gap-1">
+                      ${parseFloat(pnl.protection.amount).toLocaleString()}
+                    </p>
+                    <p className="text-xs font-mono text-primary/70">
+                      {pnl.protection.percent.toFixed(2)}%
+                    </p>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="flex gap-2">

@@ -3,9 +3,15 @@
 import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { createWalletClient, custom, type Address } from 'viem';
+import { createWalletClient, createPublicClient, custom, http, type Address } from 'viem';
 import { TradeEscrowFactoryAbi, ERC20Abi, getChain, ADDRESSES_BY_CHAIN, type ChainId } from '@thesis/contracts';
 import { TOKENS_BY_CHAIN } from '@thesis/shared';
+
+const RPC_URLS: Record<number, string> = {
+  137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',
+  8453: process.env.NEXT_PUBLIC_BASE_RPC_URL || '',
+  143: process.env.NEXT_PUBLIC_MONAD_RPC_URL || '',
+};
 
 type Step = 'idle' | 'approve' | 'create' | 'confirming' | 'success';
 
@@ -24,6 +30,12 @@ export function useCreateTrade() {
   const [step, setStep] = useState<Step>('idle');
   const [error, setError] = useState<string | null>(null);
 
+  const reset = useCallback(() => {
+    setStep('idle');
+    setIsLoading(false);
+    setError(null);
+  }, []);
+
   const createTrade = useCallback(
     async (params: CreateTradeParams) => {
       const wallet = wallets.find((w) => w.walletClientType === 'privy');
@@ -39,6 +51,11 @@ export function useCreateTrade() {
         const walletClient = createWalletClient({
           chain: getChain(params.chainId),
           transport: custom(provider),
+        });
+
+        const publicClient = createPublicClient({
+          chain: getChain(params.chainId),
+          transport: http(RPC_URLS[params.chainId] || undefined),
         });
 
         const factoryAddress = ADDRESSES_BY_CHAIN[params.chainId].TRADE_ESCROW_FACTORY;
@@ -77,6 +94,8 @@ export function useCreateTrade() {
         console.log('Create tx:', createHash);
 
         setStep('confirming');
+        await publicClient.waitForTransactionReceipt({ hash: createHash });
+
         await queryClient.invalidateQueries({ queryKey: ['trades'] });
         await queryClient.invalidateQueries({ queryKey: ['userTrades'] });
 
@@ -95,6 +114,7 @@ export function useCreateTrade() {
 
   return {
     createTrade,
+    reset,
     isLoading,
     step,
     error,

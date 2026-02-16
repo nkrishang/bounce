@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Coins, Clock, FileText, AlertCircle, Check, Loader2, XCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -29,9 +30,11 @@ interface CreateTradeFormProps {
     networkId?: number;
   } | null;
   onSuccess?: () => void;
+  modal?: boolean;
 }
 
-export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProps) {
+export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeFormProps) {
+  const router = useRouter();
   const { address } = useAuth();
   const { createTrade, isLoading, step, error } = useCreateTrade();
 
@@ -51,14 +54,6 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
   const [thesis, setThesis] = useState('');
   const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null);
 
-  useEffect(() => {
-    if (step === 'success') {
-      const timer = setTimeout(() => {
-        onSuccess?.();
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [step, onSuccess]);
 
   const handleTokenChange = (tokenAddress: string, token?: TokenInfo) => {
     setBuyToken(tokenAddress);
@@ -83,21 +78,16 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
         expirationSeconds,
         metadataUri: thesis ? JSON.stringify({ thesis }) : '',
       });
+      router.push('/my-trades?tab=proposed');
     } catch (err) {
       console.error('Failed to create trade:', err);
       setSubmitError(parseTransactionError(err));
     }
   };
 
-  return (
-    <motion.form
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 }}
-      onSubmit={handleSubmit}
-      className="space-y-6"
-    >
-      <div className="p-6 rounded-xl bg-muted border border-border space-y-6">
+  const scrollableContent = (
+    <>
+      <div className={`${modal ? '' : 'p-6 rounded-xl bg-muted border border-border '}space-y-6`}>
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm font-medium">
             <Coins className="w-4 h-4 text-muted-foreground" />
@@ -118,6 +108,7 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
           value={sellAmount}
           onChange={setSellAmount}
           address={address}
+          chainId={chainId}
         />
 
         <div className="space-y-2">
@@ -208,7 +199,11 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
           </div>
         </div>
       </motion.div>
+    </>
+  );
 
+  const footerContent = (
+    <>
       <div className="p-4 rounded-lg bg-warning/10 border border-warning/20 flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
         <div className="text-sm">
@@ -294,6 +289,37 @@ export function CreateTradeForm({ initialToken, onSuccess }: CreateTradeFormProp
           </>
         )}
       </motion.button>
+    </>
+  );
+
+  if (modal) {
+    return (
+      <form
+        onSubmit={handleSubmit}
+        className="flex flex-col min-h-0 flex-1"
+      >
+        <div className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-6">
+          {scrollableContent}
+        </div>
+        <div className="flex-shrink-0 p-6 pt-4 border-t border-border space-y-4">
+          {footerContent}
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <motion.form
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 }}
+      onSubmit={handleSubmit}
+      className="space-y-6"
+    >
+      <div className="p-6 rounded-xl bg-muted border border-border space-y-6">
+        {scrollableContent}
+      </div>
+      {footerContent}
     </motion.form>
   );
 }

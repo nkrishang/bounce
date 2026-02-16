@@ -1,7 +1,5 @@
 import { createPublicClient, http, type Address, type PublicClient } from 'viem';
-import { getChain, SUPPORTED_CHAIN_IDS, type ChainId } from '@thesis/contracts';
-import { ADDRESSES_BY_CHAIN } from '@thesis/contracts';
-import { TOKENS_BY_CHAIN, type SupportedChainId } from '@thesis/shared';
+import { getChain, SUPPORTED_CHAIN_IDS, ADDRESSES_BY_CHAIN, type ChainId } from '@thesis/contracts';
 import { logger } from './logger.js';
 
 const RPC_URLS: Record<ChainId, string> = {
@@ -27,29 +25,10 @@ export function getPublicClient(chainId: ChainId): PublicClient {
 // Backward compat — some old code may import this
 export const publicClient = clients[137];
 
-function envAddr(name: string): Address | null {
-  const v = process.env[name];
-  return v ? (v as Address) : null;
-}
-
 export function getFactoryAddress(chainId: ChainId): Address {
-  const override =
-    chainId === 137 ? envAddr('POLYGON_TRADE_ESCROW_FACTORY_ADDRESS') :
-    chainId === 8453 ? envAddr('BASE_TRADE_ESCROW_FACTORY_ADDRESS') :
-    envAddr('MONAD_TRADE_ESCROW_FACTORY_ADDRESS');
-
-  const addr = override ?? ADDRESSES_BY_CHAIN[chainId].TRADE_ESCROW_FACTORY;
+  const addr = ADDRESSES_BY_CHAIN[chainId].TRADE_ESCROW_FACTORY;
   if (addr === '0x0000000000000000000000000000000000000000') {
     logger.warn({ chainId }, 'Factory address is zero — chain may not be deployed yet');
   }
   return addr;
-}
-
-export function getUsdcAddress(chainId: ChainId): Address {
-  const override =
-    chainId === 137 ? envAddr('POLYGON_USDC_ADDRESS') :
-    chainId === 8453 ? envAddr('BASE_USDC_ADDRESS') :
-    envAddr('MONAD_USDC_ADDRESS');
-
-  return override ?? TOKENS_BY_CHAIN[chainId as SupportedChainId].USDC;
 }

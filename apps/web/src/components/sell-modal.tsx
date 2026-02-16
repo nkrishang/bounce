@@ -16,8 +16,28 @@ interface SellModalProps {
 }
 
 export function SellModal({ trade, buyTokenMeta, open, onClose }: SellModalProps) {
-  const { sellTrade, isLoading, step } = useSellTrade();
+  const { sellTrade, reset, isLoading, step } = useSellTrade();
   const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setSubmitError(null);
+      reset();
+    }
+  }, [open, reset]);
+
+  useEffect(() => {
+    if (!open) return;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      document.documentElement.style.overflow = '';
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    };
+  }, [open]);
 
   useEffect(() => {
     if (step === 'success') {
