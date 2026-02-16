@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, Loader2, Check, User, Clock, TrendingUp, Shield, ExternalLink, XCircle } from 'lucide-react';
+import { X, AlertTriangle, Loader2, Check, User, Clock, TrendingUp, Shield, ExternalLink, XCircle, Wallet } from 'lucide-react';
 import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@thesis/shared';
 import { EXPLORER_URLS } from '@thesis/contracts';
 import { formatUnits } from 'viem';
 import { useAuth } from '@/hooks/use-auth';
 import { useFundTrade } from '@/hooks/use-fund-trade';
+import { useWalletBalances } from '@/hooks/use-wallet';
 import { TokenAvatar } from './token-avatar';
 import { CountdownTimer } from './countdown-timer';
 import { LinkifyText } from './linkify-text';
@@ -27,6 +28,11 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
   const { isAuthenticated, login, address } = useAuth();
   const { fundTrade, reset, isLoading, step } = useFundTrade();
   const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null);
+  const { data: balances, isLoading: balanceLoading } = useWalletBalances(address);
+  const balanceRaw = balances?.[trade.chainId] ?? '0';
+  const usdcBalance = balanceRaw && balanceRaw !== '0'
+    ? parseFloat(formatUnits(BigInt(balanceRaw), 6))
+    : 0;
 
   useEffect(() => {
     if (!open) {
@@ -55,6 +61,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
     6
   );
   const totalPosition = formatUnits(BigInt(trade.data.sellAmount) * 5n, 6);
+  const exceedsBalance = !!address && !balanceLoading && parseFloat(fundingNeeded) > usdcBalance;
 
   let thesis = '';
   try {
@@ -183,6 +190,18 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                     <span>Total Position</span>
                     <span className="font-mono">${parseFloat(totalPosition).toLocaleString()}</span>
                   </div>
+                  <div className="flex justify-between text-xs pt-1">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Wallet className="w-3.5 h-3.5" />
+                      Your Balance
+                    </span>
+                    <span className={`font-mono ${exceedsBalance ? 'text-danger font-medium' : 'text-muted-foreground'}`}>
+                      {balanceLoading
+                        ? 'Loading...'
+                        : `$${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`
+                      }
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -208,6 +227,15 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                     This will execute a swap immediately. Slippage and price impact may apply.
                   </p>
                 </div>
+
+                {exceedsBalance && (
+                  <div className="p-3 rounded-lg bg-danger/10 border border-danger/20 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-danger">
+                      Insufficient USDC balance. You need ${parseFloat(fundingNeeded).toLocaleString()} USDC but only have ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC.
+                    </p>
+                  </div>
+                )}
 
                 <AnimatePresence mode="wait">
                   {submitError && (
@@ -259,12 +287,14 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                         : {}
                     }
                     onClick={handleInvest}
-                    disabled={isLoading || step === 'success'}
+                    disabled={isLoading || step === 'success' || exceedsBalance}
                     className={`w-full py-4 rounded-lg font-medium disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors ${
                       step === 'success'
                         ? 'bg-green-600 text-white'
                         : submitError
                         ? 'bg-danger text-white'
+                        : exceedsBalance
+                        ? 'bg-danger/50 text-white'
                         : 'bg-primary text-primary-foreground disabled:opacity-50'
                     }`}
                   >
@@ -289,6 +319,11 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                       <>
                         <XCircle className="w-5 h-5" />
                         Try Again
+                      </>
+                    ) : exceedsBalance ? (
+                      <>
+                        <AlertTriangle className="w-5 h-5" />
+                        Insufficient USDC Balance
                       </>
                     ) : (
                       <>

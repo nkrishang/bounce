@@ -120,6 +120,13 @@ export function parseTransactionError(error: unknown): ParsedError {
   if (error instanceof Error) {
     const msg = error.message;
     
+    if (msg.includes('Insufficient USDC balance')) {
+      return {
+        title: 'Insufficient Balance',
+        message: "You don't have enough USDC for this transaction.",
+      };
+    }
+
     if (msg.includes('No Privy embedded wallet')) {
       return {
         title: 'Wallet Not Ready',

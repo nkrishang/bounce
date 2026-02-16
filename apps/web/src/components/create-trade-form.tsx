@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Coins, Clock, FileText, AlertCircle, Check, Loader2, XCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useCreateTrade } from '@/hooks/use-create-trade';
-import { parseUnits } from 'viem';
+import { useWalletBalances } from '@/hooks/use-wallet';
+import { parseUnits, formatUnits } from 'viem';
 import { TokenSelector } from '@/components/token-selector';
 import { ContributionInput } from '@/components/contribution-input';
 import { TokenAvatar } from '@/components/token-avatar';
@@ -55,6 +56,15 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
   const [thesis, setThesis] = useState('');
   const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null);
 
+  const { data: balances, isLoading: balanceLoading } = useWalletBalances(address);
+  const usdcBalanceRaw = balances?.[chainId] ?? '0';
+  const usdcBalance = usdcBalanceRaw && usdcBalanceRaw !== '0'
+    ? parseFloat(formatUnits(BigInt(usdcBalanceRaw), 6))
+    : 0;
+  const sellAmountNum = sellAmount ? parseFloat(sellAmount) : 0;
+  const hasZeroUsdc = !!address && !balanceLoading && usdcBalance <= 0;
+  const exceedsBalance = !!address && !balanceLoading && sellAmountNum > 0 && sellAmountNum > usdcBalance;
+  const insufficientUsdc = hasZeroUsdc || exceedsBalance;
 
   const handleTokenChange = (tokenAddress: string, token?: TokenInfo) => {
     setBuyToken(tokenAddress);
@@ -217,6 +227,23 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
         </div>
       </div>
 
+      {insufficientUsdc && (
+        <div className="p-4 rounded-lg bg-danger/10 border border-danger/20">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-danger">Insufficient USDC Balance</p>
+              <p className="text-danger/80 mt-1">
+                {exceedsBalance
+                  ? `You need ${sellAmount} USDC but only have ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC.`
+                  : `Your USDC balance is ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Add USDC to create a trade.`
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         {submitError && (
           <motion.div
@@ -253,12 +280,14 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
             : {}
         }
         type="submit"
-        disabled={isLoading || !buyToken || !sellAmount || step === 'success'}
+        disabled={isLoading || !buyToken || !sellAmount || step === 'success' || insufficientUsdc}
         className={`w-full py-4 rounded-lg font-medium disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors ${
           step === 'success'
             ? 'bg-green-600 text-white'
             : submitError
             ? 'bg-danger text-white'
+            : insufficientUsdc
+            ? 'bg-danger/50 text-white'
             : 'bg-primary text-primary-foreground disabled:opacity-50'
         }`}
       >
@@ -282,6 +311,11 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
           <>
             <XCircle className="w-5 h-5" />
             Try Again
+          </>
+        ) : insufficientUsdc ? (
+          <>
+            <AlertCircle className="w-5 h-5" />
+            Insufficient USDC Balance
           </>
         ) : (
           <>

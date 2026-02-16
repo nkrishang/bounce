@@ -136,7 +136,7 @@ export function ContributionInput({ value, onChange, address, chainId }: Contrib
 
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>This is your 20% stake. You&apos;ll ask funders for 4x this amount.</span>
-        {balance > 0 && value && parseFloat(value) > balance && (
+        {!!balances && value && parseFloat(value) > balance && (
           <motion.span
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

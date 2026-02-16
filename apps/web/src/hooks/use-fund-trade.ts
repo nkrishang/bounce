@@ -90,6 +90,18 @@ export function useFundTrade() {
 
         const [address] = await walletClient.getAddresses();
 
+        // Safety net: verify on-chain USDC balance before any transactions
+        const usdcBalance = await publicClient.readContract({
+          address: params.sellToken,
+          abi: ERC20Abi,
+          functionName: "balanceOf",
+          args: [address],
+        });
+
+        if (usdcBalance < params.funderContribution) {
+          throw new Error("Insufficient USDC balance");
+        }
+
         // Step 1: Approve escrow to pull funder's contribution (skip if sufficient allowance exists)
         const existingAllowance = await publicClient.readContract({
           address: params.sellToken,

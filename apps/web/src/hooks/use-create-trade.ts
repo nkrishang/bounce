@@ -64,6 +64,18 @@ export function useCreateTrade() {
 
         const [address] = await walletClient.getAddresses();
 
+        // Safety net: verify on-chain USDC balance before any transactions
+        const usdcBalance = await publicClient.readContract({
+          address: usdcAddress,
+          abi: ERC20Abi,
+          functionName: 'balanceOf',
+          args: [address],
+        });
+
+        if (usdcBalance < params.sellAmount) {
+          throw new Error('Insufficient USDC balance');
+        }
+
         // Check existing allowance to skip redundant approval
         const existingAllowance = await publicClient.readContract({
           address: usdcAddress,
