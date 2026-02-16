@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "docker compose up -d redis && pnpm run --parallel dev",
+    "dev:fresh": "docker compose up -d redis && docker compose exec redis redis-cli FLUSHALL && pnpm run --parallel dev",
     "dev:no-redis": "pnpm run --parallel dev",
+    "cache:clear": "docker compose exec redis redis-cli FLUSHALL",
     "build": "pnpm run -r build",
     "lint": "pnpm run -r lint",
     "typecheck": "pnpm run -r typecheck"

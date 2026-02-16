@@ -6,7 +6,6 @@ import {
   type SupportedChainId,
   type SwapQuote,
   type ZeroXQuoteResponse,
-  type Address,
 } from '@thesis/shared';
 import { SUPPORTED_CHAIN_IDS } from '@thesis/contracts';
 import { logger } from '../lib/logger.js';
@@ -21,14 +20,6 @@ if (!ZERO_X_API_KEY) {
 // Reference amount for deriving token prices (10 USDC = 10_000_000 in 6 decimals)
 const REFERENCE_USDC_AMOUNT = '10000000';
 
-interface IndicativePriceResponse {
-  sellAmount: string;
-  buyAmount: string;
-  liquidityAvailable: boolean;
-  pricePerToken?: string; // AUSD per token (6 decimals)
-  derivedFromReference?: boolean;
-}
-
 interface GetQuoteQuery {
   chainId: string;
   sellToken: string;
@@ -37,6 +28,125 @@ interface GetQuoteQuery {
   taker: string;
   slippageBps?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Helpers extracted from the indicative-price handler for reuse & inflight dedup
+// ---------------------------------------------------------------------------
+
+interface QuoteResult {
+  buyAmount: string;
+  sellAmount: string;
+  liquidityAvailable: boolean;
+}
+
+/** Fetch a 0x /quote for an arbitrary token pair.  Returns null on failure. */
+async function fetch0xQuote(
+  chainId: number,
+  taker: string,
+  sell: string,
+  buy: string,
+  amount: string,
+): Promise<QuoteResult | null> {
+  if (!ZERO_X_API_KEY) return null;
+
+  const params = new URLSearchParams({
+    chainId: chainId.toString(),
+    sellToken: sell,
+    buyToken: buy,
+    sellAmount: amount,
+    taker,
+  });
+
+  const url = `${ZERO_X_API_URL}/swap/allowance-holder/quote?${params.toString()}`;
+
+  try {
+    logger.debug({ sell, buy, amount }, '[0x-quote] Fetching');
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { '0x-api-key': ZERO_X_API_KEY, '0x-version': 'v2' },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      logger.warn({ sell, buy, amount, status: response.status, error: errorBody }, '[0x-quote] Failed');
+      return null;
+    }
+
+    const data = await response.json();
+    const liquidityAvailable = data.liquidityAvailable ?? true;
+
+    if (!liquidityAvailable) {
+      logger.debug({ sell, buy, amount }, '[0x-quote] No liquidity');
+      return null;
+    }
+
+    return { buyAmount: data.buyAmount, sellAmount: data.sellAmount, liquidityAvailable: true };
+  } catch (err) {
+    logger.error({ sell, buy, amount, error: err }, '[0x-quote] Exception');
+    return null;
+  }
+}
+
+/**
+ * Derive the USDC price-per-token for `tokenAddress` by querying a reference
+ * amount through 0x.  Tries USDC -> TOKEN first, then USDC -> WRAPPED_NATIVE -> TOKEN.
+ * Returns the price as a string (USDC units with 6 decimals per whole token)
+ * or null when no liquidity is found.
+ */
+async function fetchReferencePricePerToken(
+  chainId: SupportedChainId,
+  tokenAddress: string,
+  tokenDecimals: number,
+  taker: string,
+): Promise<string | null> {
+  const decimalsFactor = BigInt(10) ** BigInt(tokenDecimals);
+  const refUsdc = BigInt(REFERENCE_USDC_AMOUNT);
+
+  // Route 1: USDC -> TOKEN direct
+  const direct = await fetch0xQuote(
+    chainId, taker,
+    TOKENS_BY_CHAIN[chainId].USDC,
+    tokenAddress,
+    REFERENCE_USDC_AMOUNT,
+  );
+
+  if (direct && direct.buyAmount !== '0') {
+    const price = (refUsdc * decimalsFactor) / BigInt(direct.buyAmount);
+    logger.info({ chainId, tokenAddress, route: 'USDC->TOKEN', price: price.toString() }, '[ref-price] Derived');
+    return price.toString();
+  }
+
+  // Route 2: USDC -> WRAPPED_NATIVE -> TOKEN
+  const usdcToWrapped = await fetch0xQuote(
+    chainId, taker,
+    TOKENS_BY_CHAIN[chainId].USDC,
+    TOKENS_BY_CHAIN[chainId].WRAPPED_NATIVE,
+    REFERENCE_USDC_AMOUNT,
+  );
+
+  if (usdcToWrapped?.liquidityAvailable && usdcToWrapped.buyAmount) {
+    const wrappedToToken = await fetch0xQuote(
+      chainId, taker,
+      TOKENS_BY_CHAIN[chainId].WRAPPED_NATIVE,
+      tokenAddress,
+      usdcToWrapped.buyAmount,
+    );
+
+    if (wrappedToToken && wrappedToToken.buyAmount !== '0') {
+      const price = (refUsdc * decimalsFactor) / BigInt(wrappedToToken.buyAmount);
+      logger.info({ chainId, tokenAddress, route: 'USDC->WNATIVE->TOKEN', price: price.toString() }, '[ref-price] Derived');
+      return price.toString();
+    }
+  }
+
+  logger.warn({ chainId, tokenAddress }, '[ref-price] No liquidity through any route');
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Routes
+// ---------------------------------------------------------------------------
 
 export async function swapRoutes(fastify: FastifyInstance) {
   // GET /swap/quote - Get a swap quote from 0x
@@ -245,109 +355,28 @@ export async function swapRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Helper to fetch 0x price/quote with extensive logging
-      const fetch0xPrice = async (sell: string, buy: string, amount: string): Promise<{ buyAmount: string; sellAmount: string; liquidityAvailable: boolean } | null> => {
-        const params = new URLSearchParams({
-          chainId: chainId.toString(),
-          sellToken: sell,
-          buyToken: buy,
-          sellAmount: amount,
-          taker,
-        });
-
-        const logContext = { sell, buy, amount };
-
-        // Try quote endpoint first (more reliable - same as sell action)
-        let url = `${ZERO_X_API_URL}/swap/allowance-holder/quote?${params.toString()}`;
-        try {
-          logger.info({ ...logContext, endpoint: 'quote' }, '[indicative-price] Trying 0x /quote endpoint');
-          
-          const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-              '0x-api-key': ZERO_X_API_KEY!,
-              '0x-version': 'v2',
-            },
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            logger.info({ 
-              ...logContext, 
-              endpoint: 'quote',
-              status: response.status,
-              liquidityAvailable: data.liquidityAvailable,
-              buyAmount: data.buyAmount,
-              sellAmount: data.sellAmount,
-            }, '[indicative-price] 0x /quote response');
-            
-            // Quote endpoint returns liquidityAvailable, default to true if not present
-            const liquidityAvailable = data.liquidityAvailable ?? true;
-            if (liquidityAvailable) {
-              return { buyAmount: data.buyAmount, sellAmount: data.sellAmount, liquidityAvailable: true };
-            }
-            logger.warn({ ...logContext }, '[indicative-price] /quote returned liquidityAvailable=false');
-          } else {
-            const errorBody = await response.json().catch(() => ({}));
-            logger.warn({ 
-              ...logContext, 
-              endpoint: 'quote',
-              status: response.status, 
-              error: errorBody 
-            }, '[indicative-price] 0x /quote failed');
-          }
-
-          return null;
-        } catch (err) {
-          logger.error({ ...logContext, error: err }, '[indicative-price] Exception in fetch0xPrice');
-          return null;
-        }
-      };
-
-      const requestContext = { sellToken, buyToken, sellAmount, tokenDecimals };
-      logger.info(requestContext, '[indicative-price] === START REQUEST ===');
-
       try {
-        // Check cache for reference price (AUSD -> TOKEN)
-        const cacheKey = `ref:${chainId}:${sellToken}`;
-        const cached = await cache.get<IndicativePriceResponse>(cacheKey);
+        const cacheKey = `ref-price:${chainId}:${sellToken}`;
+        const tokenDecimalsFactor = BigInt(10) ** BigInt(tokenDecimals);
 
-        if (cached) {
-          // Use cached reference price to calculate value
-          const pricePerToken = BigInt(cached.pricePerToken || '0');
-          const balance = BigInt(sellAmount);
-          const tokenDecimalsFactor = BigInt(10) ** BigInt(tokenDecimals);
-          const valueAusd = (balance * pricePerToken) / tokenDecimalsFactor;
-
-          logger.info({
-            ...requestContext,
-            cacheHit: true,
-            pricePerToken: pricePerToken.toString(),
-            valueAusd: valueAusd.toString(),
-          }, '[indicative-price] Using cached reference price');
-
+        // 1. Fast path — check for a cached reference price-per-token
+        const cachedPrice = await cache.get<string>(cacheKey);
+        if (cachedPrice) {
+          const valueAusd = (BigInt(sellAmount) * BigInt(cachedPrice)) / tokenDecimalsFactor;
+          logger.info({ sellToken, cacheHit: true, pricePerToken: cachedPrice }, '[indicative-price] Cached reference price');
           return reply.send({
             sellAmount,
             buyAmount: valueAusd.toString(),
             liquidityAvailable: true,
-            pricePerToken: cached.pricePerToken,
+            pricePerToken: cachedPrice,
             derivedFromReference: true,
           });
         }
 
-        logger.info({ ...requestContext, cacheHit: false }, '[indicative-price] Cache miss, fetching fresh price');
-
-        // First, try direct price for the exact amount (TOKEN -> AUSD)
-        logger.info({ ...requestContext, step: 'direct' }, '[indicative-price] Step 1: Trying direct TOKEN → AUSD price');
-        const directPrice = await fetch0xPrice(sellToken, buyToken, sellAmount);
-        
+        // 2. Try direct price for the exact amount (no caching — amount-specific)
+        const directPrice = await fetch0xQuote(chainId, taker, sellToken, buyToken, sellAmount);
         if (directPrice?.liquidityAvailable) {
-          logger.info({ 
-            ...requestContext, 
-            step: 'direct',
-            success: true,
-            buyAmount: directPrice.buyAmount 
-          }, '[indicative-price] ✓ Direct price available');
+          logger.info({ sellToken, buyAmount: directPrice.buyAmount }, '[indicative-price] Direct price available');
           return reply.send({
             sellAmount,
             buyAmount: directPrice.buyAmount,
@@ -355,133 +384,31 @@ export async function swapRoutes(fastify: FastifyInstance) {
             derivedFromReference: false,
           });
         }
-        
-        logger.warn({ ...requestContext, step: 'direct', result: directPrice }, '[indicative-price] ✗ Direct price failed, trying reference pricing');
 
-        // Direct price failed - use reference pricing
-        // Get quote for AUSD -> TOKEN to derive price per token
-        logger.info({ 
-          ...requestContext, 
-          step: 'reference-direct',
-          referenceAmount: REFERENCE_USDC_AMOUNT,
-        }, '[indicative-price] Step 2: Trying reference quote USDC → TOKEN');
-        
-        const referenceQuote = await fetch0xPrice(TOKENS_BY_CHAIN[chainId as SupportedChainId].USDC, sellToken, REFERENCE_USDC_AMOUNT);
-        
-        logger.info({ 
-          ...requestContext, 
-          step: 'reference-direct',
-          result: referenceQuote,
-        }, '[indicative-price] Reference quote USDC → TOKEN result');
-        
-        if (!referenceQuote?.liquidityAvailable || !referenceQuote.buyAmount || referenceQuote.buyAmount === '0') {
-          // Try routing through WMATIC: USDC -> WMATIC -> TOKEN
-          logger.info({ 
-            ...requestContext, 
-            step: 'reference-wmon',
-          }, '[indicative-price] Step 3: Reference failed, trying USDC → WMATIC → TOKEN route');
-          
-          const usdcToWmon = await fetch0xPrice(TOKENS_BY_CHAIN[chainId as SupportedChainId].USDC, TOKENS_BY_CHAIN[chainId as SupportedChainId].WRAPPED_NATIVE, REFERENCE_USDC_AMOUNT);
-          
-          logger.info({ 
-            ...requestContext, 
-            step: 'reference-wmon-1',
-            result: usdcToWmon,
-          }, '[indicative-price] USDC → WMATIC result');
-          
-          if (usdcToWmon?.liquidityAvailable && usdcToWmon.buyAmount) {
-            const wmonToToken = await fetch0xPrice(TOKENS_BY_CHAIN[chainId as SupportedChainId].WRAPPED_NATIVE, sellToken, usdcToWmon.buyAmount);
-            
-            logger.info({ 
-              ...requestContext, 
-              step: 'reference-wmon-2',
-              wmonAmount: usdcToWmon.buyAmount,
-              result: wmonToToken,
-            }, '[indicative-price] WMATIC → TOKEN result');
-            
-            if (wmonToToken?.liquidityAvailable && wmonToToken.buyAmount && wmonToToken.buyAmount !== '0') {
-              // Calculate: pricePerToken = referenceUsdc / tokensReceived
-              // In 6 decimal precision
-              const referenceUsdc = BigInt(REFERENCE_USDC_AMOUNT);
-              const tokensReceived = BigInt(wmonToToken.buyAmount);
-              const tokenDecimalsFactor = BigInt(10) ** BigInt(tokenDecimals);
-              
-              // pricePerToken in USDC units (6 decimals) per 1 whole token
-              const pricePerToken = (referenceUsdc * tokenDecimalsFactor) / tokensReceived;
-              
-              // Calculate value of user's balance
-              const balance = BigInt(sellAmount);
-              const valueUsdc = (balance * pricePerToken) / tokenDecimalsFactor;
-              
-              // Cache the reference price
-              const result: IndicativePriceResponse = {
-                sellAmount,
-                buyAmount: valueUsdc.toString(),
-                liquidityAvailable: true,
-                pricePerToken: pricePerToken.toString(),
-                derivedFromReference: true,
-              };
-              
-              await cache.set(cacheKey, result, TTL.PRICE_REF);
+        // 3. Derive reference price (with inflight dedup via getOrFetch)
+        const pricePerToken = await cache.getOrFetch(
+          cacheKey,
+          () => fetchReferencePricePerToken(chainId as SupportedChainId, sellToken, tokenDecimals, taker),
+          TTL.PRICE_REF,
+        );
 
-              logger.info({
-                ...requestContext,
-                step: 'reference-wmon',
-                success: true,
-                tokensReceived: tokensReceived.toString(),
-                pricePerToken: pricePerToken.toString(), 
-                valueUsdc: valueUsdc.toString(),
-              }, '[indicative-price] ✓ Derived price via WMATIC route');
-              return reply.send(result);
-            }
-          }
-          
-          // No liquidity available through any route
-          logger.error({ 
-            ...requestContext,
-            usdcToWmonResult: usdcToWmon,
-          }, '[indicative-price] ✗✗✗ NO LIQUIDITY through any route');
-          
+        if (pricePerToken) {
+          const valueAusd = (BigInt(sellAmount) * BigInt(pricePerToken)) / tokenDecimalsFactor;
           return reply.send({
             sellAmount,
-            buyAmount: '0',
-            liquidityAvailable: false,
+            buyAmount: valueAusd.toString(),
+            liquidityAvailable: true,
+            pricePerToken,
+            derivedFromReference: true,
           });
         }
 
-        // Direct USDC -> TOKEN reference worked
-        const referenceUsdc = BigInt(REFERENCE_USDC_AMOUNT);
-        const tokensReceived = BigInt(referenceQuote.buyAmount);
-        const tokenDecimalsFactor = BigInt(10) ** BigInt(tokenDecimals);
-        
-        // pricePerToken in USDC units (6 decimals) per 1 whole token
-        const pricePerToken = (referenceUsdc * tokenDecimalsFactor) / tokensReceived;
-        
-        // Calculate value of user's balance
-        const balance = BigInt(sellAmount);
-        const valueUsdc = (balance * pricePerToken) / tokenDecimalsFactor;
-        
-        // Cache the reference price
-        const result: IndicativePriceResponse = {
+        // 4. No liquidity through any route
+        return reply.send({
           sellAmount,
-          buyAmount: valueUsdc.toString(),
-          liquidityAvailable: true,
-          pricePerToken: pricePerToken.toString(),
-          derivedFromReference: true,
-        };
-        
-        await cache.set(cacheKey, result, TTL.PRICE_REF);
-
-        logger.info({
-          ...requestContext,
-          step: 'reference-direct',
-          success: true,
-          tokensReceived: tokensReceived.toString(),
-          pricePerToken: pricePerToken.toString(), 
-          valueUsdc: valueUsdc.toString(),
-        }, '[indicative-price] ✓ Derived price from direct reference quote');
-        return reply.send(result);
-        
+          buyAmount: '0',
+          liquidityAvailable: false,
+        });
       } catch (error) {
         logger.error({ error }, 'Failed to fetch indicative price');
         return reply.status(500).send({

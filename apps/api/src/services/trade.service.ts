@@ -162,11 +162,16 @@ async function getMultipleTradeDatas(chainId: ChainId, escrows: Address[]): Prom
   const client = getPublicClient(chainId);
   const map = new Map<Address, TradeData>();
 
+  // Batch cache read — single MGET round-trip instead of N sequential GETs
+  const cacheKeys = escrows.map((e) => `trade-data-${chainId}-${e}`);
+  const cached = await cache.mget<TradeData>(cacheKeys);
+
   const uncachedEscrows: Address[] = [];
-  for (const escrow of escrows) {
-    const cached = await cache.get<TradeData>(`trade-data-${chainId}-${escrow}`);
-    if (cached) {
-      map.set(escrow, cached);
+  for (let i = 0; i < escrows.length; i++) {
+    const escrow = escrows[i]!;
+    const hit = cached.get(cacheKeys[i]!);
+    if (hit) {
+      map.set(escrow, hit);
     } else {
       uncachedEscrows.push(escrow);
     }
@@ -203,6 +208,9 @@ async function getMultipleTradeDatas(chainId: ChainId, escrows: Address[]): Prom
     allResults.push(...results);
   }
 
+  // Batch cache write — single pipeline round-trip instead of N sequential SETs
+  const cacheEntries: Array<{ key: string; data: TradeData; ttlSeconds: number }> = [];
+
   for (let i = 0; i < uncachedEscrows.length; i++) {
     const escrow = uncachedEscrows[i]!;
     const data = allResults[i]!;
@@ -217,9 +225,14 @@ async function getMultipleTradeDatas(chainId: ChainId, escrows: Address[]): Prom
     };
 
     map.set(escrow, tradeData);
-    await cache.set(`trade-data-${chainId}-${escrow}`, tradeData, TTL.IMMUTABLE);
+    cacheEntries.push({
+      key: `trade-data-${chainId}-${escrow}`,
+      data: tradeData,
+      ttlSeconds: TTL.IMMUTABLE,
+    });
   }
 
+  await cache.mset(cacheEntries);
   return map;
 }
 
@@ -227,11 +240,16 @@ async function getMultipleEscrowStates(chainId: ChainId, escrows: Address[]): Pr
   const client = getPublicClient(chainId);
   const map = new Map<Address, TradeEscrowState>();
 
+  // Batch cache read — single MGET round-trip instead of N sequential GETs
+  const cacheKeys = escrows.map((e) => `escrow-state-${chainId}-${e}`);
+  const cached = await cache.mget<TradeEscrowState>(cacheKeys);
+
   const uncachedEscrows: Address[] = [];
-  for (const escrow of escrows) {
-    const cached = await cache.get<TradeEscrowState>(`escrow-state-${chainId}-${escrow}`);
-    if (cached) {
-      map.set(escrow, cached);
+  for (let i = 0; i < escrows.length; i++) {
+    const escrow = escrows[i]!;
+    const hit = cached.get(cacheKeys[i]!);
+    if (hit) {
+      map.set(escrow, hit);
     } else {
       uncachedEscrows.push(escrow);
     }
@@ -262,6 +280,9 @@ async function getMultipleEscrowStates(chainId: ChainId, escrows: Address[]): Pr
     allResults.push(...results);
   }
 
+  // Batch cache write — single pipeline round-trip instead of N sequential SETs
+  const cacheEntries: Array<{ key: string; data: TradeEscrowState; ttlSeconds: number }> = [];
+
   for (let i = 0; i < uncachedEscrows.length; i++) {
     const escrow = uncachedEscrows[i]!;
     const base = i * ESCROW_STATE_FNS.length;
@@ -283,9 +304,14 @@ async function getMultipleEscrowStates(chainId: ChainId, escrows: Address[]): Pr
     };
 
     map.set(escrow, state);
-    await cache.set(`escrow-state-${chainId}-${escrow}`, state, TTL.ESCROW_STATE);
+    cacheEntries.push({
+      key: `escrow-state-${chainId}-${escrow}`,
+      data: state,
+      ttlSeconds: TTL.ESCROW_STATE,
+    });
   }
 
+  await cache.mset(cacheEntries);
   return map;
 }
 

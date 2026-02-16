@@ -11,6 +11,7 @@ export const TTL = {
 } as const;
 
 const DEFAULT_TTL = 15;
+const MEM_CLEANUP_INTERVAL = 60_000; // sweep expired in-memory entries every 60s
 
 interface MemEntry {
   data: string;
@@ -21,8 +22,27 @@ class Cache {
   private memFallback = new Map<string, MemEntry>();
   private inflightFetches = new Map<string, Promise<unknown>>();
 
+  constructor() {
+    const timer = setInterval(() => this.sweepExpired(), MEM_CLEANUP_INTERVAL);
+    timer.unref(); // don't prevent process exit
+  }
+
   private get redis(): Redis | null {
     return getRedisClient();
+  }
+
+  private sweepExpired(): void {
+    const now = Date.now();
+    let swept = 0;
+    for (const [key, entry] of this.memFallback) {
+      if (now > entry.expiresAt) {
+        this.memFallback.delete(key);
+        swept++;
+      }
+    }
+    if (swept > 0) {
+      logger.debug({ swept }, 'Swept expired entries from memory cache');
+    }
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -50,6 +70,40 @@ class Cache {
     return JSON.parse(entry.data) as T;
   }
 
+  /** Batch-read multiple keys in a single Redis MGET round-trip. */
+  async mget<T>(keys: string[]): Promise<Map<string, T>> {
+    const result = new Map<string, T>();
+    if (keys.length === 0) return result;
+
+    try {
+      if (this.redis) {
+        const values = await this.redis.mget(...keys);
+        for (let i = 0; i < keys.length; i++) {
+          const raw = values[i];
+          if (raw !== null) {
+            result.set(keys[i]!, JSON.parse(raw) as T);
+          }
+        }
+        logger.debug({ total: keys.length, hits: result.size }, 'Cache mget (Redis)');
+        return result;
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Redis mget failed, trying in-memory fallback');
+    }
+
+    const now = Date.now();
+    for (const key of keys) {
+      const entry = this.memFallback.get(key);
+      if (entry && now <= entry.expiresAt) {
+        result.set(key, JSON.parse(entry.data) as T);
+      } else if (entry) {
+        this.memFallback.delete(key);
+      }
+    }
+    logger.debug({ total: keys.length, hits: result.size }, 'Cache mget (memory)');
+    return result;
+  }
+
   async set<T>(key: string, data: T, ttlSeconds: number = DEFAULT_TTL): Promise<void> {
     const json = JSON.stringify(data);
 
@@ -65,6 +119,33 @@ class Cache {
       }
     } catch (err) {
       logger.warn({ key, err }, 'Redis set failed, using in-memory only');
+    }
+  }
+
+  /** Batch-write multiple entries in a single Redis pipeline round-trip. */
+  async mset(entries: Array<{ key: string; data: unknown; ttlSeconds: number }>): Promise<void> {
+    if (entries.length === 0) return;
+
+    const serialized = entries.map(({ key, data, ttlSeconds }) => {
+      const json = JSON.stringify(data);
+      this.memFallback.set(key, {
+        data: json,
+        expiresAt: Date.now() + ttlSeconds * 1000,
+      });
+      return { key, json, ttlSeconds };
+    });
+
+    try {
+      if (this.redis) {
+        const pipeline = this.redis.pipeline();
+        for (const { key, json, ttlSeconds } of serialized) {
+          pipeline.set(key, json, 'EX', ttlSeconds);
+        }
+        await pipeline.exec();
+        logger.debug({ count: entries.length }, 'Cache mset (Redis pipeline)');
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Redis pipeline set failed, using in-memory only');
     }
   }
 
@@ -85,7 +166,11 @@ class Cache {
     const fetchPromise = (async () => {
       try {
         const result = await fetchFn();
-        await this.set(key, result, ttlSeconds);
+        // Don't cache null/undefined — treat them as "no result" so
+        // subsequent calls re-fetch rather than serving a stale miss.
+        if (result !== null && result !== undefined) {
+          await this.set(key, result, ttlSeconds);
+        }
         return result;
       } finally {
         this.inflightFetches.delete(key);
