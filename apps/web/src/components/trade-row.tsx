@@ -10,6 +10,7 @@ import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';
 import { useWithdraw } from '@/hooks/use-withdraw';
 import { usePositionValue } from '@/hooks/use-position-value';
+import { TokenAvatar } from './token-avatar';
 import { SellModal } from './sell-modal';
 import { CountdownTimer } from './countdown-timer';
 import { InvestModal } from './invest-modal';
@@ -171,22 +172,13 @@ export function TradeRow({ trade, role }: TradeRowProps) {
             <div className="flex items-start justify-between gap-6">
               {/* Token Info */}
               <div className="flex items-center gap-4">
-                {displayTokenMeta?.logoUrl ? (
-                  <img
-                    src={displayTokenMeta.logoUrl}
-                    alt={displayTokenMeta.symbol}
-                    className="w-14 h-14 rounded-xl"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                    <span className="text-xl font-bold text-primary">
-                      {displayTokenMeta?.symbol?.[0] || '?'}
-                    </span>
-                  </div>
-                )}
+                <TokenAvatar
+                  src={displayTokenMeta?.logoUrl}
+                  name={trade.data.buyToken}
+                  alt={displayTokenMeta?.symbol}
+                  size={56}
+                  rounded="xl"
+                />
                 <div>
                   <div className="flex items-center gap-3">
                     <h3 className="text-xl font-bold">
@@ -386,22 +378,13 @@ export function TradeRow({ trade, role }: TradeRowProps) {
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            {displayTokenMeta?.logoUrl ? (
-              <img
-                src={displayTokenMeta.logoUrl}
-                alt={displayTokenMeta.symbol}
-                className="w-12 h-12 rounded-xl"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                <span className="text-lg font-bold text-primary">
-                  {displayTokenMeta?.symbol?.[0] || '?'}
-                </span>
-              </div>
-            )}
+            <TokenAvatar
+              src={displayTokenMeta?.logoUrl}
+              name={trade.data.buyToken}
+              alt={displayTokenMeta?.symbol}
+              size={48}
+              rounded="xl"
+            />
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold">

@@ -10,11 +10,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@thesis/contracts": "workspace:*",
-    "@thesis/shared": "workspace:*",
     "@privy-io/react-auth": "^1.88.4",
     "@tanstack/react-query": "^5.51.1",
+    "@thesis/contracts": "workspace:*",
+    "@thesis/shared": "workspace:*",
     "clsx": "^2.1.1",
+    "facehash": "^0.1.0",
     "framer-motion": "^11.3.8",
     "lucide-react": "^0.424.0",
     "next": "16.1.4",
@@ -24,10 +25,10 @@
     "viem": "^2.21.0"
   },
   "devDependencies": {
+    "@next/eslint-plugin-next": "^16.1.0",
     "@types/node": "^20.11.30",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@next/eslint-plugin-next": "^16.1.0",
     "autoprefixer": "^10.4.19",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.1.0",

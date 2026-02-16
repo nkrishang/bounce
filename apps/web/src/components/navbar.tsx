@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wallet, LogOut, ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { Facehash } from "facehash";
 import { useAuth } from "@/hooks/use-auth";
 import { WalletModal } from "./wallet-modal";
 import { HowItWorksModal } from "./how-it-works-modal";
@@ -64,7 +65,14 @@ export function Navbar() {
                     onClick={() => setShowUserMenu(!showUserMenu)}
                     className="flex items-center gap-3 px-4 py-2 rounded-lg bg-dark-surface border border-dark-border hover:border-primary/50 transition-colors"
                   >
-                    <div className="w-8 h-8 rounded bg-[#E85D4A] flex-shrink-0" />
+                    <div className="w-8 h-8 rounded overflow-hidden flex-shrink-0">
+                      <Facehash
+                        name={address ?? ''}
+                        size={32}
+                        showInitial={false}
+                        colors={['#8B5CF6', '#EC4899', '#F97316', '#06B6D4', '#10B981', '#6366F1', '#F43F5E', '#A855F7', '#14B8A6', '#EAB308']}
+                      />
+                    </div>
                     <div className="text-left">
                       <span className="font-mono text-sm text-dark-surface-foreground block">
                         {walletsLoading

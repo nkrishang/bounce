@@ -7,6 +7,7 @@ import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribut
 import { formatUnits } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';
+import { TokenAvatar } from './token-avatar';
 import { CountdownTimer } from './countdown-timer';
 import { InvestModal } from './invest-modal';
 
@@ -84,22 +85,12 @@ export function TradeCard({ trade }: TradeCardProps) {
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-3 flex-1">
             <div className="flex items-center gap-3">
-              {displayTokenMeta?.logoUrl ? (
-                <img
-                  src={displayTokenMeta.logoUrl}
-                  alt={displayTokenMeta.symbol}
-                  className="w-10 h-10 rounded-lg"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                  <span className="text-lg font-bold text-primary">
-                    {displayTokenMeta?.symbol?.[0] || '?'}
-                  </span>
-                </div>
-              )}
+              <TokenAvatar
+                src={displayTokenMeta?.logoUrl}
+                name={trade.data.buyToken}
+                alt={displayTokenMeta?.symbol}
+                size={40}
+              />
               <div>
                 <h3 className="font-semibold">
                   {displayTokenMeta?.symbol || formatAddress(trade.data.buyToken)}

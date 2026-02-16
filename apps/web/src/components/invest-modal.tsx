@@ -9,6 +9,7 @@ import { EXPLORER_URLS } from '@thesis/contracts';
 import { formatUnits } from 'viem';
 import { useAuth } from '@/hooks/use-auth';
 import { useFundTrade } from '@/hooks/use-fund-trade';
+import { TokenAvatar } from './token-avatar';
 import { CountdownTimer } from './countdown-timer';
 import { LinkifyText } from './linkify-text';
 import { parseTransactionError } from '@/lib/parse-transaction-error';
@@ -112,22 +113,13 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
 
               <div className="p-6 space-y-6">
                 <div className="flex items-center gap-4">
-                  {buyTokenMeta?.logoUrl ? (
-                    <img
-                      src={buyTokenMeta.logoUrl}
-                      alt={buyTokenMeta.symbol}
-                      className="w-12 h-12 rounded-xl"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                      <span className="text-xl font-bold text-primary">
-                        {buyTokenMeta?.symbol?.[0] || '?'}
-                      </span>
-                    </div>
-                  )}
+                  <TokenAvatar
+                    src={buyTokenMeta?.logoUrl}
+                    name={trade.data.buyToken}
+                    alt={buyTokenMeta?.symbol}
+                    size={48}
+                    rounded="xl"
+                  />
                   <div>
                     <h3 className="text-xl font-bold">
                       {buyTokenMeta?.symbol || formatAddress(trade.data.buyToken)}

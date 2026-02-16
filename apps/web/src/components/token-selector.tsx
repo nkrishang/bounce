@@ -8,6 +8,7 @@ import { useVerifyToken, type VerificationStatus } from '@/hooks/use-verify-toke
 import { EXPLORER_URLS } from '@thesis/contracts';
 import type { SupportedChainId } from '@thesis/shared';
 import type { Address } from 'viem';
+import { TokenAvatar } from './token-avatar';
 
 interface TokenSelectorProps {
   chainId: SupportedChainId;
@@ -79,20 +80,13 @@ export function TokenSelector({ chainId, value, onChange, usdcAddress }: TokenSe
       >
         {selectedToken ? (
           <div className="flex items-center gap-3">
-            {selectedToken.logoURI ? (
-              <img
-                src={selectedToken.logoURI}
-                alt={selectedToken.symbol}
-                className="w-6 h-6 rounded-full"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            ) : (
-              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold">
-                {selectedToken.symbol.charAt(0)}
-              </div>
-            )}
+            <TokenAvatar
+              src={selectedToken.logoURI}
+              name={selectedToken.address}
+              alt={selectedToken.symbol}
+              size={24}
+              rounded="full"
+            />
             <div className="text-left">
               <div className="font-medium">{selectedToken.symbol}</div>
               <div className="text-xs text-muted-foreground">{selectedToken.name}</div>
@@ -100,9 +94,12 @@ export function TokenSelector({ chainId, value, onChange, usdcAddress }: TokenSe
           </div>
         ) : value && tokenData ? (
           <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold">
-              {tokenData.symbol.charAt(0)}
-            </div>
+            <TokenAvatar
+              name={value}
+              alt={tokenData.symbol}
+              size={24}
+              rounded="full"
+            />
             <div className="text-left">
               <div className="font-medium">{tokenData.symbol}</div>
               <div className="text-xs text-muted-foreground">{tokenData.name}</div>
@@ -166,20 +163,13 @@ export function TokenSelector({ chainId, value, onChange, usdcAddress }: TokenSe
                       onClick={() => handleSelectToken(token)}
                       className="w-full px-4 py-3 flex items-center gap-3 transition-colors duration-75 hover:bg-[rgba(139,92,246,0.25)]"
                     >
-                      {token.logoURI ? (
-                        <img
-                          src={token.logoURI}
-                          alt={token.symbol}
-                          className="w-8 h-8 rounded-full"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold">
-                          {token.symbol.charAt(0)}
-                        </div>
-                      )}
+                      <TokenAvatar
+                        src={token.logoURI}
+                        name={token.address}
+                        alt={token.symbol}
+                        size={32}
+                        rounded="full"
+                      />
                       <div className="flex-1 text-left">
                         <div className="font-medium">{token.symbol}</div>
                         <div className="text-xs text-muted-foreground">{token.name}</div>

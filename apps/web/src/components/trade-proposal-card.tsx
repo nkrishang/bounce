@@ -6,6 +6,7 @@ import { type TradeView, type TokenMeta, formatAddress } from '@thesis/shared';
 import { formatUnits } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';
+import { TokenAvatar } from './token-avatar';
 import { CountdownTimer } from './countdown-timer';
 import { InvestModal } from './invest-modal';
 
@@ -48,22 +49,12 @@ export function TradeProposalCard({ trade }: TradeProposalCardProps) {
       <div className="w-[280px] flex-shrink-0 rounded-xl bg-dark-surface border border-dark-border p-5 flex flex-col gap-4">
         {/* Token header */}
         <div className="flex items-center gap-3">
-          {logoUrl ? (
-            <img
-              src={logoUrl}
-              alt={displayTokenMeta?.symbol}
-              className="w-10 h-10 rounded-lg"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-              <span className="text-lg font-bold text-primary">
-                {displayTokenMeta?.symbol?.[0] || '?'}
-              </span>
-            </div>
-          )}
+          <TokenAvatar
+            src={logoUrl}
+            name={trade.data.buyToken}
+            alt={displayTokenMeta?.symbol}
+            size={40}
+          />
           <div className="min-w-0">
             <h3 className="font-semibold text-dark-surface-foreground truncate">
               {displayTokenMeta?.name || 'Unknown'}

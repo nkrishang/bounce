@@ -2,6 +2,7 @@
 
 import { ExternalLink, Globe, Loader2, MessageCircle, Send } from 'lucide-react';
 import { useTokenList, type TokenInfo } from '@/hooks/use-token-list';
+import { TokenAvatar } from './token-avatar';
 
 interface TrendingTokensTableProps {
   onBoostedBuy?: (token: TokenInfo) => void;
@@ -189,20 +190,13 @@ export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) 
                 {/* Token */}
                 <td className="py-4 px-3">
                   <div className="flex items-center gap-3">
-                    {logoSrc ? (
-                      <img
-                        src={logoSrc}
-                        alt={token.symbol}
-                        className="w-10 h-10 rounded-full"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary">
-                        {token.symbol.charAt(0)}
-                      </div>
-                    )}
+                    <TokenAvatar
+                      src={logoSrc}
+                      name={token.address}
+                      alt={token.symbol}
+                      size={40}
+                      rounded="full"
+                    />
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-sm text-foreground">{token.name}</span>

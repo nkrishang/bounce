@@ -69,6 +69,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      facehash:
+        specifier: ^0.1.0
+        version: 0.1.0(@types/react@19.2.9)(next@16.1.4)(react-dom@19.2.3)(react@19.2.3)
       framer-motion:
         specifier: ^11.3.8
         version: 11.18.2(react-dom@19.2.3)(react@19.2.3)
@@ -5983,6 +5986,25 @@ packages:
     resolution: {integrity: sha512-GipyPsXO1anza0AOZdy69Im7hGFCNB7Y/NGjDlZGJ3GJJLtwNSb2vrzYrTYJRrRloVx7pl+bhUaTB8yiccPvFQ==}
     engines: {node: '> 0.1.90'}
     requiresBuild: true
+    dev: false
+
+  /facehash@0.1.0(@types/react@19.2.9)(next@16.1.4)(react-dom@19.2.3)(react@19.2.3):
+    resolution: {integrity: sha512-tv/QVZjLvEXHssqBaJECq+kRLFwwhd017PKk8ucT7aLingL2OZ5zEqKwPMHmT9+YQO92MVFWGZQP6vxV+P5vrQ==}
+    peerDependencies:
+      '@types/react': '*'
+      next: '>=15'
+      react: '>=18 <20'
+      react-dom: '>=18 <20'
+    peerDependenciesMeta:
+      '@types/react':
+        optional: true
+      next:
+        optional: true
+    dependencies:
+      '@types/react': 19.2.9
+      next: 16.1.4(@babel/core@7.28.6)(react-dom@19.2.3)(react@19.2.3)
+      react: 19.2.3
+      react-dom: 19.2.3(react@19.2.3)
     dev: false
 
   /fast-content-type-parse@1.1.0:

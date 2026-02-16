@@ -9,6 +9,7 @@ import { useCreateTrade } from '@/hooks/use-create-trade';
 import { parseUnits } from 'viem';
 import { TokenSelector } from '@/components/token-selector';
 import { ContributionInput } from '@/components/contribution-input';
+import { TokenAvatar } from '@/components/token-avatar';
 import { parseTransactionError } from '@/lib/parse-transaction-error';
 import { TOKENS_BY_CHAIN, type SupportedChainId } from '@thesis/shared';
 import type { TokenInfo } from '@/hooks/use-token-list';
@@ -173,13 +174,13 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Token</span>
               <div className="flex items-center gap-2">
-                {selectedToken.logoURI && (
-                  <img
-                    src={selectedToken.logoURI}
-                    alt={selectedToken.symbol}
-                    className="w-4 h-4 rounded-full"
-                  />
-                )}
+                <TokenAvatar
+                  src={selectedToken.logoURI}
+                  name={selectedToken.address}
+                  alt={selectedToken.symbol}
+                  size={16}
+                  rounded="full"
+                />
                 <span className="font-medium">{selectedToken.symbol}</span>
               </div>
             </div>
