@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
+import { HeroSection } from '@/components/hero-section';
 import { TradeProposalsCarousel } from '@/components/trade-proposals-carousel';
 import { TrendingTokensTable } from '@/components/trending-tokens-table';
 import { CreateTradeModal } from '@/components/create-trade-modal';
@@ -19,6 +20,9 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Hero Section */}
+      <HeroSection />
+
       {/* Trade Proposals Section */}
       <section className="py-6">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
