@@ -1,24 +1,25 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Shield } from 'lucide-react';
-import { useTokenList } from '@/hooks/use-token-list';
+import { TrendingUp, Shield, ArrowRight } from 'lucide-react';
+import { useTokenList, type TokenInfo } from '@/hooks/use-token-list';
 import { TokenSlotMachine } from './token-slot-machine';
+import { HowItWorksModal } from './how-it-works-modal';
 
 export function HeroSection() {
-  const cachedLogos = useRef<string[]>([]);
+  const cachedTokens = useRef<TokenInfo[]>([]);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
   const { data: tokens = [] } = useTokenList();
 
-  if (cachedLogos.current.length === 0 && tokens.length > 0) {
-    cachedLogos.current = tokens
-      .map((t) => t.logoURI)
-      .filter((uri): uri is string => !!uri);
+  if (cachedTokens.current.length === 0 && tokens.length > 0) {
+    cachedTokens.current = tokens.filter((t) => t.logoURI || t.imageThumbUrl);
   }
 
-  const logos = cachedLogos.current;
+  const displayTokens = cachedTokens.current;
 
   return (
+    <>
     <section className="relative py-14 lg:py-20 overflow-hidden">
       {/* Ambient glow backgrounds */}
       <div className="absolute inset-0 pointer-events-none">
@@ -50,20 +51,45 @@ export function HeroSection() {
           {/* Hero Copy */}
           <div className="w-fit text-center lg:text-left">
             {/* Pill badge */}
-            <motion.div
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#ECC25E]/20 bg-[#ECC25E]/[0.06] mb-5"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ECC25E] opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#ECC25E]" />
-              </span>
-              <span className="text-xs font-medium tracking-wide text-[#ECC25E] uppercase">
-                Fully Onchain · 100% Backed
-              </span>
-            </motion.div>
+            <div className="flex flex-wrap items-center gap-2.5 mb-5">
+              <motion.div
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#ECC25E]/20 bg-[#ECC25E]/[0.06]"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ECC25E] opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#ECC25E]" />
+                </span>
+                <span className="text-xs font-medium tracking-wide text-[#ECC25E] uppercase">
+                  Fully Onchain · 100% Backed
+                </span>
+              </motion.div>
+
+              <motion.div
+                className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/[0.08] bg-success/[0.06]"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.15 }}
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
+                </span>
+                <span className="text-xs font-medium tracking-wide text-gray-200 uppercase flex items-center gap-1.5">
+                  Live on
+                  <img src="/logos/monad-logo.svg" alt="Monad" className="w-3.5 h-3.5 inline-block" />
+                  Monad
+                  <span className="text-gray-500">·</span>
+                  <img src="/logos/polygon-logo.svg" alt="Polygon" className="w-3.5 h-3.5 inline-block" />
+                  Polygon
+                  <span className="text-gray-500">·</span>
+                  <img src="/logos/base-logo.svg" alt="Base" className="w-3.5 h-3.5 inline-block" />
+                  Base
+                </span>
+              </motion.div>
+            </div>
 
             {/* Main headline */}
             <motion.h1
@@ -121,17 +147,6 @@ export function HeroSection() {
                 <span className="text-[#333]">.</span>
               </span>
             </motion.h1>
-
-            {/* Sub-tagline */}
-            <motion.p
-              className="mt-4 text-base text-[#888888] max-w-lg mx-auto lg:mx-0"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-            >
-              The leveraged conviction protocol. Believers risk first for amplified gains.
-              Backers earn yield, shielded from downside.
-            </motion.p>
 
             {/* Role cards */}
             <motion.div
@@ -252,21 +267,58 @@ export function HeroSection() {
                 </div>
               </div>
             </motion.div>
+
+            {/* CTA buttons */}
+            <motion.div
+              className="mt-7 flex flex-wrap items-center gap-3 justify-center lg:justify-start"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.7 }}
+            >
+              <button
+                onClick={() => {
+                  document.getElementById('active-opportunities')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="group px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] animate-btn-glow"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(236, 194, 94, 0.15), rgba(200, 169, 62, 0.08))',
+                  border: '1px solid rgba(236, 194, 94, 0.3)',
+                  color: '#ECC25E',
+                }}
+              >
+                <span className="flex items-center gap-2">
+                  Go to App
+                  <ArrowRight size={14} className="transition-transform duration-300 group-hover:translate-x-0.5" />
+                </span>
+              </button>
+              <button
+                onClick={() => setShowHowItWorks(true)}
+                className="px-6 py-3 rounded-xl text-sm font-bold text-white/70 hover:text-white border border-white/[0.08] hover:border-white/[0.15] bg-white/[0.03] hover:bg-white/[0.06] transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+              >
+                How It Works
+              </button>
+            </motion.div>
           </div>
 
           {/* Token Slot Machine */}
-          {logos.length > 0 && (
+          {displayTokens.length > 0 && (
             <motion.div
               className="flex-shrink-0 w-full lg:w-auto"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
             >
-              <TokenSlotMachine logos={logos} />
+              <TokenSlotMachine tokens={displayTokens} />
             </motion.div>
           )}
         </div>
       </div>
     </section>
+
+    <HowItWorksModal
+      open={showHowItWorks}
+      onClose={() => setShowHowItWorks(false)}
+    />
+    </>
   );
 }

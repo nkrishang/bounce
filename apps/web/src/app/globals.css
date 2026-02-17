@@ -92,3 +92,26 @@ a {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted-foreground);
 }
+
+.carousel-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.carousel-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 0 2%;
+}
+
+.carousel-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
+.carousel-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.carousel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}

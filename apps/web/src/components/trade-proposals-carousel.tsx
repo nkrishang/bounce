@@ -45,13 +45,21 @@ export function TradeProposalsCarousel() {
 
       {/* Cards horizontal scroll */}
       <div
-        className="overflow-x-auto pb-4 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        className="relative -mx-4 sm:-mx-6 lg:-mx-8"
+        style={{
+          maskImage: 'linear-gradient(to right, transparent, black 2%, black 98%, transparent)',
+          WebkitMaskImage: 'linear-gradient(to right, transparent, black 2%, black 98%, transparent)',
+        }}
       >
-        <div className="flex gap-4" style={{ minWidth: 'min-content' }}>
-          {trades.map((trade) => (
-            <TradeProposalCard key={trade.escrow} trade={trade} />
-          ))}
+        <div
+          className="overflow-x-auto pb-3 px-4 sm:px-6 lg:px-8 carousel-scroll"
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
+          <div className="flex gap-4" style={{ minWidth: 'min-content' }}>
+            {trades.map((trade) => (
+              <TradeProposalCard key={trade.escrow} trade={trade} />
+            ))}
+          </div>
         </div>
       </div>
     </div>

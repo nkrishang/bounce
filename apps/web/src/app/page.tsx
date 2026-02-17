@@ -24,7 +24,7 @@ export default function HomePage() {
       <HeroSection />
 
       {/* Trade Proposals Section */}
-      <section className="py-6">
+      <section id="active-opportunities" className="py-6 scroll-mt-20">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
           <TradeProposalsCarousel />
         </div>

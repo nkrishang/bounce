@@ -9,7 +9,6 @@ import { useState } from "react";
 import { Facehash } from "facehash";
 import { useAuth } from "@/hooks/use-auth";
 import { WalletModal } from "./wallet-modal";
-import { HowItWorksModal } from "./how-it-works-modal";
 import { formatAddress } from "@bounce/shared";
 
 export function Navbar() {
@@ -18,7 +17,6 @@ export function Navbar() {
     useAuth();
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showHowItWorks, setShowHowItWorks] = useState(false);
 
   return (
     <>
@@ -35,6 +33,16 @@ export function Navbar() {
 
             <div className="flex items-center gap-6">
               <Link
+                href="/"
+                className={`text-sm font-medium transition-colors ${
+                  pathname === "/"
+                    ? "text-primary"
+                    : "text-dark-surface-foreground/70 hover:text-dark-surface-foreground"
+                }`}
+              >
+                Explore
+              </Link>
+              <Link
                 href="/my-trades"
                 className={`text-sm font-medium transition-colors ${
                   pathname === "/my-trades"
@@ -44,12 +52,6 @@ export function Navbar() {
               >
                 My Trades
               </Link>
-              <button
-                onClick={() => setShowHowItWorks(true)}
-                className="text-sm font-medium text-dark-surface-foreground/70 hover:text-dark-surface-foreground transition-colors"
-              >
-                How it works
-              </button>
             </div>
 
             <div className="flex items-center gap-3">
@@ -137,10 +139,6 @@ export function Navbar() {
       <WalletModal
         open={showWalletModal}
         onClose={() => setShowWalletModal(false)}
-      />
-      <HowItWorksModal
-        open={showHowItWorks}
-        onClose={() => setShowHowItWorks(false)}
       />
     </>
   );

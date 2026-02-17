@@ -98,9 +98,9 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
 
   const scrollableContent = (
     <>
-      <div className={`${modal ? '' : 'p-6 rounded-xl bg-muted border border-border '}space-y-6`}>
+      <div className={`${modal ? '' : 'p-6 rounded-xl bg-dark-surface border border-dark-border '}space-y-6`}>
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm font-medium">
+          <label className="flex items-center gap-2 text-sm font-medium text-white">
             <Coins className="w-4 h-4 text-muted-foreground" />
             Token to Buy
           </label>
@@ -123,7 +123,7 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
         />
 
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm font-medium">
+          <label className="flex items-center gap-2 text-sm font-medium text-white">
             <Clock className="w-4 h-4 text-muted-foreground" />
             Expiration Time
           </label>
@@ -133,10 +133,10 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
                 key={option.value}
                 type="button"
                 onClick={() => setExpirationSeconds(option.value)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   expirationSeconds === option.value
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-background border border-border hover:border-primary'
+                    : 'bg-[#111113] border border-dark-border hover:border-primary/50 text-[#ccc]'
                 }`}
               >
                 {option.label}
@@ -146,7 +146,7 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
         </div>
 
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm font-medium">
+          <label className="flex items-center gap-2 text-sm font-medium text-white">
             <FileText className="w-4 h-4 text-muted-foreground" />
             Thesis (Optional)
           </label>
@@ -164,7 +164,7 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
             }}
             maxLength={100}
             rows={2}
-            className="w-full px-4 py-3 rounded-lg bg-background border border-border focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-none"
+            className="w-full px-4 py-3 rounded-xl bg-[#111113] border border-dark-border focus:border-primary focus:ring-1 focus:ring-primary/30 outline-none transition-all resize-none text-[#ccc] placeholder:text-muted-foreground/50"
           />
           <p className="text-xs text-muted-foreground text-right">
             {thesis.length}/100 characters
@@ -176,37 +176,39 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="p-6 rounded-xl glass border border-border space-y-4"
+        className="rounded-xl border border-dark-border overflow-hidden"
       >
-        <h3 className="font-medium">Trade Summary</h3>
-        <div className="space-y-2 text-sm">
-          {selectedToken && (
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Token</span>
-              <div className="flex items-center gap-2">
-                <TokenAvatar
-                  src={selectedToken.logoURI}
-                  name={selectedToken.address}
-                  alt={selectedToken.symbol}
-                  size={16}
-                  rounded="full"
-                />
-                <span className="font-medium">{selectedToken.symbol}</span>
+        <div className="p-4 space-y-3">
+          <h3 className="text-sm font-medium text-white">Trade Summary</h3>
+          <div className="space-y-3 text-sm">
+            {selectedToken && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Token</span>
+                <div className="flex items-center gap-2">
+                  <TokenAvatar
+                    src={selectedToken.logoURI}
+                    name={selectedToken.address}
+                    alt={selectedToken.symbol}
+                    size={16}
+                    rounded="full"
+                  />
+                  <span className="font-medium text-white">{selectedToken.symbol}</span>
+                </div>
               </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Your Stake (20%)</span>
+              <span className="font-mono text-[#ccc]">{sellAmount || '0'} USDC</span>
             </div>
-          )}
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Your Stake (20%)</span>
-            <span className="font-mono">{sellAmount || '0'} USDC</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Funding Needed (80%)</span>
-            <span className="font-mono">{fundingNeeded} USDC</span>
-          </div>
-          <div className="h-px bg-border my-2" />
-          <div className="flex justify-between font-medium">
-            <span>Total Position</span>
-            <span className="font-mono">{totalPosition} USDC</span>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Funding Needed (80%)</span>
+              <span className="font-mono font-semibold" style={{ color: '#C8A93E' }}>{fundingNeeded} USDC</span>
+            </div>
+            <div className="h-px bg-dark-border" />
+            <div className="flex justify-between font-semibold">
+              <span className="text-white">Total Position</span>
+              <span className="font-mono text-white">{totalPosition} USDC</span>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -215,9 +217,9 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
 
   const footerContent = (
     <>
-      <div className="p-4 rounded-lg bg-warning/10 border border-warning/20 flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-        <div className="text-sm">
+      <div className="p-3 rounded-xl bg-warning/5 border border-warning/15 flex items-start gap-2.5">
+        <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
+        <div className="text-xs">
           <p className="font-medium text-warning">Two Transactions Required</p>
           <p className="text-muted-foreground mt-1">
             1. Approve USDC spending for the factory contract
@@ -228,10 +230,10 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
       </div>
 
       {insufficientUsdc && (
-        <div className="p-4 rounded-lg bg-danger/10 border border-danger/20">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
-            <div className="text-sm">
+        <div className="p-3 rounded-xl bg-danger/10 border border-danger/20">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
+            <div className="text-xs">
               <p className="font-medium text-danger">Insufficient USDC Balance</p>
               <p className="text-danger/80 mt-1">
                 {exceedsBalance
@@ -250,7 +252,7 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="p-4 rounded-lg bg-danger/10 border border-danger/20"
+            className="p-4 rounded-xl bg-danger/10 border border-danger/20"
           >
             <div className="flex items-start gap-3">
               <XCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
@@ -281,15 +283,24 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
         }
         type="submit"
         disabled={isLoading || !buyToken || !sellAmount || step === 'success' || insufficientUsdc}
-        className={`w-full py-4 rounded-lg font-medium disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors ${
+        className={`w-full py-4 rounded-xl font-bold text-[15px] disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all duration-200 ${
           step === 'success'
-            ? 'bg-green-600 text-white'
+            ? 'bg-success text-white'
             : submitError
             ? 'bg-danger text-white'
             : insufficientUsdc
             ? 'bg-danger/50 text-white'
-            : 'bg-primary text-primary-foreground disabled:opacity-50'
+            : 'disabled:opacity-50'
         }`}
+        style={
+          step !== 'success' && !submitError && !insufficientUsdc
+            ? {
+                background: 'rgba(236, 194, 94, 0.12)',
+                border: '1px solid rgba(236, 194, 94, 0.3)',
+                color: '#C8A93E',
+              }
+            : undefined
+        }
       >
         {step === 'success' ? (
           <motion.div
@@ -336,7 +347,7 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
         <div className="flex-1 overflow-y-auto overscroll-contain p-6 space-y-6">
           {scrollableContent}
         </div>
-        <div className="flex-shrink-0 p-6 pt-4 border-t border-border space-y-4">
+        <div className="flex-shrink-0 p-6 pt-4 border-t border-dark-border space-y-4">
           {footerContent}
         </div>
       </form>
@@ -351,7 +362,7 @@ export function CreateTradeForm({ initialToken, onSuccess, modal }: CreateTradeF
       onSubmit={handleSubmit}
       className="space-y-6"
     >
-      <div className="p-6 rounded-xl bg-muted border border-border space-y-6">
+      <div className="p-6 rounded-xl bg-dark-surface border border-dark-border space-y-6">
         {scrollableContent}
       </div>
       {footerContent}

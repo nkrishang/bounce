@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, Loader2, Check, User, Clock, TrendingUp, Shield, ExternalLink, XCircle, Wallet } from 'lucide-react';
+import { X, AlertTriangle, Loader2, Check, Clock, TrendingUp, Shield, ExternalLink, XCircle, Wallet } from 'lucide-react';
 import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@bounce/shared';
 import { EXPLORER_URLS } from '@bounce/contracts';
 import { formatUnits } from 'viem';
@@ -90,7 +91,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
     }
   };
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -99,7 +100,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={!isLoading ? onClose : undefined}
-            className="fixed inset-0 bg-black/60 z-50"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -107,66 +108,78 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div className="bg-muted border border-border rounded-xl shadow-2xl overflow-hidden w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain">
-              <div className="flex items-center justify-between p-4 border-b border-border">
-                <h2 className="text-lg font-semibold">Invest in Trade</h2>
+            <div className="bg-dark-surface border border-dark-border rounded-2xl shadow-2xl overflow-hidden w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain">
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-dark-border">
+                <h2 className="text-lg font-bold text-white">Back this Trade</h2>
                 <button
                   onClick={onClose}
                   disabled={isLoading}
-                  className="p-2 rounded-lg hover:bg-background transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 rounded-lg hover:bg-white/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 text-muted-foreground" />
                 </button>
               </div>
 
-              <div className="p-6 space-y-6">
+              <div className="p-6 space-y-5">
+                {/* Token header */}
                 <div className="flex items-center gap-4">
-                  <TokenAvatar
-                    src={buyTokenMeta?.logoUrl}
-                    name={trade.data.buyToken}
-                    alt={buyTokenMeta?.symbol}
-                    size={48}
-                    rounded="xl"
-                  />
+                  <div className="rounded-xl bg-[#1e1e22] border border-[#2a2a2e]/50 p-1.5">
+                    <TokenAvatar
+                      src={buyTokenMeta?.logoUrl}
+                      name={trade.data.buyToken}
+                      alt={buyTokenMeta?.symbol}
+                      size={44}
+                      rounded="lg"
+                    />
+                  </div>
                   <div>
-                    <h3 className="text-xl font-bold">
+                    <h3 className="text-xl font-bold text-white">
                       {buyTokenMeta?.symbol || formatAddress(trade.data.buyToken)}
                     </h3>
                     <p className="text-sm text-muted-foreground">{buyTokenMeta?.name}</p>
                   </div>
                 </div>
 
+                {/* Thesis */}
                 {thesis && (
-                  <div className="p-4 rounded-lg bg-background border border-border">
-                    <p className="text-sm text-muted-foreground mb-1">Proposer&apos;s Thesis</p>
-                    <p className="text-sm italic">
+                  <div className="p-4 rounded-xl bg-[#111113] border border-dark-border">
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5">Believer&apos;s Thesis</p>
+                    <p className="text-sm text-[#ccc] italic leading-relaxed">
                       &ldquo;<LinkifyText text={thesis} />&rdquo;
                     </p>
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-background">
-                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                      <User className="w-4 h-4" />
-                      <span className="text-xs">Proposer</span>
+                {/* Believer + Expiry row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-4 rounded-xl bg-[#111113] border border-dark-border">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-1.5">
+                      <div
+                        className="w-5 h-5 rounded flex items-center justify-center"
+                        style={{ background: 'rgba(236, 194, 94, 0.12)' }}
+                      >
+                        <TrendingUp size={11} style={{ color: '#D4AD4A' }} />
+                      </div>
+                      <span className="text-[11px] font-medium">Believer</span>
                     </div>
                     <a
                       href={`${EXPLORER_URLS[trade.chainId]}/address/${trade.data.proposer}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-mono text-sm text-primary hover:underline transition-colors inline-flex items-center gap-1"
+                      className="font-mono text-sm hover:underline transition-colors inline-flex items-center gap-1"
+                      style={{ color: '#D4AD4A' }}
                     >
                       {formatAddress(trade.data.proposer)}
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>
-                  <div className="p-4 rounded-lg bg-background">
-                    <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                  <div className="p-4 rounded-xl bg-[#111113] border border-dark-border">
+                    <div className="flex items-center gap-2 text-muted-foreground mb-1.5">
                       <Clock className="w-4 h-4" />
-                      <span className="text-xs">Expires In</span>
+                      <span className="text-[11px] font-medium">Expires In</span>
                     </div>
-                    <p className="font-mono text-sm">
+                    <p className="font-mono text-sm text-[#ccc]">
                       <CountdownTimer
                         expirationTimestamp={trade.data.expirationTimestamp}
                         onExpire={onClose}
@@ -175,28 +188,31 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                   </div>
                 </div>
 
-                <div className="space-y-3 p-4 rounded-lg bg-gradient-to-br from-primary/5 to-accent/5 border border-primary/20">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Proposer Stake (20%)</span>
-                    <span className="font-mono">${parseFloat(sellAmount).toLocaleString()}</span>
+                {/* Funding breakdown */}
+                <div className="rounded-xl border border-dark-border overflow-hidden">
+                  <div className="p-4 space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Believer Stake (20%)</span>
+                      <span className="font-mono text-[#ccc]">${parseFloat(sellAmount).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Your Funding (80%)</span>
+                      <span className="font-mono font-semibold" style={{ color: '#61A6FB' }}>
+                        ${parseFloat(fundingNeeded).toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="h-px bg-dark-border" />
+                    <div className="flex justify-between font-semibold">
+                      <span className="text-white">Total Position</span>
+                      <span className="font-mono text-white">${parseFloat(totalPosition).toLocaleString()}</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Your Investment (80%)</span>
-                    <span className="font-mono text-primary font-medium">
-                      ${parseFloat(fundingNeeded).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="h-px bg-border" />
-                  <div className="flex justify-between font-medium">
-                    <span>Total Position</span>
-                    <span className="font-mono">${parseFloat(totalPosition).toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-xs pt-1">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <div className="px-4 py-3 bg-[#111113] flex justify-between items-center">
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Wallet className="w-3.5 h-3.5" />
                       Your Balance
                     </span>
-                    <span className={`font-mono ${exceedsBalance ? 'text-danger font-medium' : 'text-muted-foreground'}`}>
+                    <span className={`font-mono text-xs ${exceedsBalance ? 'text-danger font-medium' : 'text-muted-foreground'}`}>
                       {balanceLoading
                         ? 'Loading...'
                         : `$${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`
@@ -205,32 +221,34 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex items-start gap-2">
-                    <TrendingUp className="w-4 h-4 text-success mt-0.5" />
-                    <div>
-                      <p className="font-medium">If Profit</p>
-                      <p className="text-muted-foreground">You get 70% of gains</p>
+                {/* Outcome scenarios */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3.5 rounded-xl bg-[#111113] border border-dark-border">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TrendingUp className="w-4 h-4 text-success" />
+                      <span className="text-sm font-semibold text-success">If Profit</span>
                     </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">You receive 40% of gains</p>
                   </div>
-                  <div className="flex items-start gap-2">
-                    <Shield className="w-4 h-4 text-primary mt-0.5" />
-                    <div>
-                      <p className="font-medium">If Loss</p>
-                      <p className="text-muted-foreground">Proposer absorbs first 20%</p>
+                  <div className="p-3.5 rounded-xl bg-[#111113] border border-dark-border">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Shield className="w-4 h-4" style={{ color: '#61A6FB' }} />
+                      <span className="text-sm font-semibold" style={{ color: '#61A6FB' }}>If Loss</span>
                     </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">Believer absorbs first 20% of loss</p>
                   </div>
                 </div>
 
-                <div className="p-3 rounded-lg bg-warning/10 border border-warning/20 flex items-start gap-2">
+                {/* Warning */}
+                <div className="p-3 rounded-xl bg-warning/5 border border-warning/15 flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-muted-foreground">
-                    This will execute a swap immediately. Slippage and price impact may apply.
+                    This will execute a swap immediately. Slippage and price impact apply.
                   </p>
                 </div>
 
                 {exceedsBalance && (
-                  <div className="p-3 rounded-lg bg-danger/10 border border-danger/20 flex items-start gap-2">
+                  <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 flex items-start gap-2.5">
                     <AlertTriangle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-danger">
                       Insufficient USDC balance. You need ${parseFloat(fundingNeeded).toLocaleString()} USDC but only have ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC.
@@ -244,7 +262,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
-                      className="p-4 rounded-lg bg-danger/10 border border-danger/20"
+                      className="p-4 rounded-xl bg-danger/10 border border-danger/20"
                     >
                       <div className="flex items-start gap-3">
                         <XCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
@@ -257,8 +275,9 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                   )}
                 </AnimatePresence>
 
+                {/* CTA */}
                 {previewMode ? (
-                  <div className="w-full py-4 rounded-lg bg-muted-foreground/20 text-muted-foreground font-medium text-center">
+                  <div className="w-full py-4 rounded-xl bg-white/5 text-muted-foreground font-medium text-center">
                     Preview Mode
                   </div>
                 ) : !isAuthenticated ? (
@@ -266,9 +285,14 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                     whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.99 }}
                     onClick={login}
-                    className="w-full py-4 rounded-lg bg-primary text-primary-foreground font-medium"
+                    className="w-full py-4 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all duration-200"
+                    style={{
+                      background: 'rgba(97, 166, 251, 0.12)',
+                      border: '1px solid rgba(97, 166, 251, 0.3)',
+                      color: '#61A6FB',
+                    }}
                   >
-                    Sign In to Invest
+                    Sign In to Fund
                   </motion.button>
                 ) : (
                   <motion.button
@@ -289,15 +313,24 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                     }
                     onClick={handleInvest}
                     disabled={isLoading || step === 'success' || exceedsBalance}
-                    className={`w-full py-4 rounded-lg font-medium disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors ${
+                    className={`w-full py-4 rounded-xl font-bold text-[15px] disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all duration-200 ${
                       step === 'success'
-                        ? 'bg-green-600 text-white'
+                        ? 'bg-success text-white'
                         : submitError
                         ? 'bg-danger text-white'
                         : exceedsBalance
                         ? 'bg-danger/50 text-white'
-                        : 'bg-primary text-primary-foreground disabled:opacity-50'
+                        : 'disabled:opacity-50'
                     }`}
+                    style={
+                      step !== 'success' && !submitError && !exceedsBalance
+                        ? {
+                            background: 'rgba(97, 166, 251, 0.12)',
+                            border: '1px solid rgba(97, 166, 251, 0.3)',
+                            color: '#61A6FB',
+                          }
+                        : undefined
+                    }
                   >
                     {step === 'success' ? (
                       <motion.div
@@ -328,8 +361,8 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                       </>
                     ) : (
                       <>
-                        <Check className="w-5 h-5" />
-                        Invest ${parseFloat(fundingNeeded).toLocaleString()}
+                        <Shield className="w-5 h-5" />
+                        Fund ${parseFloat(fundingNeeded).toLocaleString()}
                       </>
                     )}
                   </motion.button>
@@ -339,6 +372,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
