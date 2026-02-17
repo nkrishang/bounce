@@ -22,9 +22,9 @@ COPY packages/shared packages/shared
 COPY packages/contracts packages/contracts
 
 # Build dependencies first, then api
-RUN pnpm --filter @thesis/shared run build && \
-    pnpm --filter @thesis/contracts run build && \
-    pnpm --filter @thesis/api run build
+RUN pnpm --filter @bounce/shared run build && \
+    pnpm --filter @bounce/contracts run build && \
+    pnpm --filter @bounce/api run build
 
 # ---- Runtime ----
 FROM node:20-alpine AS runtime
