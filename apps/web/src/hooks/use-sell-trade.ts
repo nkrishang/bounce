@@ -3,26 +3,21 @@
 import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { createWalletClient, createPublicClient, custom, http, type Address } from 'viem';
-import { TradeEscrowAbi, getChain, type ChainId } from '@thesis/contracts';
+import { type Address } from 'viem';
+import { TradeEscrowAbi, type ChainId } from '@thesis/contracts';
 import type { SwapQuote } from '@thesis/shared';
-import { api } from '../lib/api';
+import { api } from '@/lib/api';
 import { patchTradeInCache } from '@/lib/trade-cache';
+import { sendAndConfirm, createClients, getWalletAddress } from '@/lib/transaction';
 
 type Step = 'idle' | 'fetching-quote' | 'sell' | 'confirming' | 'success';
-
-const RPC_URLS: Record<number, string> = {
-  137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',
-  8453: process.env.NEXT_PUBLIC_BASE_RPC_URL || '',
-  143: process.env.NEXT_PUBLIC_MONAD_RPC_URL || '',
-};
 
 interface SellTradeParams {
   chainId: ChainId;
   escrowAddress: Address;
   buyToken: Address;
   sellToken: Address;
-  buyTokenAmount: bigint; // The amount of buyToken the escrow holds
+  buyTokenAmount: bigint;
 }
 
 async function getSwapQuote(chainId: number, params: {
@@ -39,7 +34,7 @@ async function getSwapQuote(chainId: number, params: {
     sellAmount: params.sellAmount,
     taker: params.taker,
   });
-  
+
   if (params.slippageBps) {
     queryParams.append('slippageBps', params.slippageBps.toString());
   }
@@ -72,56 +67,51 @@ export function useSellTrade() {
         await wallet.switchChain(params.chainId);
 
         const provider = await wallet.getEthereumProvider();
-        const walletClient = createWalletClient({
-          chain: getChain(params.chainId),
-          transport: custom(provider),
-        });
+        const { walletClient, publicClient, chain } = createClients(params.chainId, provider);
 
-        const publicClient = createPublicClient({
-          chain: getChain(params.chainId),
-          transport: http(RPC_URLS[params.chainId] || undefined),
-        });
+        const address = await getWalletAddress(walletClient);
 
-        const [address] = await walletClient.getAddresses();
-
-        // Step 1: Get swap quote from 0x API
-        // For sell, we're swapping buyToken -> sellToken
+        // Step 1: Get swap quote (selling buyToken back to sellToken/USDC)
         setStep('fetching-quote');
-        
+
         const quote = await getSwapQuote(params.chainId, {
-          sellToken: params.buyToken, // We're selling the buyToken
-          buyToken: params.sellToken, // To get back sellToken
+          sellToken: params.buyToken,
+          buyToken: params.sellToken,
           sellAmount: params.buyTokenAmount.toString(),
-          taker: params.escrowAddress, // Escrow is the one making the swap
-          slippageBps: 100, // 1% slippage
+          taker: params.escrowAddress,
+          slippageBps: 100,
         });
 
         console.log('0x Quote received for sell:', {
           sellAmount: quote.sellAmount,
           buyAmount: quote.buyAmount,
           minBuyAmount: quote.minBuyAmount,
-          route: quote.route.fills.map(f => f.source).join(' -> '),
+          route: quote.route?.fills?.map(f => f.source).join(' -> ') ?? 'unknown',
         });
 
         // Step 2: Execute sell with 0x quote
         setStep('sell');
-        const sellHash = await walletClient.writeContract({
-          address: params.escrowAddress,
-          abi: TradeEscrowAbi,
-          functionName: 'sell',
-          args: [
-            BigInt(quote.minBuyAmount),
-            quote.swapTarget,
-            quote.swapCallData,
-          ],
-          account: address,
-          gas: 2000000n,
-        });
-
-        console.log('Sell tx:', sellHash);
 
         setStep('confirming');
-        await publicClient.waitForTransactionReceipt({ hash: sellHash });
+        const { hash: sellHash } = await sendAndConfirm(
+          publicClient,
+          () =>
+            walletClient.writeContract({
+              chain,
+              address: params.escrowAddress,
+              abi: TradeEscrowAbi,
+              functionName: 'sell',
+              args: [
+                BigInt(quote.minBuyAmount),
+                quote.swapTarget,
+                quote.swapCallData,
+              ],
+              account: address,
+              gas: 2_000_000n,
+            }),
+        );
+
+        console.log('Sell tx confirmed:', sellHash);
 
         await api.post('/trades/refresh', {
           chainId: params.chainId,
@@ -139,13 +129,14 @@ export function useSellTrade() {
         }));
 
         setStep('success');
-        setIsLoading(false);
         return sellHash;
       } catch (err) {
         console.error('Sell trade error:', err);
         setError(err instanceof Error ? err.message : 'Failed to sell trade');
-        setIsLoading(false);
+        setStep('idle');
         throw err;
+      } finally {
+        setIsLoading(false);
       }
     },
     [wallets, queryClient]

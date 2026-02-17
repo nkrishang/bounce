@@ -98,7 +98,7 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={!isLoading ? onClose : undefined}
             className="fixed inset-0 bg-black/60 z-50"
           />
           <motion.div
@@ -112,7 +112,8 @@ export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = 
                 <h2 className="text-lg font-semibold">Invest in Trade</h2>
                 <button
                   onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-background transition-colors"
+                  disabled={isLoading}
+                  className="p-2 rounded-lg hover:bg-background transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <X className="w-5 h-5" />
                 </button>

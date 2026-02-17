@@ -8,6 +8,7 @@ import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';
 import { useWithdraw } from '@/hooks/use-withdraw';
 import { usePositionValue } from '@/hooks/use-position-value';
+import { parseTransactionError } from '@/lib/parse-transaction-error';
 import { computeActiveExpectedOutcomes, computeSoldMetrics } from '@/lib/trade-math';
 import { TokenAvatar } from './token-avatar';
 import { SellModal } from './sell-modal';
@@ -27,7 +28,8 @@ export function MyTradeCard({ trade, role, tab }: MyTradeCardProps) {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const { data: buyTokenMeta } = useTokenMeta(trade.chainId, trade.data.buyToken);
   const { data: tokenList = [] } = useTokenList();
-  const { withdrawProposer, withdrawFunder, isLoading: withdrawLoading } = useWithdraw();
+  const { withdrawProposer, withdrawFunder, isLoading: withdrawLoading, step: withdrawStep, error: withdrawError, reset: resetWithdraw } = useWithdraw();
+  const [withdrawSubmitError, setWithdrawSubmitError] = useState<{ title: string; message: string } | null>(null);
 
   const tokenFromList = useMemo(() => {
     return tokenList.find(
@@ -69,10 +71,15 @@ export function MyTradeCard({ trade, role, tab }: MyTradeCardProps) {
     : trade.state.withdrawFunderPerformed;
 
   const handleWithdraw = async () => {
-    if (role === 'proposer') {
-      await withdrawProposer(trade.chainId, trade.escrow);
-    } else {
-      await withdrawFunder(trade.chainId, trade.escrow);
+    setWithdrawSubmitError(null);
+    try {
+      if (role === 'proposer') {
+        await withdrawProposer(trade.chainId, trade.escrow);
+      } else {
+        await withdrawFunder(trade.chainId, trade.escrow);
+      }
+    } catch (err) {
+      setWithdrawSubmitError(parseTransactionError(err));
     }
   };
 
@@ -153,7 +160,7 @@ export function MyTradeCard({ trade, role, tab }: MyTradeCardProps) {
             </button>
           )}
           {tab === 'proposed' && trade.status === 'EXPIRED_UNFUNDED' && canWithdraw && (
-            <WithdrawButton loading={withdrawLoading} onClick={handleWithdraw} />
+            <WithdrawButton loading={withdrawLoading} step={withdrawStep} onClick={handleWithdraw} error={withdrawSubmitError} />
           )}
           {tab === 'active' && (
             <div className="flex flex-col gap-2">
@@ -166,7 +173,7 @@ export function MyTradeCard({ trade, role, tab }: MyTradeCardProps) {
                 </button>
               )}
               {canWithdraw && (
-                <WithdrawButton loading={withdrawLoading} onClick={handleWithdraw} />
+                <WithdrawButton loading={withdrawLoading} step={withdrawStep} onClick={handleWithdraw} error={withdrawSubmitError} />
               )}
               {alreadyWithdrawn && <WithdrawnBadge />}
             </div>
@@ -174,7 +181,7 @@ export function MyTradeCard({ trade, role, tab }: MyTradeCardProps) {
           {tab === 'sold' && (
             <>
               {canWithdraw && (
-                <WithdrawButton loading={withdrawLoading} onClick={handleWithdraw} />
+                <WithdrawButton loading={withdrawLoading} step={withdrawStep} onClick={handleWithdraw} error={withdrawSubmitError} />
               )}
               {alreadyWithdrawn && <WithdrawnBadge />}
             </>
@@ -416,22 +423,42 @@ function SoldInfo({ soldMetrics }: { soldMetrics: NonNullable<ReturnType<typeof 
   );
 }
 
-function WithdrawButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+function WithdrawButton({ loading, step, onClick, error }: { loading: boolean; step: string; onClick: () => void; error?: { title: string; message: string } | null }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={loading}
-      className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2"
-    >
-      {loading ? (
-        <Loader2 className="w-4 h-4 animate-spin" />
-      ) : (
-        <>
-          <Wallet className="w-4 h-4" />
-          Withdraw
-        </>
+    <div className="space-y-2">
+      <button
+        onClick={onClick}
+        disabled={loading || step === 'success'}
+        className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2 ${
+          step === 'success'
+            ? 'bg-green-600 text-white'
+            : 'bg-primary text-primary-foreground hover:bg-primary/90'
+        }`}
+      >
+        {step === 'success' ? (
+          <>
+            <CheckCircle className="w-4 h-4" />
+            Withdrawn!
+          </>
+        ) : loading ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {step === 'confirming' ? 'Confirming...' : 'Withdrawing...'}
+          </>
+        ) : (
+          <>
+            <Wallet className="w-4 h-4" />
+            Withdraw
+          </>
+        )}
+      </button>
+      {error && (
+        <div className="p-3 rounded-lg bg-danger/10 border border-danger/20 text-xs">
+          <p className="font-medium text-danger">{error.title}</p>
+          <p className="text-danger/80 mt-1">{error.message}</p>
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 

@@ -30,7 +30,7 @@ export function patchTradeInCache(
     const isAffected =
       key[0] === 'userTrades' ||
       key[0] === 'trades' ||
-      (key[0] === 'trade' && key[1] === escrow);
+      (key[0] === 'trade' && typeof key[1] === 'string' && key[1].toLowerCase() === escrow.toLowerCase());
 
     if (isAffected) {
       applyPatch(queryClient, escrow, updater);
@@ -65,7 +65,7 @@ function applyPatch(
     if (!data) continue;
 
     const patchList = (list: TradeView[]) =>
-      list.map((t) => (t.escrow === escrow ? updater(t) : t));
+      list.map((t) => (t.escrow.toLowerCase() === escrow.toLowerCase() ? updater(t) : t));
 
     queryClient.setQueryData(queryKey, {
       asProposer: patchList(data.asProposer),
@@ -84,7 +84,7 @@ function applyPatch(
     const statusFilter = queryKey[1] as TradeStatus | undefined;
 
     const updated = data
-      .map((t) => (t.escrow === escrow ? updater(t) : t))
+      .map((t) => (t.escrow.toLowerCase() === escrow.toLowerCase() ? updater(t) : t))
       .filter((t) => !statusFilter || t.status === statusFilter);
 
     queryClient.setQueryData(queryKey, updated);

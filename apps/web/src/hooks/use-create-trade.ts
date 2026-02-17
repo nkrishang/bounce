@@ -3,18 +3,13 @@
 import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { createWalletClient, createPublicClient, custom, http, type Address } from 'viem';
-import { TradeEscrowFactoryAbi, ERC20Abi, getChain, ADDRESSES_BY_CHAIN, type ChainId } from '@thesis/contracts';
+import { type Address } from 'viem';
+import { TradeEscrowFactoryAbi, ERC20Abi, ADDRESSES_BY_CHAIN, type ChainId } from '@thesis/contracts';
 import { TOKENS_BY_CHAIN } from '@thesis/shared';
-import { api } from '../lib/api';
+import { api } from '@/lib/api';
+import { sendAndConfirm, createClients, getWalletAddress } from '@/lib/transaction';
 
-const RPC_URLS: Record<number, string> = {
-  137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',
-  8453: process.env.NEXT_PUBLIC_BASE_RPC_URL || '',
-  143: process.env.NEXT_PUBLIC_MONAD_RPC_URL || '',
-};
-
-type Step = 'idle' | 'approve' | 'create' | 'confirming' | 'success';
+type Step = 'idle' | 'approve' | 'confirming-approve' | 'create' | 'confirming' | 'success';
 
 interface CreateTradeParams {
   chainId: ChainId;
@@ -49,22 +44,14 @@ export function useCreateTrade() {
         await wallet.switchChain(params.chainId);
 
         const provider = await wallet.getEthereumProvider();
-        const walletClient = createWalletClient({
-          chain: getChain(params.chainId),
-          transport: custom(provider),
-        });
+        const { walletClient, publicClient, chain } = createClients(params.chainId, provider);
 
-        const publicClient = createPublicClient({
-          chain: getChain(params.chainId),
-          transport: http(RPC_URLS[params.chainId] || undefined),
-        });
+        const address = await getWalletAddress(walletClient);
 
         const factoryAddress = ADDRESSES_BY_CHAIN[params.chainId].TRADE_ESCROW_FACTORY;
         const usdcAddress = TOKENS_BY_CHAIN[params.chainId].USDC;
 
-        const [address] = await walletClient.getAddresses();
-
-        // Safety net: verify on-chain USDC balance before any transactions
+        // Verify on-chain USDC balance before any transactions
         const usdcBalance = await publicClient.readContract({
           address: usdcAddress,
           abi: ERC20Abi,
@@ -86,14 +73,19 @@ export function useCreateTrade() {
 
         if (existingAllowance < params.sellAmount) {
           setStep('approve');
-          const approveHash = await walletClient.writeContract({
-            address: usdcAddress,
-            abi: ERC20Abi,
-            functionName: 'approve',
-            args: [factoryAddress, params.sellAmount],
-            account: address,
-          });
-          console.log('Approve tx:', approveHash);
+          const { hash: approveHash } = await sendAndConfirm(
+            publicClient,
+            () =>
+              walletClient.writeContract({
+                chain,
+                address: usdcAddress,
+                abi: ERC20Abi,
+                functionName: 'approve',
+                args: [factoryAddress, params.sellAmount],
+                account: address,
+              }),
+          );
+          console.log('Approve tx confirmed:', approveHash);
         } else {
           console.log('Sufficient USDC allowance already exists, skipping approval');
         }
@@ -101,24 +93,27 @@ export function useCreateTrade() {
         setStep('create');
         const expirationTimestamp = BigInt(Math.floor(Date.now() / 1000) + params.expirationSeconds);
 
-        const createHash = await walletClient.writeContract({
-          address: factoryAddress,
-          abi: TradeEscrowFactoryAbi,
-          functionName: 'createTradeEscrow',
-          args: [
-            expirationTimestamp,
-            usdcAddress,
-            params.buyToken,
-            params.sellAmount,
-            params.metadataUri,
-          ],
-          account: address,
-        });
-
-        console.log('Create tx:', createHash);
-
         setStep('confirming');
-        await publicClient.waitForTransactionReceipt({ hash: createHash });
+        const { hash: createHash } = await sendAndConfirm(
+          publicClient,
+          () =>
+            walletClient.writeContract({
+              chain,
+              address: factoryAddress,
+              abi: TradeEscrowFactoryAbi,
+              functionName: 'createTradeEscrow',
+              args: [
+                expirationTimestamp,
+                usdcAddress,
+                params.buyToken,
+                params.sellAmount,
+                params.metadataUri,
+              ],
+              account: address,
+            }),
+        );
+
+        console.log('Create tx confirmed:', createHash);
 
         await api.post('/trades/refresh', { chainId: params.chainId }).catch(() => {});
 
@@ -130,9 +125,10 @@ export function useCreateTrade() {
       } catch (err) {
         console.error('Create trade error:', err);
         setError(err instanceof Error ? err.message : 'Failed to create trade');
-        setIsLoading(false);
         setStep('idle');
         throw err;
+      } finally {
+        setIsLoading(false);
       }
     },
     [wallets, queryClient]

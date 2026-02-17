@@ -1,27 +1,16 @@
-"use client";
+'use client';
 
-import { useState, useCallback } from "react";
-import { useWallets } from "@privy-io/react-auth";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  createWalletClient,
-  createPublicClient,
-  custom,
-  http,
-  type Address,
-} from "viem";
-import { TradeEscrowAbi, ERC20Abi, getChain, type ChainId } from "@thesis/contracts";
-import type { SwapQuote } from "@thesis/shared";
-import { api } from "../lib/api";
-import { patchTradeInCache } from "@/lib/trade-cache";
+import { useState, useCallback } from 'react';
+import { useWallets } from '@privy-io/react-auth';
+import { useQueryClient } from '@tanstack/react-query';
+import { type Address } from 'viem';
+import { TradeEscrowAbi, ERC20Abi, type ChainId } from '@thesis/contracts';
+import type { SwapQuote } from '@thesis/shared';
+import { api } from '@/lib/api';
+import { patchTradeInCache } from '@/lib/trade-cache';
+import { sendAndConfirm, createClients, getWalletAddress } from '@/lib/transaction';
 
-type Step = "idle" | "fetching-quote" | "approve" | "buy" | "confirming" | "success";
-
-const RPC_URLS: Record<number, string> = {
-  137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',
-  8453: process.env.NEXT_PUBLIC_BASE_RPC_URL || '',
-  143: process.env.NEXT_PUBLIC_MONAD_RPC_URL || '',
-};
+type Step = 'idle' | 'fetching-quote' | 'approve' | 'buy' | 'confirming' | 'success';
 
 interface FundTradeParams {
   chainId: ChainId;
@@ -45,9 +34,9 @@ async function getSwapQuote(chainId: number, params: {
     sellAmount: params.sellAmount,
     taker: params.taker,
   });
-  
+
   if (params.slippageBps) {
-    queryParams.append("slippageBps", params.slippageBps.toString());
+    queryParams.append('slippageBps', params.slippageBps.toString());
   }
 
   return api.get<SwapQuote>(`/swap/quote?${queryParams.toString()}`);
@@ -57,19 +46,19 @@ export function useFundTrade() {
   const { wallets } = useWallets();
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
-  const [step, setStep] = useState<Step>("idle");
+  const [step, setStep] = useState<Step>('idle');
   const [error, setError] = useState<string | null>(null);
 
   const reset = useCallback(() => {
-    setStep("idle");
+    setStep('idle');
     setIsLoading(false);
     setError(null);
   }, []);
 
   const fundTrade = useCallback(
     async (params: FundTradeParams) => {
-      const wallet = wallets.find((w) => w.walletClientType === "privy");
-      if (!wallet) throw new Error("No Privy embedded wallet connected");
+      const wallet = wallets.find((w) => w.walletClientType === 'privy');
+      if (!wallet) throw new Error('No Privy embedded wallet connected');
 
       setIsLoading(true);
       setError(null);
@@ -78,127 +67,122 @@ export function useFundTrade() {
         await wallet.switchChain(params.chainId);
 
         const provider = await wallet.getEthereumProvider();
-        const walletClient = createWalletClient({
-          chain: getChain(params.chainId),
-          transport: custom(provider),
-        });
+        const { walletClient, publicClient, chain } = createClients(params.chainId, provider);
 
-        const publicClient = createPublicClient({
-          chain: getChain(params.chainId),
-          transport: http(RPC_URLS[params.chainId] || undefined),
-        });
+        const address = await getWalletAddress(walletClient);
 
-        const [address] = await walletClient.getAddresses();
-
-        // Safety net: verify on-chain USDC balance before any transactions
+        // Verify on-chain USDC balance
         const usdcBalance = await publicClient.readContract({
           address: params.sellToken,
           abi: ERC20Abi,
-          functionName: "balanceOf",
+          functionName: 'balanceOf',
           args: [address],
         });
 
         if (usdcBalance < params.funderContribution) {
-          throw new Error("Insufficient USDC balance");
+          throw new Error('Insufficient USDC balance');
         }
 
-        // Step 1: Approve escrow to pull funder's contribution (skip if sufficient allowance exists)
+        // Step 1: Approve escrow to pull funder's contribution
         const existingAllowance = await publicClient.readContract({
           address: params.sellToken,
           abi: ERC20Abi,
-          functionName: "allowance",
+          functionName: 'allowance',
           args: [address, params.escrowAddress],
         });
 
         if (existingAllowance < params.funderContribution) {
-          setStep("approve");
-          const approveHash = await walletClient.writeContract({
-            address: params.sellToken,
-            abi: ERC20Abi,
-            functionName: "approve",
-            args: [params.escrowAddress, params.funderContribution],
-            account: address,
-          });
-          console.log("Approve tx:", approveHash);
-          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          setStep('approve');
+          const { hash: approveHash } = await sendAndConfirm(
+            publicClient,
+            () =>
+              walletClient.writeContract({
+                chain,
+                address: params.sellToken,
+                abi: ERC20Abi,
+                functionName: 'approve',
+                args: [params.escrowAddress, params.funderContribution],
+                account: address,
+              }),
+          );
+          console.log('Approve tx confirmed:', approveHash);
         } else {
-          console.log("Sufficient allowance already exists, skipping approval");
+          console.log('Sufficient allowance already exists, skipping approval');
         }
 
-        // Step 2: Get swap quote from 0x API
-        // Total swap amount = proposer (20%) + funder (80%) = funderContribution * 1.25
-        setStep("fetching-quote");
-        const totalSellAmount = (params.funderContribution * 5n) / 4n; // funder is 80%, total is 100%
-        
+        // Step 2: Get swap quote
+        setStep('fetching-quote');
+        const totalSellAmount = (params.funderContribution * 5n) / 4n;
+
         const quote = await getSwapQuote(params.chainId, {
           sellToken: params.sellToken,
           buyToken: params.buyToken,
           sellAmount: totalSellAmount.toString(),
-          taker: params.escrowAddress, // Escrow is the one making the swap
-          slippageBps: 100, // 1% slippage
+          taker: params.escrowAddress,
+          slippageBps: 100,
         });
 
-        console.log("0x Quote received:", {
+        console.log('0x Quote received:', {
           sellAmount: quote.sellAmount,
           buyAmount: quote.buyAmount,
           minBuyAmount: quote.minBuyAmount,
-          route: quote.route.fills.map(f => f.source).join(" -> "),
+          route: quote.route?.fills?.map(f => f.source).join(' -> ') ?? 'unknown',
         });
 
         // Step 3: Execute buy with 0x quote
-        setStep("buy");
-        const buyHash = await walletClient.writeContract({
-          address: params.escrowAddress,
-          abi: TradeEscrowAbi,
-          functionName: "buy",
-          args: [
-            BigInt(quote.minBuyAmount),
-            quote.swapTarget,
-            quote.swapCallData,
-          ],
-          account: address,
-          gas: 2000000n,
-        });
+        setStep('buy');
 
-        console.log("Buy tx:", buyHash);
+        setStep('confirming');
+        const { hash: buyHash } = await sendAndConfirm(
+          publicClient,
+          () =>
+            walletClient.writeContract({
+              chain,
+              address: params.escrowAddress,
+              abi: TradeEscrowAbi,
+              functionName: 'buy',
+              args: [
+                BigInt(quote.minBuyAmount),
+                quote.swapTarget,
+                quote.swapCallData,
+              ],
+              account: address,
+              gas: 2_000_000n,
+            }),
+        );
 
-        setStep("confirming");
-        await publicClient.waitForTransactionReceipt({ hash: buyHash });
+        console.log('Buy tx confirmed:', buyHash);
 
         await api.post('/trades/refresh', {
           chainId: params.chainId,
           escrowAddress: params.escrowAddress,
         }).catch(() => {});
 
-        setStep("success");
-
-        // Delay optimistic patch so the modal's success effect fires before
-        // the trade is removed from the OPEN list (which unmounts the modal).
+        // Apply optimistic cache patch immediately
         const proposerContribution = totalSellAmount - params.funderContribution;
+        patchTradeInCache(queryClient, params.escrowAddress, (trade) => ({
+          ...trade,
+          status: 'FUNDED',
+          canBuy: false,
+          state: {
+            ...trade.state,
+            buyPerformed: true,
+            funder: address,
+            funderContribution: params.funderContribution.toString(),
+            proposerContribution: proposerContribution.toString(),
+            totalSellIn: totalSellAmount.toString(),
+          },
+        }));
 
-        setTimeout(() => {
-          patchTradeInCache(queryClient, params.escrowAddress, (trade) => ({
-            ...trade,
-            status: 'FUNDED',
-            canBuy: false,
-            state: {
-              ...trade.state,
-              buyPerformed: true,
-              funder: address,
-              funderContribution: params.funderContribution.toString(),
-              proposerContribution: proposerContribution.toString(),
-              totalSellIn: totalSellAmount.toString(),
-            },
-          }));
-        }, 1000);
-
+        setStep('success');
         return buyHash;
       } catch (err) {
-        console.error("Fund trade error:", err);
-        setError(err instanceof Error ? err.message : "Failed to fund trade");
-        setIsLoading(false);
-        setStep("idle");
+        console.error('Fund trade error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fund trade');
+        setStep('idle');
         throw err;
+      } finally {
+        setIsLoading(false);
       }
     },
     [wallets, queryClient],
