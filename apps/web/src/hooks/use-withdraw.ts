@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { type Address } from 'viem';
-import { TradeEscrowAbi, type ChainId } from '@thesis/contracts';
+import { TradeEscrowAbi, type ChainId } from '@bounce/contracts';
 import { api } from '@/lib/api';
 import { patchTradeInCache } from '@/lib/trade-cache';
 import { sendAndConfirm, createClients, getWalletAddress } from '@/lib/transaction';

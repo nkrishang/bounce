@@ -1,8 +1,8 @@
 import { type Address } from 'viem';
 import { getPublicClient } from '../lib/viem.js';
-import { type ChainId } from '@thesis/contracts';
-import { ERC20Abi } from '@thesis/contracts';
-import { type TokenMeta } from '@thesis/shared';
+import { type ChainId } from '@bounce/contracts';
+import { ERC20Abi } from '@bounce/contracts';
+import { type TokenMeta } from '@bounce/shared';
 import { cache, TTL } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
 

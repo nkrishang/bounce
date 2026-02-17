@@ -4,8 +4,8 @@ import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { type Address } from 'viem';
-import { TradeEscrowFactoryAbi, ERC20Abi, ADDRESSES_BY_CHAIN, type ChainId } from '@thesis/contracts';
-import { TOKENS_BY_CHAIN } from '@thesis/shared';
+import { TradeEscrowFactoryAbi, ERC20Abi, ADDRESSES_BY_CHAIN, type ChainId } from '@bounce/contracts';
+import { TOKENS_BY_CHAIN } from '@bounce/shared';
 import { api } from '@/lib/api';
 import { sendAndConfirm, createClients, getWalletAddress } from '@/lib/transaction';
 

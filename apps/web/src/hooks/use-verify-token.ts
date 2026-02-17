@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { createPublicClient, http, isAddress, type Address } from 'viem';
-import { getChain } from '@thesis/contracts';
-import { TOKENS_BY_CHAIN, type SupportedChainId } from '@thesis/shared';
+import { getChain } from '@bounce/contracts';
+import { TOKENS_BY_CHAIN, type SupportedChainId } from '@bounce/shared';
 import { api } from '../lib/api';
 
 const ERC20Abi = [

@@ -6,7 +6,7 @@ import { Coins, Wallet } from 'lucide-react';
 import { formatUnits } from 'viem';
 import { useWalletBalances } from '@/hooks/use-wallet';
 import type { Address } from 'viem';
-import type { SupportedChainId } from '@thesis/shared';
+import type { SupportedChainId } from '@bounce/shared';
 
 interface ContributionInputProps {
   value: string;

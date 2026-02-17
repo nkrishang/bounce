@@ -1,4 +1,4 @@
-import type { TradeView } from '@thesis/shared';
+import type { TradeView } from '@bounce/shared';
 import { formatUnits } from 'viem';
 
 interface ExpectedOutcomes {

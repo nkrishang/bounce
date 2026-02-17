@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ChevronDown, Check, X, Loader2, Plus, ExternalLink } from 'lucide-react';
 import { useTokenList, type TokenInfo } from '@/hooks/use-token-list';
 import { useVerifyToken, type VerificationStatus } from '@/hooks/use-verify-token';
-import { EXPLORER_URLS } from '@thesis/contracts';
-import type { SupportedChainId } from '@thesis/shared';
+import { EXPLORER_URLS } from '@bounce/contracts';
+import type { SupportedChainId } from '@bounce/shared';
 import type { Address } from 'viem';
 import { TokenAvatar } from './token-avatar';
 

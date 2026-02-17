@@ -3,8 +3,8 @@
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Loader2, Eye, Wallet, CheckCircle, Coins, ExternalLink } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@thesis/shared';
-import { EXPLORER_URLS } from '@thesis/contracts';
+import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@bounce/shared';
+import { EXPLORER_URLS } from '@bounce/contracts';
 import { formatUnits, type Address } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';

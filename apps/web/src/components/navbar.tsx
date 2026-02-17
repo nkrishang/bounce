@@ -10,7 +10,7 @@ import { Facehash } from "facehash";
 import { useAuth } from "@/hooks/use-auth";
 import { WalletModal } from "./wallet-modal";
 import { HowItWorksModal } from "./how-it-works-modal";
-import { formatAddress } from "@thesis/shared";
+import { formatAddress } from "@bounce/shared";
 
 export function Navbar() {
   const pathname = usePathname();

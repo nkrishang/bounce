@@ -11,7 +11,7 @@ import {
   type Hash,
   type TransactionReceipt,
 } from 'viem';
-import { getChain, type ChainId } from '@thesis/contracts';
+import { getChain, type ChainId } from '@bounce/contracts';
 
 const RPC_URLS: Record<number, string> = {
   137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',

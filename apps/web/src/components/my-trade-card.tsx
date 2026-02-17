@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Loader2, Wallet, CheckCircle, Eye } from 'lucide-react';
-import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@thesis/shared';
+import { type TradeView, type TokenMeta, formatAddress, calculateFunderContribution } from '@bounce/shared';
 import { formatUnits, type Address } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';

@@ -5,7 +5,7 @@ import { X, Copy, ExternalLink, RefreshCw, Check, Wallet } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useWalletBalances } from "@/hooks/use-wallet";
-import { formatAddress } from "@thesis/shared";
+import { formatAddress } from "@bounce/shared";
 import { formatUnits } from "viem";
 
 const CHAIN_META: Record<number, { name: string; logo: string; explorer: string }> = {

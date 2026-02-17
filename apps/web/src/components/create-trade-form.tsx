@@ -12,7 +12,7 @@ import { TokenSelector } from '@/components/token-selector';
 import { ContributionInput } from '@/components/contribution-input';
 import { TokenAvatar } from '@/components/token-avatar';
 import { parseTransactionError } from '@/lib/parse-transaction-error';
-import { TOKENS_BY_CHAIN, type SupportedChainId } from '@thesis/shared';
+import { TOKENS_BY_CHAIN, type SupportedChainId } from '@bounce/shared';
 import type { TokenInfo } from '@/hooks/use-token-list';
 
 const EXPIRATION_OPTIONS = [

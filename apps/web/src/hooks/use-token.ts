@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { type TokenMeta, type Address, type SupportedChainId } from '@thesis/shared';
+import { type TokenMeta, type Address, type SupportedChainId } from '@bounce/shared';
 import { api } from '@/lib/api';
 
 export function useTokenMeta(chainId: SupportedChainId, tokenAddress: Address | undefined) {

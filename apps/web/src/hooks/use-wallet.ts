@@ -1,8 +1,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { type Address } from '@thesis/shared';
-import { TOKENS_BY_CHAIN, type SupportedChainId } from '@thesis/shared';
+import { type Address } from '@bounce/shared';
+import { TOKENS_BY_CHAIN, type SupportedChainId } from '@bounce/shared';
 import { api } from '@/lib/api';
 
 const CHAIN_IDS: SupportedChainId[] = [137, 8453, 143];

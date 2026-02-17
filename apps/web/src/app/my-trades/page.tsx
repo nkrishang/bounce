@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Briefcase, TrendingUp, CheckCircle, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useUserTrades } from '@/hooks/use-trades';
-import { type TradeView } from '@thesis/shared';
+import { type TradeView } from '@bounce/shared';
 import { MyTradeCard } from '@/components/my-trade-card';
 import { EmptyState } from '@/components/empty-state';
 

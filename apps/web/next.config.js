@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@thesis/shared', '@thesis/contracts'],
+  transpilePackages: ['@bounce/shared', '@bounce/contracts'],
 };
 
 module.exports = nextConfig;

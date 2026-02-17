@@ -1,9 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { type Address } from 'viem';
-import { type ChainId } from '@thesis/contracts';
+import { type ChainId } from '@bounce/contracts';
 import { getTokenMeta, getTokenBalance } from '../services/token.service.js';
 import { getTrendingTokens } from '../services/trending.service.js';
-import { isValidAddress } from '@thesis/shared';
+import { isValidAddress } from '@bounce/shared';
 import { logger } from '../lib/logger.js';
 
 export async function tokenRoutes(fastify: FastifyInstance) {

@@ -4,7 +4,7 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { polygon, base } from "viem/chains";
-import { monad } from "@thesis/contracts";
+import { monad } from "@bounce/contracts";
 
 const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "";
 

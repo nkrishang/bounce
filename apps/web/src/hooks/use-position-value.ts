@@ -2,8 +2,8 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, http, type Address, formatUnits } from 'viem';
-import { ERC20Abi, getChain } from '@thesis/contracts';
-import { TOKENS_BY_CHAIN, type SupportedChainId } from '@thesis/shared';
+import { ERC20Abi, getChain } from '@bounce/contracts';
+import { TOKENS_BY_CHAIN, type SupportedChainId } from '@bounce/shared';
 import { api } from '@/lib/api';
 
 const RPC_URLS: Record<number, string | undefined> = {

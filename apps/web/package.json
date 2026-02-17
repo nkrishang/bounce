@@ -1,5 +1,5 @@
 {
-  "name": "@thesis/web",
+  "name": "@bounce/web",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -12,8 +12,8 @@
   "dependencies": {
     "@privy-io/react-auth": "^1.88.4",
     "@tanstack/react-query": "^5.51.1",
-    "@thesis/contracts": "workspace:*",
-    "@thesis/shared": "workspace:*",
+    "@bounce/contracts": "workspace:*",
+    "@bounce/shared": "workspace:*",
     "clsx": "^2.1.1",
     "facehash": "^0.1.0",
     "framer-motion": "^11.3.8",

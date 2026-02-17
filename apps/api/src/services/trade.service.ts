@@ -1,13 +1,13 @@
 import { type Address } from 'viem';
 import { getPublicClient, getFactoryAddress } from '../lib/viem.js';
-import { TradeEscrowFactoryAbi, TradeEscrowAbi, SUPPORTED_CHAIN_IDS, type ChainId } from '@thesis/contracts';
+import { TradeEscrowFactoryAbi, TradeEscrowAbi, SUPPORTED_CHAIN_IDS, type ChainId } from '@bounce/contracts';
 import {
   type TradeData,
   type TradeEscrowState,
   type TradeView,
   deriveTradeView,
   ZERO_ADDRESS,
-} from '@thesis/shared';
+} from '@bounce/shared';
 import { cache, TTL } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
 

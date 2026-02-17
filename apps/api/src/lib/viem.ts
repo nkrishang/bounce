@@ -1,5 +1,5 @@
 import { createPublicClient, http, type Address, type PublicClient } from 'viem';
-import { getChain, SUPPORTED_CHAIN_IDS, ADDRESSES_BY_CHAIN, type ChainId } from '@thesis/contracts';
+import { getChain, SUPPORTED_CHAIN_IDS, ADDRESSES_BY_CHAIN, type ChainId } from '@bounce/contracts';
 import { logger } from './logger.js';
 
 const RPC_URLS: Record<ChainId, string> = {

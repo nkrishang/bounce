@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import type { TradeView, Address } from '@thesis/shared';
+import type { TradeView, Address } from '@bounce/shared';
 
 type TradeUpdater = (trade: TradeView) => TradeView;
 

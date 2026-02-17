@@ -6,8 +6,8 @@ import {
   type SupportedChainId,
   type SwapQuote,
   type ZeroXQuoteResponse,
-} from '@thesis/shared';
-import { SUPPORTED_CHAIN_IDS } from '@thesis/contracts';
+} from '@bounce/shared';
+import { SUPPORTED_CHAIN_IDS } from '@bounce/contracts';
 import { logger } from '../lib/logger.js';
 import { cache, TTL } from '../lib/cache.js';
 

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Globe, MessageCircle } from 'lucide-react';
-import { type TradeView, type TokenMeta, formatAddress } from '@thesis/shared';
+import { type TradeView, type TokenMeta, formatAddress } from '@bounce/shared';
 import { formatUnits } from 'viem';
 import { useTokenMeta } from '@/hooks/use-token';
 import { useTokenList } from '@/hooks/use-token-list';

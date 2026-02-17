@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { type TradeView, type TradeStatus, type Address } from '@thesis/shared';
+import { type TradeView, type TradeStatus, type Address } from '@bounce/shared';
 import { api } from '@/lib/api';
 
 interface UseTradesOptions {
