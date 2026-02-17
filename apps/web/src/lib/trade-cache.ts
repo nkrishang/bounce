@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import type { TradeView, TradeStatus, Address } from '@thesis/shared';
+import type { TradeView, Address } from '@thesis/shared';
 
 type TradeUpdater = (trade: TradeView) => TradeView;
 
@@ -24,7 +24,12 @@ export function patchTradeInCache(
   // expired (guardMs), we stop and let fresh data through.
   const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== 'updated') return;
-    if ((event.action as { type: string }).type !== 'success') return;
+    const action = event.action as { type: string; manual?: boolean };
+    if (action.type !== 'success') return;
+    // Ignore our own setQueryData calls to prevent an infinite loop:
+    // setQueryData fires a 'success' event with manual=true, which would
+    // re-trigger this subscription and call applyPatch again endlessly.
+    if (action.manual) return;
 
     const key = event.query.queryKey;
     const isAffected =
@@ -81,11 +86,9 @@ function applyPatch(
   for (const [queryKey, data] of tradesEntries) {
     if (!data) continue;
 
-    const statusFilter = queryKey[1] as TradeStatus | undefined;
-
-    const updated = data
-      .map((t) => (t.escrow.toLowerCase() === escrow.toLowerCase() ? updater(t) : t))
-      .filter((t) => !statusFilter || t.status === statusFilter);
+    const updated = data.map((t) =>
+      t.escrow.toLowerCase() === escrow.toLowerCase() ? updater(t) : t
+    );
 
     queryClient.setQueryData(queryKey, updated);
   }
