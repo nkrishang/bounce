@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wallet, LogOut, ChevronDown } from "lucide-react";
@@ -26,8 +27,9 @@ export function Navbar() {
           <div className="flex items-center justify-between h-16">
             <Link
               href="/"
-              className="text-dark-surface-foreground font-bold text-lg tracking-tight"
+              className="flex items-center gap-1.5 text-dark-surface-foreground font-bold text-lg tracking-tight"
             >
+              <Image src="/logos/bounce-cap.svg" alt="Bounce Capital" width={28} height={28} />
               BOUNCE.CAPITAL
             </Link>
 

@@ -19,6 +19,9 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "BOUNCE.CAPITAL",
   description: "Leverage for Believers. Protection for Backers.",
+  icons: {
+    icon: "/logos/bounce-cap.svg",
+  },
 };
 
 export default function RootLayout({
