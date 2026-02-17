@@ -1,5 +1,5 @@
 import type { Address } from 'viem';
-import type { ChainId } from './chain';
+import type { ChainId } from './chain.js';
 
 const ZERO = '0x0000000000000000000000000000000000000000' as Address;
 

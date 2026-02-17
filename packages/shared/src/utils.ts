@@ -1,4 +1,4 @@
-import type { TradeData, TradeEscrowState, TradeStatus, TradeView, Address, SupportedChainId } from './types';
+import type { TradeData, TradeEscrowState, TradeStatus, TradeView, Address, SupportedChainId } from './types.js';
 
 export function bigintToString(value: bigint): string {
   return value.toString();

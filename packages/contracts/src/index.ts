@@ -1,3 +1,3 @@
-export * from './abis';
-export * from './addresses';
-export * from './chain';
+export * from './abis.js';
+export * from './addresses.js';
+export * from './chain.js';

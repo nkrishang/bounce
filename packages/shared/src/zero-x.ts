@@ -1,4 +1,4 @@
-import type { Address, SupportedChainId } from './types';
+import type { Address, SupportedChainId } from './types.js';
 
 // 0x API base URL
 export const ZERO_X_API_URL = 'https://api.0x.org';

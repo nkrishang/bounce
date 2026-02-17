@@ -1,4 +1,4 @@
-import type { Address, SupportedChainId } from './types';
+import type { Address, SupportedChainId } from './types.js';
 
 export const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
 
