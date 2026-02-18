@@ -148,20 +148,20 @@ export default function MyTradesPage() {
         </p>
       </motion.div>
 
-      <div className="flex gap-2 mb-8">
+      <div className="flex gap-1.5 sm:gap-2 mb-8">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => onTabClick(t.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+            className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-all ${
               activeTab === t.id
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:text-foreground'
             }`}
           >
-            <t.icon className="w-4 h-4" />
+            <t.icon className="w-4 h-4 hidden sm:block" />
             {t.label}
-            <span className="text-xs px-2 py-0.5 rounded-full bg-black/20">
+            <span className="text-xs px-1.5 sm:px-2 py-0.5 rounded-full bg-black/20">
               {t.count}
             </span>
           </button>
