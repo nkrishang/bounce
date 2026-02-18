@@ -151,13 +151,19 @@ export function MyTradeCard({ trade, role, tab }: MyTradeCardProps) {
         {/* Action button */}
         <div>
           {tab === 'proposed' && role === 'proposer' && trade.status === 'OPEN' && (
-            <button
-              onClick={() => setShowPreviewModal(true)}
-              className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-1.5"
-            >
-              <Eye className="w-4 h-4" />
-              Preview
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setShowPreviewModal(true)}
+                className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-1.5"
+              >
+                <Eye className="w-4 h-4" />
+                Preview
+              </button>
+              <ShareOnXButton
+                escrowAddress={trade.escrow}
+                tokenSymbol={displayTokenMeta?.symbol}
+              />
+            </div>
           )}
           {tab === 'proposed' && trade.status === 'EXPIRED_UNFUNDED' && canWithdraw && (
             <WithdrawButton loading={withdrawLoading} step={withdrawStep} onClick={handleWithdraw} error={withdrawSubmitError} />
@@ -479,4 +485,25 @@ function ExpiredAgo({ expirationTimestamp }: { expirationTimestamp: number }) {
   else if (diff < 86400) text = `${Math.round(diff / 3600)}h ago`;
   else text = `${Math.round(diff / 86400)}d ago`;
   return <span className="text-danger">{text}</span>;
+}
+
+function ShareOnXButton({ escrowAddress, tokenSymbol }: { escrowAddress: string; tokenSymbol?: string }) {
+  const handleShare = () => {
+    const tradeUrl = `https://bounce.capital/trade/${escrowAddress}`;
+    const text = `Buy $${tokenSymbol || 'token'} with 20% guaranteed loss protection on Bounce.\n\n${tradeUrl}`;
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+    window.open(twitterUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <button
+      onClick={handleShare}
+      className="w-full py-2.5 rounded-lg bg-white/10 border border-white/10 text-white font-semibold text-sm hover:bg-white/15 transition-colors inline-flex items-center justify-center gap-1.5"
+    >
+      Share on
+      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+      </svg>
+    </button>
+  );
 }

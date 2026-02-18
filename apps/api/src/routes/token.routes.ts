@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { type Address } from 'viem';
 import { type ChainId } from '@bounce/contracts';
 import { getTokenMeta, getTokenBalance } from '../services/token.service.js';
-import { getTrendingTokens } from '../services/trending.service.js';
+import { getTrendingTokens, getTokenImageUrl } from '../services/trending.service.js';
 import { isValidAddress } from '@bounce/shared';
 import { logger } from '../lib/logger.js';
 
@@ -32,8 +32,11 @@ export async function tokenRoutes(fastify: FastifyInstance) {
 
     try {
       logger.info({ address, chainId }, 'Fetching token metadata');
-      const meta = await getTokenMeta(Number(chainId) as ChainId, address as Address);
-      return { data: meta };
+      const [meta, logoUrl] = await Promise.all([
+        getTokenMeta(Number(chainId) as ChainId, address as Address),
+        getTokenImageUrl(address, Number(chainId)),
+      ]);
+      return { data: { ...meta, logoUrl } };
     } catch (error) {
       logger.error({ address, error }, 'Failed to fetch token metadata');
       reply.status(500).send({ error: 'Failed to fetch token metadata' });

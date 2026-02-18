@@ -22,13 +22,22 @@ export function useTrades(options?: UseTradesOptions) {
   });
 }
 
+const SUPPORTED_CHAIN_IDS = [137, 8453, 143] as const;
+
 export function useTrade(escrowAddress: string | undefined) {
   return useQuery({
     queryKey: ['trade', escrowAddress],
     queryFn: async () => {
       if (!escrowAddress) throw new Error('No escrow address');
-      const response = await api.get<{ data: TradeView }>(`/trades/${escrowAddress}`);
-      return response.data;
+      const results = await Promise.allSettled(
+        SUPPORTED_CHAIN_IDS.map((chainId) =>
+          api.get<{ data: TradeView }>(`/trades/${escrowAddress}?chainId=${chainId}`)
+        )
+      );
+      for (const result of results) {
+        if (result.status === 'fulfilled') return result.value.data;
+      }
+      throw new Error('Trade not found on any chain');
     },
     enabled: !!escrowAddress,
   });

@@ -88,6 +88,67 @@ const FILTER_TOKENS_VARIABLES = {
   limit: 50,
 };
 
+const TOKEN_IMAGE_QUERY = `
+query GetTokenInfo($address: String!, $networkId: Int!) {
+  token(input: { address: $address, networkId: $networkId }) {
+    info {
+      imageThumbUrl
+      imageSmallUrl
+      imageLargeUrl
+    }
+  }
+}
+`;
+
+const TOKEN_IMAGE_CACHE_PREFIX = 'token-image-';
+
+export async function getTokenImageUrl(
+  address: string,
+  networkId: number
+): Promise<string | null> {
+  const cacheKey = `${TOKEN_IMAGE_CACHE_PREFIX}${networkId}-${address.toLowerCase()}`;
+
+  return cache.getOrFetch(cacheKey, async () => {
+    const apiKey = process.env.CODEX_IO_API_KEY;
+    if (!apiKey) {
+      logger.warn('CODEX_IO_API_KEY is not set — cannot fetch token image');
+      return null;
+    }
+
+    logger.info({ address, networkId }, 'Fetching token image from Codex.io');
+
+    const res = await fetch(CODEX_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: apiKey,
+      },
+      body: JSON.stringify({
+        query: TOKEN_IMAGE_QUERY,
+        variables: { address: address.toLowerCase(), networkId },
+      }),
+    });
+
+    if (!res.ok) {
+      logger.error({ status: res.status }, 'Codex API error fetching token image');
+      return null;
+    }
+
+    const json = await res.json() as {
+      data?: { token?: { info?: TrendingTokenInfo } };
+      errors?: { message: string }[];
+    };
+
+    if (json.errors?.length) {
+      logger.error({ error: json.errors[0].message }, 'Codex GraphQL error fetching token image');
+      return null;
+    }
+
+    const info = json.data?.token?.info;
+    return info?.imageSmallUrl ?? info?.imageThumbUrl ?? info?.imageLargeUrl ?? null;
+  }, TTL.TRENDING);
+}
+
 const TRENDING_CACHE_KEY = 'trending-tokens';
 
 export async function getTrendingTokens(): Promise<TrendingToken[]> {
