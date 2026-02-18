@@ -5,11 +5,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Wallet, LogOut, ChevronDown, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Facehash } from "facehash";
 import { useAuth } from "@/hooks/use-auth";
 import { WalletModal } from "./wallet-modal";
 import { formatAddress } from "@bounce/shared";
+
+const FACEHASH_COLORS = ['#8B5CF6', '#EC4899', '#F97316', '#06B6D4', '#10B981', '#6366F1', '#F43F5E', '#A855F7', '#14B8A6', '#EAB308'];
 
 export function Navbar() {
   const pathname = usePathname();
@@ -18,6 +20,10 @@ export function Navbar() {
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  useEffect(() => {
+    setShowMobileMenu(false);
+  }, [pathname]);
 
   return (
     <>
@@ -76,7 +82,7 @@ export function Navbar() {
                         name={address ?? ''}
                         size={32}
                         showInitial={false}
-                        colors={['#8B5CF6', '#EC4899', '#F97316', '#06B6D4', '#10B981', '#6366F1', '#F43F5E', '#A855F7', '#14B8A6', '#EAB308']}
+                        colors={FACEHASH_COLORS}
                       />
                     </div>
                     <div className="text-left">
@@ -146,7 +152,7 @@ export function Navbar() {
                     name={address}
                     size={28}
                     showInitial={false}
-                    colors={['#8B5CF6', '#EC4899', '#F97316', '#06B6D4', '#10B981', '#6366F1', '#F43F5E', '#A855F7', '#14B8A6', '#EAB308']}
+                    colors={FACEHASH_COLORS}
                   />
                 </div>
               )}
@@ -162,12 +168,21 @@ export function Navbar() {
         {/* Mobile menu panel */}
         <AnimatePresence>
           {showMobileMenu && (
+            <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 top-16 bg-black/40 sm:hidden z-40"
+              onClick={() => setShowMobileMenu(false)}
+            />
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="sm:hidden overflow-hidden border-t border-dark-border"
+              className="sm:hidden overflow-hidden border-t border-dark-border relative z-50"
             >
               <div className="px-4 py-3 space-y-1">
                 <Link
@@ -237,6 +252,7 @@ export function Navbar() {
                 </div>
               </div>
             </motion.div>
+            </>
           )}
         </AnimatePresence>
       </nav>

@@ -437,7 +437,7 @@ export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) 
       </div>
 
     {/* Desktop table */}
-    <div className="hidden md:block rounded-xl border border-dark-border bg-dark-surface/50 backdrop-blur-sm overflow-hidden">
+    <div className="hidden md:block rounded-xl border border-dark-border bg-dark-surface/50 backdrop-blur-sm overflow-x-auto">
       <Table className="min-w-[1100px]">
         <colgroup>
           <col className="w-[50px]" />

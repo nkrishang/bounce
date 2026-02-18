@@ -123,7 +123,7 @@ export function InvestContent({ trade, buyTokenMeta, previewMode = false, onExpi
             className="font-mono text-sm hover:underline transition-colors inline-flex items-center gap-1"
             style={{ color: '#D4AD4A' }}
           >
-            {formatAddress(trade.data.proposer)}
+            {`${trade.data.proposer.slice(0, 4)}...${trade.data.proposer.slice(-4)}`}
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>
