@@ -304,6 +304,72 @@ function createColumns(onBoostedBuy?: (token: TokenInfo) => void): ColumnDef<Tok
   ];
 }
 
+// ── Mobile card ─────────────────────────────────────────────────────
+
+function TrendingTokenCard({ token, onBoostedBuy }: { token: TokenInfo; onBoostedBuy?: (token: TokenInfo) => void }) {
+  const chain = CHAIN_META[token.networkId];
+  const logoSrc = token.logoURI || token.imageThumbUrl;
+  const isSupported = [137, 8453, 143].includes(token.networkId);
+
+  return (
+    <div className="rounded-xl border border-dark-border bg-dark-surface/50 backdrop-blur-sm p-4 flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-shrink-0">
+          <TokenAvatar src={logoSrc} name={token.address} alt={token.symbol} size={36} rounded="full" />
+          {chain && (
+            <img src={chain.logo} alt={chain.name} className="absolute -bottom-1 -right-1 w-4 h-4" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="font-semibold text-sm text-foreground truncate block leading-tight">{token.name}</span>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-xs text-muted-foreground font-medium">{token.symbol}</span>
+            <SocialLinks links={token.socialLinks} />
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <span className="font-mono text-sm text-foreground tabular-nums block">{formatPrice(token.priceUSD)}</span>
+          <div className="flex items-center gap-2 mt-0.5 justify-end">
+            <span className="hidden min-[425px]:flex items-center gap-1"><span className="text-[10px] text-muted-foreground">5m</span><PctCell value={token.change5m} /></span>
+            <span className="flex items-center gap-1"><span className="text-[10px] text-muted-foreground">1h</span><PctCell value={token.change1h} /></span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div>
+          <span>Vol </span>
+          <span className="font-mono text-foreground/80 tabular-nums">{formatCompact(token.volume24h)}</span>
+        </div>
+        <div>
+          <span>MCap </span>
+          <span className="font-mono text-foreground/80 tabular-nums">{formatCompact(token.marketCap)}</span>
+        </div>
+      </div>
+
+      <button
+        onClick={() => isSupported && onBoostedBuy?.(token)}
+        disabled={!isSupported}
+        className={cn(
+          'w-full py-3 rounded-xl text-sm font-bold transition-all duration-300',
+          'disabled:opacity-30 disabled:cursor-not-allowed',
+          isSupported && 'animate-btn-glow hover:scale-[1.02] active:scale-[0.98]'
+        )}
+        style={isSupported ? {
+          background: 'linear-gradient(135deg, rgba(236, 194, 94, 0.12), rgba(200, 169, 62, 0.06))',
+          border: '1px solid rgba(236, 194, 94, 0.25)',
+          color: '#C8A93E',
+        } : undefined}
+      >
+        <span className="flex items-center justify-center gap-1.5">
+          Boosted Buy
+          {isSupported && <ArrowRight size={13} />}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 // ── Main component ──────────────────────────────────────────────────
 
 export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) {
@@ -370,7 +436,8 @@ export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) 
         </p>
       </div>
 
-    <div className="rounded-xl border border-dark-border bg-dark-surface/50 backdrop-blur-sm overflow-hidden">
+    {/* Desktop table */}
+    <div className="hidden md:block rounded-xl border border-dark-border bg-dark-surface/50 backdrop-blur-sm overflow-hidden">
       <Table className="min-w-[1100px]">
         <colgroup>
           <col className="w-[50px]" />
@@ -418,6 +485,17 @@ export function TrendingTokensTable({ onBoostedBuy }: TrendingTokensTableProps) 
           ))}
         </TableBody>
       </Table>
+    </div>
+
+    {/* Mobile cards */}
+    <div className="md:hidden flex flex-col gap-3">
+      {table.getRowModel().rows.map((row) => (
+        <TrendingTokenCard
+          key={row.id}
+          token={row.original}
+          onBoostedBuy={onBoostedBuy}
+        />
+      ))}
     </div>
     </div>
   );

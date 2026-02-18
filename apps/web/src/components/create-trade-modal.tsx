@@ -51,17 +51,13 @@ export function CreateTradeModal({ open, onClose, initialToken }: CreateTradeMod
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div className="bg-dark-surface border border-dark-border rounded-2xl shadow-2xl overflow-hidden w-full max-w-lg max-h-[90vh] flex flex-col">
-              {/* Header */}
-              <div className="flex items-center justify-between p-5 border-b border-dark-border flex-shrink-0">
-                <h2 className="text-lg font-bold text-white">Boosted Buy</h2>
-                <button
-                  onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-white/5 transition-colors"
-                >
-                  <X className="w-5 h-5 text-muted-foreground" />
-                </button>
-              </div>
+            <div className="relative bg-dark-surface border border-dark-border rounded-2xl shadow-2xl overflow-hidden w-full max-w-lg max-h-[90vh] flex flex-col">
+              <button
+                onClick={onClose}
+                className="absolute top-3 right-3 z-10 p-2 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
 
               {!isAuthenticated ? (
                 <div className="text-center space-y-4 py-8 px-6">

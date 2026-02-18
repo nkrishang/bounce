@@ -75,8 +75,8 @@ export function TokenSlotMachine({ tokens }: TokenSlotMachineProps) {
 
   return (
     <>
-      {/* Vertical layout on lg+ */}
-      <div className="hidden lg:flex gap-3 justify-end overflow-hidden h-[480px] relative">
+      {/* Vertical layout on xl+ */}
+      <div className="hidden xl:flex gap-3 justify-end overflow-hidden h-[480px] relative">
         <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-[#111113] to-transparent z-10 pointer-events-none" />
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#111113] to-transparent z-10 pointer-events-none" />
 
@@ -85,7 +85,7 @@ export function TokenSlotMachine({ tokens }: TokenSlotMachineProps) {
       </div>
 
       {/* Horizontal layout on smaller screens */}
-      <div className="flex lg:hidden flex-col gap-3 overflow-hidden w-full h-[152px] relative">
+      <div className="flex xl:hidden flex-col gap-3 overflow-hidden w-full h-[152px] relative">
         <div className="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-[#111113] to-transparent z-10 pointer-events-none" />
         <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-[#111113] to-transparent z-10 pointer-events-none" />
 

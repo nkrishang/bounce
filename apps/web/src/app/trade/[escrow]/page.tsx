@@ -82,9 +82,7 @@ export default function TradePage({ params }: TradePageProps) {
       <div className="max-w-lg mx-auto px-4 py-12">
         <div className="rounded-2xl bg-dark-surface border border-dark-border overflow-hidden">
           {/* Header */}
-          <div className="p-5 border-b border-dark-border">
-            <h2 className="text-lg font-bold text-white">Back this Trade</h2>
-          </div>
+          <div className="p-5 border-b border-dark-border" />
 
           <InvestContent
             trade={trade}

@@ -20,7 +20,7 @@ export function HeroSection() {
 
   return (
     <>
-    <section className="relative py-14 lg:py-20 overflow-hidden">
+    <section className="relative py-14 xl:py-20 overflow-hidden">
       {/* Ambient glow backgrounds */}
       <div className="absolute inset-0 pointer-events-none">
         <div
@@ -47,11 +47,11 @@ export function HeroSection() {
       </div>
 
       <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 w-full">
-        <div className="flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-16">
+        <div className="flex flex-col xl:flex-row items-center justify-between gap-12 xl:gap-16">
           {/* Hero Copy */}
-          <div className="w-fit text-center lg:text-left">
+          <div className="w-fit text-center xl:text-left">
             {/* Pill badge */}
-            <div className="flex flex-wrap items-center gap-2.5 mb-5">
+            <div className="flex flex-wrap items-center justify-center xl:justify-start gap-2.5 mb-5">
               <motion.div
                 className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-[#ECC25E]/20 bg-[#ECC25E]/[0.06]"
                 initial={{ opacity: 0, y: 10 }}
@@ -93,7 +93,7 @@ export function HeroSection() {
 
             {/* Main headline */}
             <motion.h1
-              className="text-[clamp(2.2rem,5.5vw,5rem)] font-extrabold leading-[1.05] tracking-[-0.03em]"
+              className="text-[clamp(1.75rem,5.5vw,5rem)] font-extrabold leading-[1.05] tracking-[-0.03em]"
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, ease: 'easeOut' }}
@@ -150,7 +150,7 @@ export function HeroSection() {
 
             {/* Role cards */}
             <motion.div
-              className="mt-7 flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto lg:mx-0"
+              className="mt-7 flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto xl:mx-0"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.5 }}
@@ -270,7 +270,7 @@ export function HeroSection() {
 
             {/* CTA buttons */}
             <motion.div
-              className="mt-7 flex flex-wrap items-center gap-3 justify-center lg:justify-start"
+              className="mt-7 flex flex-wrap items-center gap-3 justify-center xl:justify-start"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.7 }}
@@ -303,7 +303,7 @@ export function HeroSection() {
           {/* Token Slot Machine */}
           {displayTokens.length > 0 && (
             <motion.div
-              className="flex-shrink-0 w-full lg:w-auto"
+              className="flex-shrink-0 w-full xl:w-auto"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.8, delay: 0.4, ease: 'easeOut' }}
