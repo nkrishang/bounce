@@ -6,6 +6,7 @@ import {
   getTradeView,
   getUserTrades,
   invalidateTradeCache,
+  TradeNotFoundError,
 } from '../services/trade.service.js';
 import { isValidAddress } from '@bounce/shared';
 import { logger } from '../lib/logger.js';
@@ -75,6 +76,9 @@ export async function tradeRoutes(fastify: FastifyInstance) {
       const trade = await getTradeView(Number(chainId) as ChainId, escrow as Address, userAddress as Address | undefined);
       return { data: trade };
     } catch (error) {
+      if (error instanceof TradeNotFoundError) {
+        return reply.status(404).send({ error: 'Trade not found' });
+      }
       logger.error({ escrow, error }, 'Failed to fetch trade');
       reply.status(500).send({ error: 'Failed to fetch trade' });
     }

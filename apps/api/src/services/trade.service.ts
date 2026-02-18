@@ -1,4 +1,4 @@
-import { type Address } from 'viem';
+import { type Address, ContractFunctionExecutionError } from 'viem';
 import { getPublicClient, getFactoryAddress } from '../lib/viem.js';
 import { TradeEscrowFactoryAbi, TradeEscrowAbi, SUPPORTED_CHAIN_IDS, type ChainId } from '@bounce/contracts';
 import {
@@ -10,6 +10,24 @@ import {
 } from '@bounce/shared';
 import { cache, TTL } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
+
+export class TradeNotFoundError extends Error {
+  constructor(
+    public readonly chainId: ChainId,
+    public readonly escrowAddress: Address,
+  ) {
+    super(`Trade not found on chain ${chainId} at ${escrowAddress}`);
+    this.name = 'TradeNotFoundError';
+  }
+}
+
+function isContractNotFoundError(err: unknown): boolean {
+  if (err instanceof ContractFunctionExecutionError) {
+    const msg = (err.shortMessage ?? '').toLowerCase();
+    if (msg.includes('returned no data')) return true;
+  }
+  return false;
+}
 
 const ESCROW_STATE_FNS = [
   'buyPerformed',
@@ -93,6 +111,9 @@ export async function getTradeData(chainId: ChainId, escrowAddress: Address): Pr
     await cache.set(cacheKey, tradeData, TTL.IMMUTABLE);
     return tradeData;
   } catch (error) {
+    if (isContractNotFoundError(error)) {
+      throw new TradeNotFoundError(chainId, escrowAddress);
+    }
     logger.error({ chainId, escrowAddress, error }, 'Failed to fetch trade data');
     throw error;
   }
@@ -152,6 +173,9 @@ export async function getEscrowState(chainId: ChainId, escrowAddress: Address): 
     await cache.set(cacheKey, state, TTL.ESCROW_STATE);
     return state;
   } catch (error) {
+    if (isContractNotFoundError(error)) {
+      throw new TradeNotFoundError(chainId, escrowAddress);
+    }
     logger.error({ chainId, escrowAddress, error }, 'Failed to fetch escrow state');
     throw error;
   }

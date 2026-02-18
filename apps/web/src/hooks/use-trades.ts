@@ -29,15 +29,12 @@ export function useTrade(escrowAddress: string | undefined) {
     queryKey: ['trade', escrowAddress],
     queryFn: async () => {
       if (!escrowAddress) throw new Error('No escrow address');
-      const results = await Promise.allSettled(
+      const trade = await Promise.any(
         SUPPORTED_CHAIN_IDS.map((chainId) =>
           api.get<{ data: TradeView }>(`/trades/${escrowAddress}?chainId=${chainId}`)
         )
       );
-      for (const result of results) {
-        if (result.status === 'fulfilled') return result.value.data;
-      }
-      throw new Error('Trade not found on any chain');
+      return trade.data;
     },
     enabled: !!escrowAddress,
   });

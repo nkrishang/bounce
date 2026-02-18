@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { type TradeView, type TokenMeta } from '@bounce/shared';
@@ -17,8 +16,6 @@ interface InvestModalProps {
 }
 
 export function InvestModal({ trade, buyTokenMeta, open, onClose, previewMode = false }: InvestModalProps) {
-  const router = useRouter();
-
   useEffect(() => {
     if (!open) return;
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;

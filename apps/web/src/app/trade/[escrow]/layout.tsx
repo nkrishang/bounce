@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
+import { formatUnits } from 'viem';
 import { fetchTradeByEscrow } from './fetch-trade';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 interface TradeLayoutProps {
   children: React.ReactNode;
@@ -23,7 +24,7 @@ export async function generateMetadata({ params }: { params: Promise<{ escrow: s
 
     const tokenSymbol = tokenMeta?.symbol || 'Token';
     const tokenName = tokenMeta?.name || 'Unknown';
-    const sellAmount = (Number(BigInt(trade.data.sellAmount)) / 1e6).toLocaleString();
+    const sellAmount = parseFloat(formatUnits(BigInt(trade.data.sellAmount), 6)).toLocaleString();
 
     const title = `Buy ${tokenSymbol} with Loss Protection | BOUNCE.CAPITAL`;
     const description = `Back a ${tokenName} (${tokenSymbol}) trade with up to $${sellAmount} loss-protection guaranteed on BOUNCE.CAPITAL`;
