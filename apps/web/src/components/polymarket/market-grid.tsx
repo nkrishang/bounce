@@ -13,7 +13,7 @@ interface MarketGridProps {
 export function MarketGrid({ onPropose }: MarketGridProps) {
   const [limit] = useState(20);
   const [offset, setOffset] = useState(0);
-  const { data: events, isLoading, error } = usePolymarketEvents({ limit, offset, order: 'volume' });
+  const { data: events, isLoading, error } = usePolymarketEvents({ limit, offset, order: 'volume24hr' });
 
   if (isLoading) {
     return (
@@ -32,7 +32,9 @@ export function MarketGrid({ onPropose }: MarketGridProps) {
     );
   }
 
-  if (!events || events.length === 0) {
+  const activeEvents = events?.filter((event) => event.active && !event.closed);
+
+  if (!activeEvents || activeEvents.length === 0) {
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">No active events found</p>
@@ -43,7 +45,7 @@ export function MarketGrid({ onPropose }: MarketGridProps) {
   return (
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {events.map((event) => (
+        {activeEvents.map((event) => (
           <MarketCard key={event.id} event={event} onPropose={onPropose} />
         ))}
       </div>
