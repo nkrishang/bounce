@@ -176,6 +176,23 @@ State management lifts selected event/market/token/outcome/price to page level f
 
 ---
 
+## Smart Contract Source Code (Recovered ✅)
+
+The ThesisV2 Solidity source code was **recovered from prior conversation threads** and placed in `packages/foundry/src/thesis/`:
+
+| File | Purpose |
+|------|---------|
+| `ThesisFactoryV2.sol` | Deploys Guards and Settlements, registers with ThesisManager |
+| `ThesisManager.sol` | Registry tracking active settlements per Safe, manages approval caps |
+| `ThesisSettlementV2.sol` | Holds proposer/funder/safe refs, distributes proceeds (30/70 profit split via BPS), auto-deactivates in manager |
+| `ThesisGuardV2.sol` | Safe transaction guard restricting operations, queries ThesisManager for dynamic approval caps |
+| `interfaces/IGuard.sol` | Guard interface with ERC165 support (required for Safe 1.3.0 compatibility) |
+| `interfaces/IThesisManager.sol` | ThesisManager interface |
+
+All contracts compile successfully via `forge build`.
+
+---
+
 ## Unfinished Work
 
 ### 1. CLOB Order Placement (Critical)
