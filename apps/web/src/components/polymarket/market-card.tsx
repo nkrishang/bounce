@@ -82,7 +82,7 @@ function BetRow({ isYes, probability }: { isYes: boolean; probability: number })
 
   return (
     <div
-      className="rounded-xl px-4 py-4 flex items-center gap-2 overflow-hidden transition-colors duration-200 cursor-pointer"
+      className="rounded-xl px-4 py-4 flex items-center justify-center gap-2 overflow-hidden transition-colors duration-200 cursor-pointer"
       style={{
         background: hovered
           ? (isYes ? '#1e4a38' : '#4d2428')
@@ -92,7 +92,7 @@ function BetRow({ isYes, probability }: { isYes: boolean; probability: number })
       onMouseLeave={() => setHovered(false)}
     >
       {/* Label slot: animates between "Yes"/"No" and probability % */}
-      <div className="relative w-11 h-7 shrink-0 overflow-hidden">
+      <div className="relative w-14 h-7 shrink-0 overflow-hidden">
         <span
           className="absolute inset-0 flex items-center text-xl font-bold transition-all duration-200"
           style={{

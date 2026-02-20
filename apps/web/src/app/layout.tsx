@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   title: "BOUNCE.CAPITAL",
   description: "Leverage for Believers. Protection for Backers.",
   icons: {
-    icon: "/logos/bounce-cap.svg",
+    icon: "/logos/Bounce-Logo-No-Background.svg",
   },
 };
 

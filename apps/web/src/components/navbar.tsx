@@ -33,10 +33,22 @@ export function Navbar() {
             <div className="flex items-center gap-6">
               <Link
                 href="/"
-                className="flex items-center gap-1.5 text-dark-surface-foreground font-bold text-lg tracking-tight"
+                className="flex items-center text-dark-surface-foreground font-bold text-lg tracking-tight"
               >
-                <Image src="/logos/bounce-cap.svg" alt="Bounce Capital" width={28} height={28} />
-                <span className="hidden md:inline">BOUNCE.CAPITAL</span>
+                <Image
+                  src="/logos/Bounce-Logo-No-Background-Full.svg"
+                  alt="Bounce Capital"
+                  width={140}
+                  height={32}
+                  className="hidden md:block"
+                />
+                <Image
+                  src="/logos/Bounce-Logo-No-Background.svg"
+                  alt="Bounce Capital"
+                  width={28}
+                  height={28}
+                  className="md:hidden"
+                />
               </Link>
 
               <Link
