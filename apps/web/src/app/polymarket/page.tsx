@@ -109,11 +109,11 @@ export default function PolymarketPage() {
             >
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/[0.06] bg-white/[0.02]">
                 <TrendingUp className="w-4 h-4" style={{ color: '#ECC25E' }} />
-                <span className="text-sm font-medium" style={{ color: '#ECC25E' }}>Believer: 60% Profit</span>
+                <span className="text-sm font-medium" style={{ color: '#ECC25E' }}>Believer: 3x Profit</span>
               </div>
               <div className="flex items-center gap-2 px-4 py-2 rounded-xl border border-white/[0.06] bg-white/[0.02]">
                 <Shield className="w-4 h-4" style={{ color: '#61A6FB' }} />
-                <span className="text-sm font-medium" style={{ color: '#61A6FB' }}>Backer: 20% Protected</span>
+                <span className="text-sm font-medium" style={{ color: '#61A6FB' }}>Backer: 20% Loss Protection</span>
               </div>
             </motion.div>
           </div>
