@@ -7,6 +7,7 @@ import { type Address, encodeFunctionData } from 'viem';
 import {
   POLYMARKET_ADDRESSES,
   ThesisFactoryV2Abi,
+  ThesisManagerV2Abi,
   ERC20Abi,
   GnosisSafeAbi,
 } from '@bounce/contracts';
@@ -80,7 +81,7 @@ export function useCreateThesis() {
 
         // Step 2: Deploy Guard
         setStep('deploying-guard');
-        const { hash: guardHash, receipt: guardReceipt } = await sendAndConfirm(
+        const { hash: guardHash } = await sendAndConfirm(
           publicClient,
           () =>
             walletClient.writeContract({
@@ -93,9 +94,13 @@ export function useCreateThesis() {
             }),
         );
 
-        // Extract guard address from receipt logs (first topic of deployment event)
-        // For now, we'll read it from the factory
-        const guardAddress = guardReceipt.logs[0]?.address as Address;
+        // Read guard address from the manager (set by factory during deployGuard)
+        const guardAddress = await publicClient.readContract({
+          address: POLYMARKET_ADDRESSES.THESIS_MANAGER,
+          abi: ThesisManagerV2Abi,
+          functionName: 'safeGuard',
+          args: [safeAddress],
+        }) as Address;
         console.log('Guard deployed:', guardAddress, 'tx:', guardHash);
 
         // Step 3: Set guard on Safe

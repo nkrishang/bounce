@@ -51,7 +51,7 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
     try {
       const contribution = parseUnits(stakeAmount, 6);
       await createThesis({
-        conditionId: market.condition_id,
+        conditionId: market.conditionId || market.condition_id,
         outcomeTokenId: tokenId,
         isYesOutcome: outcome.toLowerCase() === 'yes',
         proposerContribution: contribution,

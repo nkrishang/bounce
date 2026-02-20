@@ -99,9 +99,9 @@ export function useFundThesis() {
               abi: ThesisFactoryV2Abi,
               functionName: 'createThesis',
               args: [
-                proposal.proposer as Address,
-                address,
                 proposal.safe as Address,
+                address,
+                proposal.proposer as Address,
                 totalCapital,
               ],
               account: address,

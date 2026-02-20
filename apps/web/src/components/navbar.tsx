@@ -69,6 +69,16 @@ export function Navbar() {
               >
                 Polymarket
               </Link>
+              <Link
+                href="/my-bets"
+                className={`hidden sm:block text-sm font-medium transition-colors ${
+                  pathname === "/my-bets"
+                    ? "text-primary"
+                    : "text-dark-surface-foreground/70 hover:text-dark-surface-foreground"
+                }`}
+              >
+                My Bets
+              </Link>
             </div>
 
             {/* Desktop wallet/auth */}
@@ -227,6 +237,17 @@ export function Navbar() {
                   }`}
                 >
                   Polymarket
+                </Link>
+                <Link
+                  href="/my-bets"
+                  onClick={() => setShowMobileMenu(false)}
+                  className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    pathname === "/my-bets"
+                      ? "text-primary bg-primary/10"
+                      : "text-dark-surface-foreground/70 hover:text-dark-surface-foreground hover:bg-white/5"
+                  }`}
+                >
+                  My Bets
                 </Link>
 
                 <div className="pt-2 border-t border-dark-border">

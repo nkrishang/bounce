@@ -19,7 +19,7 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
       closed: 'false',
       limit: limit || '20',
       offset: offset || '0',
-      order: order || 'volume_num',
+      order: order || 'volume',
       ascending: 'false',
     });
 
@@ -87,7 +87,7 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
       closed: 'false',
       limit: limit || '20',
       offset: offset || '0',
-      order: order || 'volume_num',
+      order: order || 'volume',
       ascending: 'false',
     });
 

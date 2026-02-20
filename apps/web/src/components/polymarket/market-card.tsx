@@ -50,10 +50,10 @@ export function MarketCard({ event, onPropose }: MarketCardProps) {
               <DollarSign className="w-3 h-3" />
               {formatVolume(event.volume_num || event.volume)}
             </span>
-            {event.end_date && (
+            {(event.endDate || event.end_date) && (
               <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
-                {formatDate(event.end_date)}
+                {formatDate(event.endDate || event.end_date)}
               </span>
             )}
           </div>
@@ -63,15 +63,20 @@ export function MarketCard({ event, onPropose }: MarketCardProps) {
       {/* Markets */}
       <div className="px-5 pb-4 space-y-2.5">
         {displayMarkets.map((market) => {
-          // Parse tokens - handle both array format and string format
+          // Parse tokens from Gamma API response
           let tokens = market.tokens;
           if (!tokens || tokens.length === 0) {
-            // Try parsing from outcomes and outcome_prices strings
             try {
-              const outcomes = JSON.parse(market.outcomes || '[]');
-              const prices = JSON.parse(market.outcome_prices || '[]');
+              const outcomes: string[] = typeof market.outcomes === 'string'
+                ? JSON.parse(market.outcomes)
+                : (market.outcomes || []);
+              // Gamma API uses outcomePrices (camelCase) or outcome_prices (snake_case)
+              const pricesRaw = (market as any).outcomePrices || market.outcome_prices || '[]';
+              const prices: string[] = typeof pricesRaw === 'string' ? JSON.parse(pricesRaw) : pricesRaw;
+              const tokenIdsRaw = (market as any).clobTokenIds || '[]';
+              const tokenIds: string[] = typeof tokenIdsRaw === 'string' ? JSON.parse(tokenIdsRaw) : tokenIdsRaw;
               tokens = outcomes.map((outcome: string, i: number) => ({
-                token_id: `${market.condition_id}-${i}`,
+                token_id: tokenIds[i] || `${market.conditionId || market.condition_id}-${i}`,
                 outcome,
                 price: parseFloat(prices[i] || '0.5'),
                 winner: false,

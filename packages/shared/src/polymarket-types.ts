@@ -40,22 +40,30 @@ export interface PolymarketToken {
 export interface PolymarketMarket {
   id: string;
   question: string;
+  conditionId: string;
   condition_id: string;
   slug: string;
   tokens: PolymarketToken[];
   active: boolean;
   closed: boolean;
   volume: string;
+  volumeNum: number;
   volume_num: number;
   liquidity: string;
+  endDateIso: string;
   end_date_iso: string;
   image: string;
   icon: string;
   description: string;
   outcomes: string;
+  outcomePrices: string;
   outcome_prices: string;
+  clobTokenIds: string;
+  bestBid: number;
   best_bid: number;
+  bestAsk: number;
   best_ask: number;
+  negRisk: boolean;
 }
 
 export interface PolymarketEvent {
@@ -71,7 +79,10 @@ export interface PolymarketEvent {
   volume: number;
   volume_num: number;
   liquidity: number;
+  startDate: string;
   start_date: string;
+  endDate: string;
   end_date: string;
+  createdAt: string;
   created_at: string;
 }

@@ -13,7 +13,7 @@ interface MarketGridProps {
 export function MarketGrid({ onPropose }: MarketGridProps) {
   const [limit] = useState(20);
   const [offset, setOffset] = useState(0);
-  const { data: events, isLoading, error } = usePolymarketEvents({ limit, offset, order: 'volume_num' });
+  const { data: events, isLoading, error } = usePolymarketEvents({ limit, offset, order: 'volume' });
 
   if (isLoading) {
     return (
