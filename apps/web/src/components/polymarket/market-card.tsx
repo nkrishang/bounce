@@ -142,6 +142,17 @@ function BetRow({ isYes, probability }: { isYes: boolean; probability: number })
   );
 }
 
+function marketInterestScore(market: PolymarketMarket): number {
+  const tokens = parseTokens(market);
+  const yes = tokens.find((t) => t.outcome.toLowerCase() === 'yes');
+  const pYes = yes?.price ?? 0.5;
+  // Dead extremes sink to bottom
+  if (pYes <= 0.02 || pYes >= 0.98) return -1;
+  const contention = 1 - Math.abs(pYes - 0.5) / 0.5;
+  const vol = market.volumeNum || market.volume_num || parseFloat(market.volume || '0');
+  return Math.pow(contention, 2) * Math.log1p(vol);
+}
+
 function ScrollableMarkets({ markets }: { markets: PolymarketMarket[] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atTop, setAtTop] = useState(true);
@@ -172,15 +183,15 @@ function ScrollableMarkets({ markets }: { markets: PolymarketMarket[] }) {
   const FADE = '#1E2428';
 
   return (
-    <div className="relative">
+    <div className="relative overflow-hidden">
       {/* Scrollable content */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="px-4 pb-5 space-y-4 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20"
+        className="px-4 pb-5 space-y-4 overflow-y-auto [&::-webkit-scrollbar]:w-[3px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20"
         style={{ maxHeight: 360 }}
       >
-        {markets.map((market) => {
+        {[...markets].sort((a, b) => marketInterestScore(b) - marketInterestScore(a)).map((market) => {
           const tokens = parseTokens(market);
           const yes = tokens.find((t) => t.outcome.toLowerCase() === 'yes');
           const no = tokens.find((t) => t.outcome.toLowerCase() === 'no');

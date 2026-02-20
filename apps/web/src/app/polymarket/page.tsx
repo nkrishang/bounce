@@ -133,18 +133,8 @@ export default function PolymarketPage() {
           <div className="mb-6">
             <div className="flex items-center gap-3 mb-2">
               <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                Browse Markets
+                High-Return Markets
               </h2>
-              <span
-                className="inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border"
-                style={{
-                  color: '#D4AD4A',
-                  borderColor: 'rgba(236, 194, 94, 0.3)',
-                  background: 'rgba(236, 194, 94, 0.08)',
-                }}
-              >
-                For Believers
-              </span>
             </div>
             <p className="text-sm text-muted-foreground">
               Select a Polymarket outcome to propose a leveraged bet.
