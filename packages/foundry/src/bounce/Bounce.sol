@@ -88,6 +88,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         uint40 tradedAt;
         uint40 closedAt;
         uint40 withdrawnAt;
+        uint40 expiresAt;
         // --- Status ---
         BetStatus status;
     }
@@ -139,6 +140,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         uint256 positionId,
         uint256 totalCapital,
         uint256 proposerDeposit,
+        uint40 expiresAt,
         string slug
     );
     event BetFunded(uint256 indexed betId, address indexed funder, uint256 funderDeposit);
@@ -175,6 +177,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     error NoSharesMinted();
     error NoSharesSold();
     error SlippageExceeded(uint256 received, uint256 minimum);
+    error BetExpired();
 
     // ============================================
     // Initializer
@@ -235,6 +238,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     /// @param totalCapital Total USDC for the bet (6 decimals).
     /// @param proposerCapitalBps Proposer's capital share in BPS (e.g. 2000 = 20%).
     /// @param proposerProfitShareBps Proposer's profit share in BPS (e.g. 3000 = 30%).
+    /// @param expiresAt Unix timestamp after which the bet can no longer be funded or traded.
     /// @param slug Human-readable market slug for off-chain indexing.
     /// @return betId The newly created bet ID.
     function proposeBet(
@@ -247,6 +251,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         uint256 totalCapital,
         uint16 proposerCapitalBps,
         uint16 proposerProfitShareBps,
+        uint40 expiresAt,
         string calldata slug
     ) external nonReentrant returns (uint256 betId) {
         // Validate inputs.
@@ -299,6 +304,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
             tradedAt: 0,
             closedAt: 0,
             withdrawnAt: 0,
+            expiresAt: expiresAt,
             status: BetStatus.Proposed
         });
 
@@ -319,6 +325,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
             positionId,
             totalCapital,
             proposerDeposit,
+            expiresAt,
             slug
         );
     }
@@ -330,6 +337,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
 
         // Must be in Proposed status.
         if (bet.status != BetStatus.Proposed) revert InvalidStatus(bet.status, BetStatus.Proposed);
+
+        // Must not be expired.
+        if (bet.expiresAt != 0 && block.timestamp >= bet.expiresAt) revert BetExpired();
 
         // If funder is designated, only that address can fund. Otherwise, first caller becomes funder.
         if (bet.funder != address(0) && bet.funder != msg.sender) revert NotFunder();
@@ -399,6 +409,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
 
         // Only proposer can execute trades (prevents funder from submitting malicious calldata).
         if (msg.sender != bet.proposer) revert NotProposer();
+
+        // Must not be expired.
+        if (bet.expiresAt != 0 && block.timestamp >= bet.expiresAt) revert BetExpired();
 
         // maxSpend must not exceed available escrow.
         if (maxSpend == 0) revert ZeroAmount();

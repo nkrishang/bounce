@@ -45,6 +45,7 @@ contract BounceTest is Test {
     uint8 public constant OUTCOME_INDEX = 0;
     uint256 public constant INDEX_SET = 1; // 1 << 0
     string public constant SLUG = "test-market-slug";
+    uint40 public constant EXPIRES_AT = 0; // no expiration by default
 
     // Computed position ID (matches MockCTF's redeemPositions computation)
     uint256 public POSITION_ID;
@@ -119,6 +120,7 @@ contract BounceTest is Test {
             TOTAL_CAPITAL,
             PROPOSER_CAPITAL_BPS,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -273,6 +275,7 @@ contract BounceTest is Test {
             TOTAL_CAPITAL,
             PROPOSER_CAPITAL_BPS,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -372,6 +375,7 @@ contract BounceTest is Test {
             TOTAL_CAPITAL,
             PROPOSER_CAPITAL_BPS,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -395,6 +399,7 @@ contract BounceTest is Test {
             TOTAL_CAPITAL,
             PROPOSER_CAPITAL_BPS,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -414,6 +419,7 @@ contract BounceTest is Test {
             TOTAL_CAPITAL,
             PROPOSER_CAPITAL_BPS,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -433,6 +439,7 @@ contract BounceTest is Test {
             TOTAL_CAPITAL,
             10_001,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -452,6 +459,7 @@ contract BounceTest is Test {
             0,
             PROPOSER_CAPITAL_BPS,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -474,6 +482,7 @@ contract BounceTest is Test {
             TOTAL_CAPITAL,
             PROPOSER_CAPITAL_BPS,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -492,6 +501,7 @@ contract BounceTest is Test {
             TOTAL_CAPITAL,
             PROPOSER_CAPITAL_BPS,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -541,6 +551,7 @@ contract BounceTest is Test {
             TOTAL_CAPITAL,
             PROPOSER_CAPITAL_BPS,
             PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
             SLUG
         );
         vm.stopPrank();
@@ -930,7 +941,7 @@ contract BounceTest is Test {
         vm.startPrank(proposer);
         usdc.approve(address(bounce), type(uint256).max);
         uint256 betId = bounce.proposeBet(
-            address(safe), funder, CTF_EXCHANGE, CONDITION_ID, OUTCOME_INDEX, POSITION_ID, TOTAL_CAPITAL, 5000, 5000, SLUG
+            address(safe), funder, CTF_EXCHANGE, CONDITION_ID, OUTCOME_INDEX, POSITION_ID, TOTAL_CAPITAL, 5000, 5000, EXPIRES_AT, SLUG
         );
         vm.stopPrank();
 
@@ -1112,7 +1123,7 @@ contract BounceTest is Test {
         vm.startPrank(proposer);
         usdc.approve(address(bounce), type(uint256).max);
         uint256 betId2 = bounce.proposeBet(
-            address(safe), funder, NEG_RISK_CTF_EXCHANGE, conditionId2, 0, positionId2, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, "market-2"
+            address(safe), funder, NEG_RISK_CTF_EXCHANGE, conditionId2, 0, positionId2, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, EXPIRES_AT, "market-2"
         );
         vm.stopPrank();
 
@@ -1168,7 +1179,7 @@ contract BounceTest is Test {
         usdc.approve(address(bounce), type(uint256).max);
         vm.expectRevert();
         bounce.proposeBet(
-            address(safe), funder, CTF_EXCHANGE, CONDITION_ID, OUTCOME_INDEX, POSITION_ID, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, SLUG
+            address(safe), funder, CTF_EXCHANGE, CONDITION_ID, OUTCOME_INDEX, POSITION_ID, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, EXPIRES_AT, SLUG
         );
         vm.stopPrank();
     }
@@ -1198,7 +1209,7 @@ contract BounceTest is Test {
         vm.startPrank(proposer);
         usdc.approve(address(bounce), type(uint256).max);
         bounce.proposeBet(
-            address(safe), funder, CTF_EXCHANGE, conditionId2, 0, positionId2, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, "market-2"
+            address(safe), funder, CTF_EXCHANGE, conditionId2, 0, positionId2, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, EXPIRES_AT, "market-2"
         );
         vm.stopPrank();
         assertEq(bounce.getActiveBetCount(address(safe)), 2);
@@ -1333,7 +1344,175 @@ contract BounceTest is Test {
     }
 
     // ============================================
-    // 13. BounceFactory Tests
+    // 13. Expiration Tests
+    // ============================================
+
+    function test_expiration_proposeBetStoresExpiresAt() public {
+        uint40 futureExpiry = uint40(block.timestamp + 1 days);
+
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        uint256 betId = bounce.proposeBet(
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            CONDITION_ID,
+            OUTCOME_INDEX,
+            POSITION_ID,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            futureExpiry,
+            SLUG
+        );
+        vm.stopPrank();
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertEq(bet.expiresAt, futureExpiry);
+    }
+
+    function test_expiration_zeroMeansNoExpiration() public {
+        uint256 betId = _proposeBet();
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertEq(bet.expiresAt, 0);
+
+        // Fund and trade should work at any time.
+        _fundBet(betId);
+
+        vm.warp(block.timestamp + 365 days);
+        _executeTrade(betId, TOTAL_CAPITAL);
+
+        Bounce.Bet memory betAfter = bounce.getBet(betId);
+        assertTrue(betAfter.status == Bounce.BetStatus.Traded);
+    }
+
+    function test_expiration_fundBetRevertsAfterExpiry() public {
+        uint40 futureExpiry = uint40(block.timestamp + 1 days);
+
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        uint256 betId = bounce.proposeBet(
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            CONDITION_ID,
+            OUTCOME_INDEX,
+            POSITION_ID,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            futureExpiry,
+            SLUG
+        );
+        vm.stopPrank();
+
+        // Warp past expiration.
+        vm.warp(futureExpiry);
+
+        vm.startPrank(funder);
+        usdc.approve(address(bounce), type(uint256).max);
+        vm.expectRevert(Bounce.BetExpired.selector);
+        bounce.fundBet(betId);
+        vm.stopPrank();
+    }
+
+    function test_expiration_executeTrade_revertsAfterExpiry() public {
+        uint40 futureExpiry = uint40(block.timestamp + 1 days);
+
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        uint256 betId = bounce.proposeBet(
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            CONDITION_ID,
+            OUTCOME_INDEX,
+            POSITION_ID,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            futureExpiry,
+            SLUG
+        );
+        vm.stopPrank();
+
+        _fundBet(betId);
+
+        // Warp past expiration.
+        vm.warp(futureExpiry);
+
+        bytes memory tradeData = abi.encodeWithSelector(MockExchange.buy.selector, POSITION_ID, TOTAL_CAPITAL);
+        vm.prank(proposer);
+        vm.expectRevert(Bounce.BetExpired.selector);
+        bounce.executeTrade(betId, TOTAL_CAPITAL, tradeData);
+    }
+
+    function test_expiration_cancelStillWorksAfterExpiry() public {
+        uint40 futureExpiry = uint40(block.timestamp + 1 days);
+
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        uint256 betId = bounce.proposeBet(
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            CONDITION_ID,
+            OUTCOME_INDEX,
+            POSITION_ID,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            futureExpiry,
+            SLUG
+        );
+        vm.stopPrank();
+
+        // Warp past expiration.
+        vm.warp(futureExpiry + 1);
+
+        uint256 proposerBefore = usdc.balanceOf(proposer);
+        uint256 expectedDeposit = (TOTAL_CAPITAL * PROPOSER_CAPITAL_BPS) / 10_000;
+
+        vm.prank(proposer);
+        bounce.cancelBet(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertTrue(bet.status == Bounce.BetStatus.Cancelled);
+        assertEq(usdc.balanceOf(proposer), proposerBefore + expectedDeposit);
+    }
+
+    function test_expiration_fundBeforeExpirySucceeds() public {
+        uint40 futureExpiry = uint40(block.timestamp + 1 days);
+
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        uint256 betId = bounce.proposeBet(
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            CONDITION_ID,
+            OUTCOME_INDEX,
+            POSITION_ID,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            futureExpiry,
+            SLUG
+        );
+        vm.stopPrank();
+
+        // Warp to just before expiration.
+        vm.warp(futureExpiry - 1);
+
+        _fundBet(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertTrue(bet.status == Bounce.BetStatus.Funded);
+    }
+
+    // ============================================
+    // 14. BounceFactory Tests
     // ============================================
 
     function test_factory_deploysAtomically() public {
@@ -1373,7 +1552,7 @@ contract BounceTest is Test {
     }
 
     // ============================================
-    // 14. CTF Approval Model Tests (Mock Fidelity)
+    // 15. CTF Approval Model Tests (Mock Fidelity)
     // ============================================
 
     function test_ctfApproval_sellRequiresApproval() public {
