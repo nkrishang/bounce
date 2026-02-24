@@ -121,6 +121,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     /// @notice Number of active (non-withdrawn, non-cancelled) bets per Safe.
     mapping(address => uint256) internal _activeBetCount;
 
+    /// @notice Index: conditionId => set of bet IDs.
+    mapping(bytes32 => EnumerableSetLib.Uint256Set) internal _betsByConditionId;
+
     /// @notice Tracks whether CTF setApprovalForAll has been called for (safe, exchange).
     mapping(address => mapping(address => bool)) internal _ctfApprovalSet;
 
@@ -314,6 +317,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         // Update indexes.
         _betsByProposer[msg.sender].add(betId);
         _betsBySafe[safe].add(betId);
+        _betsByConditionId[conditionId].add(betId);
         _activeBetKeyToId[key] = betId;
         _activeBetCount[safe]++;
 
@@ -763,6 +767,26 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         returns (uint256[] memory betIds)
     {
         return _paginateSet(_betsBySafe[safe], start, end);
+    }
+
+    /// @notice Returns the number of bet IDs for a given conditionId.
+    /// @param conditionId The Polymarket condition ID.
+    /// @return The number of bets.
+    function getBetsByConditionIdCount(bytes32 conditionId) external view returns (uint256) {
+        return _betsByConditionId[conditionId].length();
+    }
+
+    /// @notice Returns a paginated slice of bet IDs for a given conditionId.
+    /// @param conditionId The Polymarket condition ID.
+    /// @param start The start index (inclusive).
+    /// @param end The end index (exclusive).
+    /// @return betIds The slice of bet IDs.
+    function getBetsByConditionId(bytes32 conditionId, uint256 start, uint256 end)
+        external
+        view
+        returns (uint256[] memory betIds)
+    {
+        return _paginateSet(_betsByConditionId[conditionId], start, end);
     }
 
     /// @notice Returns the number of active bets for a Safe.
