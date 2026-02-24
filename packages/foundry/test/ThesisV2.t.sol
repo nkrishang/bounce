@@ -208,12 +208,7 @@ contract ThesisV2Test is Test {
 
     function test_Factory_CreateThesis() public {
         vm.prank(owner);
-        ThesisSettlementV2 newSettlement = factory.createThesis(
-            address(safe),
-            funder,
-            proposer,
-            TOTAL_CAPITAL
-        );
+        ThesisSettlementV2 newSettlement = factory.createThesis(address(safe), funder, proposer, TOTAL_CAPITAL);
 
         assertEq(address(newSettlement.safe()), address(safe));
         assertEq(newSettlement.funder(), funder);
@@ -228,12 +223,7 @@ contract ThesisV2Test is Test {
 
         vm.prank(owner);
         ThesisSettlementV2 newSettlement = factory.createThesisWithParams(
-            address(safe),
-            funder,
-            proposer,
-            TOTAL_CAPITAL,
-            customProposerCapitalBps,
-            customProposerProfitShareBps
+            address(safe), funder, proposer, TOTAL_CAPITAL, customProposerCapitalBps, customProposerProfitShareBps
         );
 
         assertEq(newSettlement.proposerCapitalBps(), customProposerCapitalBps);
@@ -251,21 +241,11 @@ contract ThesisV2Test is Test {
     function test_Factory_MultipleThesesSameSafe() public {
         // Create first thesis
         vm.prank(owner);
-        ThesisSettlementV2 settlement1 = factory.createThesis(
-            address(safe),
-            funder,
-            proposer,
-            1_000_000
-        );
+        ThesisSettlementV2 settlement1 = factory.createThesis(address(safe), funder, proposer, 1_000_000);
 
         // Create second thesis with same Safe
         vm.prank(owner);
-        ThesisSettlementV2 settlement2 = factory.createThesis(
-            address(safe),
-            funder,
-            proposer,
-            2_000_000
-        );
+        ThesisSettlementV2 settlement2 = factory.createThesis(address(safe), funder, proposer, 2_000_000);
 
         assertTrue(manager.isActiveSettlement(address(safe), address(settlement1)));
         assertTrue(manager.isActiveSettlement(address(safe), address(settlement2)));
@@ -283,12 +263,7 @@ contract ThesisV2Test is Test {
 
         // Create settlement
         vm.prank(owner);
-        ThesisSettlementV2 testSettlement = factory.createThesis(
-            address(safe),
-            funder,
-            proposer,
-            TOTAL_CAPITAL
-        );
+        ThesisSettlementV2 testSettlement = factory.createThesis(address(safe), funder, proposer, TOTAL_CAPITAL);
 
         // Set guard on Safe
         safe.setGuard(address(testGuard));
@@ -297,13 +272,9 @@ contract ThesisV2Test is Test {
     }
 
     function test_Guard_BlocksDelegateCall() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
-        bytes memory approveData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            CTF_EXCHANGE,
-            TOTAL_CAPITAL
-        );
+        bytes memory approveData = abi.encodeWithSignature("approve(address,uint256)", CTF_EXCHANGE, TOTAL_CAPITAL);
 
         vm.expectRevert(ThesisGuardV2.DelegateCallNotAllowed.selector);
         testGuard.checkTransaction(
@@ -311,18 +282,20 @@ contract ThesisV2Test is Test {
             0,
             approveData,
             Operation.DelegateCall,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            "",
+            address(this)
         );
     }
 
     function test_Guard_BlocksValueTransfer() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
-        bytes memory approveData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            CTF_EXCHANGE,
-            TOTAL_CAPITAL
-        );
+        bytes memory approveData = abi.encodeWithSignature("approve(address,uint256)", CTF_EXCHANGE, TOTAL_CAPITAL);
 
         vm.expectRevert(ThesisGuardV2.ValueNotAllowed.selector);
         testGuard.checkTransaction(
@@ -330,12 +303,18 @@ contract ThesisV2Test is Test {
             1 ether, // Non-zero value
             approveData,
             Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            "",
+            address(this)
         );
     }
 
     function test_Guard_BlocksEmptyData() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         vm.expectRevert(abi.encodeWithSelector(ThesisGuardV2.UnauthorizedCall.selector, USDC_ADDRESS, bytes4(0)));
         testGuard.checkTransaction(
@@ -343,158 +322,104 @@ contract ThesisV2Test is Test {
             0,
             "", // Empty data
             Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            "",
+            address(this)
         );
     }
 
     function test_Guard_AllowsUSDCApproveToExchange() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
-        bytes memory approveData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            CTF_EXCHANGE,
-            TOTAL_CAPITAL
-        );
+        bytes memory approveData = abi.encodeWithSignature("approve(address,uint256)", CTF_EXCHANGE, TOTAL_CAPITAL);
 
         // Should not revert
         testGuard.checkTransaction(
-            USDC_ADDRESS,
-            0,
-            approveData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            USDC_ADDRESS, 0, approveData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_AllowsUSDCApproveToNegRiskExchange() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
-        bytes memory approveData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            NEG_RISK_CTF_EXCHANGE,
-            TOTAL_CAPITAL
-        );
+        bytes memory approveData =
+            abi.encodeWithSignature("approve(address,uint256)", NEG_RISK_CTF_EXCHANGE, TOTAL_CAPITAL);
 
         // Should not revert
         testGuard.checkTransaction(
-            USDC_ADDRESS,
-            0,
-            approveData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            USDC_ADDRESS, 0, approveData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_BlocksUSDCApproveExceedingCap() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         uint256 excessAmount = TOTAL_CAPITAL + 1;
-        bytes memory approveData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            CTF_EXCHANGE,
-            excessAmount
-        );
+        bytes memory approveData = abi.encodeWithSignature("approve(address,uint256)", CTF_EXCHANGE, excessAmount);
 
-        vm.expectRevert(abi.encodeWithSelector(
-            ThesisGuardV2.ApprovalExceedsMax.selector,
-            excessAmount,
-            TOTAL_CAPITAL
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ThesisGuardV2.ApprovalExceedsMax.selector, excessAmount, TOTAL_CAPITAL));
         testGuard.checkTransaction(
-            USDC_ADDRESS,
-            0,
-            approveData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            USDC_ADDRESS, 0, approveData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_BlocksUSDCApproveToUnauthorizedSpender() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         address unauthorizedSpender = makeAddr("unauthorized");
-        bytes memory approveData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            unauthorizedSpender,
-            TOTAL_CAPITAL
-        );
+        bytes memory approveData =
+            abi.encodeWithSignature("approve(address,uint256)", unauthorizedSpender, TOTAL_CAPITAL);
 
-        vm.expectRevert(abi.encodeWithSelector(
-            ThesisGuardV2.UnauthorizedApproval.selector,
-            unauthorizedSpender
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ThesisGuardV2.UnauthorizedApproval.selector, unauthorizedSpender));
         testGuard.checkTransaction(
-            USDC_ADDRESS,
-            0,
-            approveData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            USDC_ADDRESS, 0, approveData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_AllowsUSDCApproveToActiveSettlement() public {
         (ThesisGuardV2 testGuard, ThesisSettlementV2 testSettlement) = _setupGuardWithSettlement();
 
-        bytes memory approveData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            address(testSettlement),
-            TOTAL_CAPITAL
-        );
+        bytes memory approveData =
+            abi.encodeWithSignature("approve(address,uint256)", address(testSettlement), TOTAL_CAPITAL);
 
         // Should not revert
         testGuard.checkTransaction(
-            USDC_ADDRESS,
-            0,
-            approveData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            USDC_ADDRESS, 0, approveData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_AllowsCTFSetApprovalForAll() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
-        bytes memory setApprovalData = abi.encodeWithSignature(
-            "setApprovalForAll(address,bool)",
-            CTF_EXCHANGE,
-            true
-        );
+        bytes memory setApprovalData = abi.encodeWithSignature("setApprovalForAll(address,bool)", CTF_EXCHANGE, true);
 
         // Should not revert
         testGuard.checkTransaction(
-            CTF,
-            0,
-            setApprovalData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            CTF, 0, setApprovalData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_BlocksCTFSetApprovalForAllUnauthorized() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         address unauthorizedOperator = makeAddr("unauthorized");
-        bytes memory setApprovalData = abi.encodeWithSignature(
-            "setApprovalForAll(address,bool)",
-            unauthorizedOperator,
-            true
-        );
+        bytes memory setApprovalData =
+            abi.encodeWithSignature("setApprovalForAll(address,bool)", unauthorizedOperator, true);
 
-        vm.expectRevert(abi.encodeWithSelector(
-            ThesisGuardV2.UnauthorizedSetApprovalForAll.selector,
-            unauthorizedOperator
-        ));
+        vm.expectRevert(
+            abi.encodeWithSelector(ThesisGuardV2.UnauthorizedSetApprovalForAll.selector, unauthorizedOperator)
+        );
         testGuard.checkTransaction(
-            CTF,
-            0,
-            setApprovalData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            CTF, 0, setApprovalData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_AllowsCTFRedeemPositions() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         uint256[] memory indexSets = new uint256[](1);
         indexSets[0] = 1;
@@ -509,16 +434,12 @@ contract ThesisV2Test is Test {
 
         // Should not revert
         testGuard.checkTransaction(
-            CTF,
-            0,
-            redeemData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            CTF, 0, redeemData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_AllowsCTFMergePositions() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         uint256[] memory partition = new uint256[](2);
         partition[0] = 1;
@@ -535,21 +456,14 @@ contract ThesisV2Test is Test {
 
         // Should not revert
         testGuard.checkTransaction(
-            CTF,
-            0,
-            mergeData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            CTF, 0, mergeData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_AllowsDistributeToActiveSettlement() public {
         (ThesisGuardV2 testGuard, ThesisSettlementV2 testSettlement) = _setupGuardWithSettlement();
 
-        bytes memory distributeData = abi.encodeWithSignature(
-            "distribute(address)",
-            address(safe)
-        );
+        bytes memory distributeData = abi.encodeWithSignature("distribute(address)", address(safe));
 
         // Should not revert
         testGuard.checkTransaction(
@@ -557,29 +471,35 @@ contract ThesisV2Test is Test {
             0,
             distributeData,
             Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            "",
+            address(this)
         );
     }
 
     function test_Guard_BlocksDistributeToInactiveSettlement() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         address inactiveSettlement = makeAddr("inactiveSettlement");
-        bytes memory distributeData = abi.encodeWithSignature(
-            "distribute(address)",
-            address(safe)
-        );
+        bytes memory distributeData = abi.encodeWithSignature("distribute(address)", address(safe));
 
-        vm.expectRevert(abi.encodeWithSelector(
-            ThesisGuardV2.SettlementNotActive.selector,
-            inactiveSettlement
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ThesisGuardV2.SettlementNotActive.selector, inactiveSettlement));
         testGuard.checkTransaction(
             inactiveSettlement,
             0,
             distributeData,
             Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            "",
+            address(this)
         );
     }
 
@@ -587,33 +507,29 @@ contract ThesisV2Test is Test {
         (ThesisGuardV2 testGuard, ThesisSettlementV2 testSettlement) = _setupGuardWithSettlement();
 
         address wrongSafe = makeAddr("wrongSafe");
-        bytes memory distributeData = abi.encodeWithSignature(
-            "distribute(address)",
-            wrongSafe
-        );
+        bytes memory distributeData = abi.encodeWithSignature("distribute(address)", wrongSafe);
 
-        vm.expectRevert(abi.encodeWithSelector(
-            ThesisGuardV2.InvalidDistributeTarget.selector,
-            wrongSafe
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ThesisGuardV2.InvalidDistributeTarget.selector, wrongSafe));
         testGuard.checkTransaction(
             address(testSettlement),
             0,
             distributeData,
             Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            "",
+            address(this)
         );
     }
 
     function test_Guard_BlocksSelfCallExceptSetGuard() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         // Try to call addOwnerWithThreshold (random self-call)
-        bytes memory randomSelfCall = abi.encodeWithSignature(
-            "addOwnerWithThreshold(address,uint256)",
-            randomUser,
-            1
-        );
+        bytes memory randomSelfCall = abi.encodeWithSignature("addOwnerWithThreshold(address,uint256)", randomUser, 1);
 
         vm.expectRevert(ThesisGuardV2.SelfCallNotAllowed.selector);
         testGuard.checkTransaction(
@@ -621,77 +537,62 @@ contract ThesisV2Test is Test {
             0,
             randomSelfCall,
             Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            "",
+            address(this)
         );
     }
 
     function test_Guard_AllowsSetGuardWithApprovedGuard() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         // Deploy a new approved guard
         address newGuard = makeAddr("newGuard");
         vm.prank(owner);
         manager.setGuardApproval(newGuard, true);
 
-        bytes memory setGuardData = abi.encodeWithSignature(
-            "setGuard(address)",
-            newGuard
-        );
+        bytes memory setGuardData = abi.encodeWithSignature("setGuard(address)", newGuard);
 
         // Should not revert
         testGuard.checkTransaction(
-            address(safe),
-            0,
-            setGuardData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            address(safe), 0, setGuardData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_BlocksSetGuardWithUnapprovedGuard() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         address unapprovedGuard = makeAddr("unapprovedGuard");
-        bytes memory setGuardData = abi.encodeWithSignature(
-            "setGuard(address)",
-            unapprovedGuard
-        );
+        bytes memory setGuardData = abi.encodeWithSignature("setGuard(address)", unapprovedGuard);
 
-        vm.expectRevert(abi.encodeWithSelector(
-            ThesisGuardV2.GuardNotApproved.selector,
-            unapprovedGuard
-        ));
+        vm.expectRevert(abi.encodeWithSelector(ThesisGuardV2.GuardNotApproved.selector, unapprovedGuard));
         testGuard.checkTransaction(
-            address(safe),
-            0,
-            setGuardData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            address(safe), 0, setGuardData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_BlocksUnauthorizedCall() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         address randomContract = makeAddr("randomContract");
         bytes memory randomCall = abi.encodeWithSignature("doSomething()");
 
-        vm.expectRevert(abi.encodeWithSelector(
-            ThesisGuardV2.UnauthorizedCall.selector,
-            randomContract,
-            bytes4(keccak256("doSomething()"))
-        ));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ThesisGuardV2.UnauthorizedCall.selector, randomContract, bytes4(keccak256("doSomething()"))
+            )
+        );
         testGuard.checkTransaction(
-            randomContract,
-            0,
-            randomCall,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", address(this)
+            randomContract, 0, randomCall, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", address(this)
         );
     }
 
     function test_Guard_SupportsInterface() public {
-        (ThesisGuardV2 testGuard, ) = _setupGuardWithSettlement();
+        (ThesisGuardV2 testGuard,) = _setupGuardWithSettlement();
 
         // Check IGuard interface
         bytes4 guardInterfaceId = 0xe6d7a83a;
@@ -704,12 +605,7 @@ contract ThesisV2Test is Test {
 
     function _setupSettlement() internal returns (ThesisSettlementV2) {
         vm.prank(owner);
-        ThesisSettlementV2 testSettlement = factory.createThesis(
-            address(safe),
-            funder,
-            proposer,
-            TOTAL_CAPITAL
-        );
+        ThesisSettlementV2 testSettlement = factory.createThesis(address(safe), funder, proposer, TOTAL_CAPITAL);
 
         // Approve settlement to transfer from Safe
         vm.prank(address(safe));
@@ -871,70 +767,56 @@ contract ThesisV2Test is Test {
 
         // 2. Create thesis (registers with manager)
         vm.prank(owner);
-        ThesisSettlementV2 testSettlement = factory.createThesis(
-            address(safe),
-            funder,
-            proposer,
-            TOTAL_CAPITAL
-        );
+        ThesisSettlementV2 testSettlement = factory.createThesis(address(safe), funder, proposer, TOTAL_CAPITAL);
 
         // 3. Verify guard allows USDC approve to CTF Exchange
-        bytes memory approveExchangeData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            CTF_EXCHANGE,
-            TOTAL_CAPITAL
-        );
+        bytes memory approveExchangeData =
+            abi.encodeWithSignature("approve(address,uint256)", CTF_EXCHANGE, TOTAL_CAPITAL);
 
         testGuard.checkTransaction(
-            USDC_ADDRESS,
-            0,
-            approveExchangeData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", proposer
+            USDC_ADDRESS, 0, approveExchangeData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", proposer
         );
 
         // 4. Verify guard allows CTF setApprovalForAll
-        bytes memory setApprovalData = abi.encodeWithSignature(
-            "setApprovalForAll(address,bool)",
-            CTF_EXCHANGE,
-            true
-        );
+        bytes memory setApprovalData = abi.encodeWithSignature("setApprovalForAll(address,bool)", CTF_EXCHANGE, true);
 
         testGuard.checkTransaction(
-            CTF,
-            0,
-            setApprovalData,
-            Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", proposer
+            CTF, 0, setApprovalData, Operation.Call, 0, 0, 0, address(0), payable(address(0)), "", proposer
         );
 
         // 5. Verify guard allows settlement approval
-        bytes memory approveSettlementData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            address(testSettlement),
-            TOTAL_CAPITAL
-        );
+        bytes memory approveSettlementData =
+            abi.encodeWithSignature("approve(address,uint256)", address(testSettlement), TOTAL_CAPITAL);
 
         testGuard.checkTransaction(
             USDC_ADDRESS,
             0,
             approveSettlementData,
             Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", proposer
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            "",
+            proposer
         );
 
         // 6. Verify guard allows distribute call
-        bytes memory distributeData = abi.encodeWithSignature(
-            "distribute(address)",
-            address(safe)
-        );
+        bytes memory distributeData = abi.encodeWithSignature("distribute(address)", address(safe));
 
         testGuard.checkTransaction(
             address(testSettlement),
             0,
             distributeData,
             Operation.Call,
-            0, 0, 0, address(0), payable(address(0)), "", proposer
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            "",
+            proposer
         );
 
         // 7. Actually perform distribute
@@ -962,11 +844,8 @@ contract ThesisV2Test is Test {
         factory.createThesis(address(safe), funder, proposer, TOTAL_CAPITAL);
 
         // Try to approve unauthorized spender - should revert
-        bytes memory approveUnauthorized = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            randomUser,
-            TOTAL_CAPITAL
-        );
+        bytes memory approveUnauthorized =
+            abi.encodeWithSignature("approve(address,uint256)", randomUser, TOTAL_CAPITAL);
 
         vm.prank(proposer);
         vm.expectRevert();
@@ -986,30 +865,16 @@ contract ThesisV2Test is Test {
 
         // Create two theses
         vm.prank(owner);
-        ThesisSettlementV2 settlement1 = factory.createThesis(
-            address(safe),
-            funder,
-            proposer,
-            1_000_000
-        );
+        ThesisSettlementV2 settlement1 = factory.createThesis(address(safe), funder, proposer, 1_000_000);
 
         vm.prank(owner);
-        ThesisSettlementV2 settlement2 = factory.createThesis(
-            address(safe),
-            funder,
-            proposer,
-            2_000_000
-        );
+        ThesisSettlementV2 settlement2 = factory.createThesis(address(safe), funder, proposer, 2_000_000);
 
         // Exchange cap should be sum
         assertEq(manager.exchangeApprovalCap(address(safe)), 3_000_000);
 
         // Approve exchange for full amount
-        bytes memory approveExchangeData = abi.encodeWithSignature(
-            "approve(address,uint256)",
-            CTF_EXCHANGE,
-            3_000_000
-        );
+        bytes memory approveExchangeData = abi.encodeWithSignature("approve(address,uint256)", CTF_EXCHANGE, 3_000_000);
 
         vm.prank(proposer);
         safe.execTransaction(USDC_ADDRESS, 0, approveExchangeData, Operation.Call);

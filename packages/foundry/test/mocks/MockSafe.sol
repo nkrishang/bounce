@@ -39,36 +39,35 @@ contract MockSafe {
 
     /// @notice Simulates Safe's execTransaction with guard checks
     /// @dev This is a simplified version for testing guard behavior
-    function execTransaction(
-        address to,
-        uint256 value,
-        bytes calldata data,
-        Operation operation
-    ) external returns (bool success) {
+    function execTransaction(address to, uint256 value, bytes calldata data, Operation operation)
+        external
+        returns (bool success)
+    {
         bytes32 txHash = getTransactionHash(to, value, data, operation, _nonce);
 
         // Check guard before execution
         if (_guard != address(0)) {
-            IGuard(_guard).checkTransaction(
-                to,
-                value,
-                data,
-                operation,
-                0, // safeTxGas
-                0, // baseGas
-                0, // gasPrice
-                address(0), // gasToken
-                payable(address(0)), // refundReceiver
-                "", // signatures
-                msg.sender // msgSender
-            );
+            IGuard(_guard)
+                .checkTransaction(
+                    to,
+                    value,
+                    data,
+                    operation,
+                    0, // safeTxGas
+                    0, // baseGas
+                    0, // gasPrice
+                    address(0), // gasToken
+                    payable(address(0)), // refundReceiver
+                    "", // signatures
+                    msg.sender // msgSender
+                );
         }
 
         // Execute the transaction
         if (operation == Operation.DelegateCall) {
-            (success, ) = to.delegatecall(data);
+            (success,) = to.delegatecall(data);
         } else {
-            (success, ) = to.call{value: value}(data);
+            (success,) = to.call{value: value}(data);
         }
 
         // Increment nonce
@@ -87,23 +86,12 @@ contract MockSafe {
     }
 
     /// @notice Computes transaction hash (simplified)
-    function getTransactionHash(
-        address to,
-        uint256 value,
-        bytes memory data,
-        Operation operation,
-        uint256 _txNonce
-    ) public view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                address(this),
-                to,
-                value,
-                keccak256(data),
-                operation,
-                _txNonce
-            )
-        );
+    function getTransactionHash(address to, uint256 value, bytes memory data, Operation operation, uint256 _txNonce)
+        public
+        view
+        returns (bytes32)
+    {
+        return keccak256(abi.encode(address(this), to, value, keccak256(data), operation, _txNonce));
     }
 
     /// @notice Allow receiving ETH

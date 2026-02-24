@@ -38,7 +38,10 @@ contract ThesisSettlementV2 {
         uint256 _proposerCapitalBps,
         uint256 _proposerProfitShareBps
     ) {
-        if (_safe == address(0) || _manager == address(0) || _funder == address(0) || _proposer == address(0) || _usdc == address(0)) revert ZeroAddress();
+        if (
+            _safe == address(0) || _manager == address(0) || _funder == address(0) || _proposer == address(0)
+                || _usdc == address(0)
+        ) revert ZeroAddress();
         if (_totalCapital == 0) revert ZeroCapital();
         if (_proposerCapitalBps > BPS_DENOMINATOR || _proposerProfitShareBps > BPS_DENOMINATOR) revert InvalidBps();
 
