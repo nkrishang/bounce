@@ -1,30 +1,37 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Shield, TrendingUp, User, Clock, CheckCircle, BarChart3 } from 'lucide-react';
-import type { Proposal } from '@bounce/shared';
-import { formatAddress } from '@bounce/shared';
-import { formatUnits } from 'viem';
+import { Shield, TrendingUp, User, Clock, CheckCircle, BarChart3, XCircle, ArrowDownToLine, Loader2 } from 'lucide-react';
+import type { BetView } from '@bounce/shared';
+import { BetStatus, formatAddress } from '@bounce/shared';
+import { formatUsdc } from '@/lib/bet-math';
+import { useCancelBet } from '@/hooks/use-cancel-bet';
+import { useWithdrawBet } from '@/hooks/use-withdraw-bet';
 
 interface MyBetCardProps {
-  proposal: Proposal;
+  betView: BetView;
   role: 'believer' | 'backer';
 }
 
-const statusConfig: Record<string, { label: string; color: string; bg: string; icon: typeof Clock }> = {
-  PROPOSED: { label: 'Proposed', color: '#D4AD4A', bg: 'rgba(236, 194, 94, 0.08)', icon: Clock },
-  FUNDED: { label: 'Funded', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.08)', icon: CheckCircle },
-  ORDER_PLACED: { label: 'Order Placed', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.08)', icon: BarChart3 },
-  MATCHED: { label: 'Matched', color: '#61A6FB', bg: 'rgba(97, 166, 251, 0.08)', icon: TrendingUp },
-  SETTLED: { label: 'Settled', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.08)', icon: CheckCircle },
+const statusConfig: Record<number, { label: string; color: string; bg: string; icon: typeof Clock }> = {
+  [BetStatus.Proposed]: { label: 'Proposed', color: '#D4AD4A', bg: 'rgba(236, 194, 94, 0.08)', icon: Clock },
+  [BetStatus.Funded]: { label: 'Funded', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.08)', icon: CheckCircle },
+  [BetStatus.Traded]: { label: 'Active', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.08)', icon: BarChart3 },
+  [BetStatus.Closed]: { label: 'Closed', color: '#61A6FB', bg: 'rgba(97, 166, 251, 0.08)', icon: TrendingUp },
+  [BetStatus.Cancelled]: { label: 'Cancelled', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.08)', icon: XCircle },
+  [BetStatus.Withdrawn]: { label: 'Withdrawn', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.08)', icon: ArrowDownToLine },
 };
 
-export function MyBetCard({ proposal, role }: MyBetCardProps) {
-  const proposerStake = formatUnits(BigInt(proposal.proposerContribution), 6);
-  const totalPosition = formatUnits(BigInt(proposal.totalCapital), 6);
-  const funderPortion = parseFloat(totalPosition) - parseFloat(proposerStake);
-  const pct = proposal.outcomePrice ? Math.round(parseFloat(proposal.outcomePrice) * 100) : 50;
-  const status = statusConfig[proposal.status] ?? statusConfig.PROPOSED;
+export function MyBetCard({ betView, role }: MyBetCardProps) {
+  const { bet, metadata } = betView;
+  const { cancelBet, isLoading: isCancelling } = useCancelBet();
+  const { withdrawBet, isLoading: isWithdrawing } = useWithdrawBet();
+
+  const proposerStake = (bet.totalCapital * BigInt(bet.proposerCapitalBps)) / 10000n;
+  const funderPortion = bet.totalCapital - proposerStake;
+  const pct = metadata?.outcomePrice ? Math.round(parseFloat(metadata.outcomePrice) * 100) : 50;
+  const isYesOutcome = metadata?.isYesOutcome ?? true;
+  const status = statusConfig[bet.status] ?? statusConfig[BetStatus.Proposed];
   const StatusIcon = status.icon;
 
   return (
@@ -35,9 +42,9 @@ export function MyBetCard({ proposal, role }: MyBetCardProps) {
     >
       {/* Header */}
       <div className="flex items-start gap-3">
-        {proposal.marketImage && (
+        {metadata?.marketImage && (
           <img
-            src={proposal.marketImage}
+            src={metadata.marketImage}
             alt=""
             className="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-white/5"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -45,17 +52,17 @@ export function MyBetCard({ proposal, role }: MyBetCardProps) {
         )}
         <div className="min-w-0 flex-1">
           <h3 className="font-bold text-[15px] text-white leading-snug line-clamp-2">
-            {proposal.marketQuestion || 'Polymarket Bet'}
+            {metadata?.marketQuestion || 'Polymarket Bet'}
           </h3>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span
               className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase"
               style={{
-                background: proposal.isYesOutcome ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                color: proposal.isYesOutcome ? '#22c55e' : '#ef4444',
+                background: isYesOutcome ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                color: isYesOutcome ? '#22c55e' : '#ef4444',
               }}
             >
-              {proposal.isYesOutcome ? 'Yes' : 'No'}
+              {isYesOutcome ? 'Yes' : 'No'}
             </span>
             <span className="text-xs text-muted-foreground font-mono">{pct}¢</span>
             <span
@@ -79,16 +86,13 @@ export function MyBetCard({ proposal, role }: MyBetCardProps) {
             {role === 'believer' ? 'Your Stake' : 'Your Funding'}
           </span>
           <p className="text-lg font-bold text-white mt-0.5 font-mono">
-            ${role === 'believer'
-              ? parseFloat(proposerStake).toLocaleString(undefined, { minimumFractionDigits: 2 })
-              : funderPortion.toLocaleString(undefined, { minimumFractionDigits: 2 })
-            }
+            ${role === 'believer' ? formatUsdc(proposerStake) : formatUsdc(funderPortion)}
           </p>
         </div>
         <div className="rounded-xl border border-dark-border bg-[#111113] px-3 py-2.5">
           <span className="text-[11px] text-muted-foreground font-medium">Total Position</span>
           <p className="text-lg font-bold text-white mt-0.5 font-mono">
-            ${parseFloat(totalPosition).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            ${formatUsdc(bet.totalCapital)}
           </p>
         </div>
       </div>
@@ -111,8 +115,8 @@ export function MyBetCard({ proposal, role }: MyBetCardProps) {
         <User className="w-3 h-3" />
         <span>
           {role === 'believer'
-            ? proposal.funder ? `Backed by ${formatAddress(proposal.funder)}` : 'Awaiting Backer'
-            : `Proposed by ${formatAddress(proposal.proposer)}`
+            ? bet.funder !== '0x0000000000000000000000000000000000000000' ? `Backed by ${formatAddress(bet.funder)}` : 'Awaiting Backer'
+            : `Proposed by ${formatAddress(bet.proposer)}`
           }
         </span>
       </div>
@@ -125,6 +129,39 @@ export function MyBetCard({ proposal, role }: MyBetCardProps) {
         <StatusIcon className="w-4 h-4" style={{ color: status.color }} />
         <span className="text-sm font-medium" style={{ color: status.color }}>{status.label}</span>
       </div>
+
+      {/* CTA Buttons */}
+      {bet.status === BetStatus.Proposed && role === 'believer' && (
+        <button
+          onClick={() => cancelBet(betView.betId)}
+          disabled={isCancelling}
+          className="w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+          style={{
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.25)',
+            color: '#ef4444',
+          }}
+        >
+          {isCancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+          {isCancelling ? 'Cancelling...' : 'Cancel Bet'}
+        </button>
+      )}
+
+      {bet.status === BetStatus.Closed && (
+        <button
+          onClick={() => withdrawBet(betView.betId)}
+          disabled={isWithdrawing}
+          className="w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+          style={{
+            background: 'rgba(97, 166, 251, 0.08)',
+            border: '1px solid rgba(97, 166, 251, 0.25)',
+            color: '#61A6FB',
+          }}
+        >
+          {isWithdrawing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />}
+          {isWithdrawing ? 'Withdrawing...' : 'Withdraw'}
+        </button>
+      )}
     </motion.div>
   );
 }

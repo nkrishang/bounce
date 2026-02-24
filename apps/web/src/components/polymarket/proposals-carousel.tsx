@@ -1,11 +1,46 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
-import { useProposals } from '@/hooks/use-proposals';
+import { useQuery } from '@tanstack/react-query';
+import { createPublicClient, http } from 'viem';
+import { polygon } from 'viem/chains';
+import { POLYMARKET_ADDRESSES, BounceAbi } from '@bounce/contracts';
+import type { BetMetadata, BetView, BetOnchain } from '@bounce/shared';
+import { BetStatus } from '@bounce/shared';
+import { api } from '@/lib/api';
 import { ProposalCard } from './proposal-card';
 
+const publicClient = createPublicClient({
+  chain: polygon,
+  transport: http(process.env.NEXT_PUBLIC_POLYGON_RPC_URL || ''),
+});
+
+function useProposedBets() {
+  return useQuery({
+    queryKey: ['bets', 'proposed'],
+    queryFn: async () => {
+      const { data: allMetadata } = await api.get<{ data: BetMetadata[] }>('/bets');
+
+      const betViews: BetView[] = await Promise.all(
+        allMetadata.map(async (metadata) => {
+          const bet = await publicClient.readContract({
+            address: POLYMARKET_ADDRESSES.BOUNCE,
+            abi: BounceAbi,
+            functionName: 'getBet',
+            args: [BigInt(metadata.betId)],
+          }) as unknown as BetOnchain;
+          return { betId: metadata.betId, bet, metadata };
+        }),
+      );
+
+      return betViews.filter((bv) => bv.bet.status === BetStatus.Proposed);
+    },
+    refetchInterval: 30_000,
+  });
+}
+
 export function ProposalsCarousel() {
-  const { data: proposals, isLoading, error } = useProposals('PROPOSED');
+  const { data: betViews, isLoading, error } = useProposedBets();
 
   if (isLoading) {
     return (
@@ -15,7 +50,7 @@ export function ProposalsCarousel() {
     );
   }
 
-  if (error || !proposals || proposals.length === 0) {
+  if (error || !betViews || betViews.length === 0) {
     return null;
   }
 
@@ -54,8 +89,8 @@ export function ProposalsCarousel() {
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           <div className="flex gap-4" style={{ minWidth: 'min-content' }}>
-            {proposals.map((proposal) => (
-              <ProposalCard key={proposal.id} proposal={proposal} />
+            {betViews.map((betView) => (
+              <ProposalCard key={betView.betId} betView={betView} />
             ))}
           </div>
         </div>

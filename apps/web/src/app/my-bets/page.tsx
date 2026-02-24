@@ -4,43 +4,48 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, Shield, CheckCircle, Loader2, BarChart3 } from 'lucide-react';
+import { TrendingUp, Shield, CheckCircle, Loader2, BarChart3, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
-import { useUserProposals } from '@/hooks/use-proposals';
-import type { Proposal } from '@bounce/shared';
+import { useMyBets } from '@/hooks/use-bets';
+import { BetStatus } from '@bounce/shared';
+import type { BetView } from '@bounce/shared';
 import { MyBetCard } from '@/components/polymarket/my-bet-card';
 import { EmptyState } from '@/components/empty-state';
 
-type Tab = 'proposed' | 'active' | 'settled';
+type Tab = 'proposed' | 'funded' | 'active' | 'settled';
 
 interface BetEntry {
-  proposal: Proposal;
+  betView: BetView;
   role: 'believer' | 'backer';
 }
 
 export default function MyBetsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('proposed');
   const { isAuthenticated, login, address } = useAuth();
-  const { data: proposals, isLoading, error } = useUserProposals(address);
+  const { data: betViews, isLoading, error } = useMyBets(address as `0x${string}` | undefined);
 
   const entries: BetEntry[] = useMemo(() => {
-    if (!proposals || !address) return [];
-    return proposals.map((p) => ({
-      proposal: p,
-      role: p.proposer.toLowerCase() === address.toLowerCase() ? 'believer' as const : 'backer' as const,
+    if (!betViews || !address) return [];
+    return betViews.map((bv) => ({
+      betView: bv,
+      role: bv.bet.proposer.toLowerCase() === address.toLowerCase() ? 'believer' as const : 'backer' as const,
     }));
-  }, [proposals, address]);
+  }, [betViews, address]);
 
   const proposedEntries = useMemo(
-    () => entries.filter((e) => e.proposal.status === 'PROPOSED'),
+    () => entries.filter((e) => e.betView.bet.status === BetStatus.Proposed),
+    [entries]
+  );
+  const fundedEntries = useMemo(
+    () => entries.filter((e) => e.betView.bet.status === BetStatus.Funded),
     [entries]
   );
   const activeEntries = useMemo(
-    () => entries.filter((e) => ['FUNDED', 'ORDER_PLACED', 'MATCHED'].includes(e.proposal.status)),
+    () => entries.filter((e) => e.betView.bet.status === BetStatus.Traded),
     [entries]
   );
   const settledEntries = useMemo(
-    () => entries.filter((e) => e.proposal.status === 'SETTLED'),
+    () => entries.filter((e) => [BetStatus.Closed, BetStatus.Withdrawn, BetStatus.Cancelled].includes(e.betView.bet.status)),
     [entries]
   );
 
@@ -68,13 +73,16 @@ export default function MyBetsPage() {
   }
 
   const tabs = [
-    { id: 'proposed' as Tab, label: 'Proposed', icon: TrendingUp, count: proposedEntries.length },
+    { id: 'proposed' as Tab, label: 'Proposed', icon: Clock, count: proposedEntries.length },
+    { id: 'funded' as Tab, label: 'Funded', icon: Shield, count: fundedEntries.length },
     { id: 'active' as Tab, label: 'Active', icon: BarChart3, count: activeEntries.length },
     { id: 'settled' as Tab, label: 'Settled', icon: CheckCircle, count: settledEntries.length },
   ];
 
   const tabEntries = activeTab === 'proposed'
     ? proposedEntries
+    : activeTab === 'funded'
+    ? fundedEntries
     : activeTab === 'active'
     ? activeEntries
     : settledEntries;
@@ -100,7 +108,7 @@ export default function MyBetsPage() {
           </span>
         </div>
         <p className="text-muted-foreground mt-2">
-          Track your proposed, active, and settled Polymarket bets
+          Track your proposed, funded, active, and settled Polymarket bets
         </p>
       </motion.div>
 
@@ -128,7 +136,7 @@ export default function MyBetsPage() {
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
         </div>
-      ) : error && !proposals ? (
+      ) : error && !betViews ? (
         <div className="text-center py-20 text-danger">
           Failed to load bets. Please try again.
         </div>
@@ -145,6 +153,8 @@ export default function MyBetsPage() {
                 title={
                   activeTab === 'proposed'
                     ? 'No Proposed Bets'
+                    : activeTab === 'funded'
+                    ? 'No Funded Bets'
                     : activeTab === 'active'
                     ? 'No Active Bets'
                     : 'No Settled Bets'
@@ -152,8 +162,10 @@ export default function MyBetsPage() {
                 description={
                   activeTab === 'proposed'
                     ? "You haven't proposed any bets yet. Browse Polymarket events to get started."
+                    : activeTab === 'funded'
+                    ? "You don't have any funded bets awaiting trade execution."
                     : activeTab === 'active'
-                    ? "You don't have any active bets. Fund a proposal or place an order."
+                    ? "You don't have any active bets."
                     : "None of your bets have settled yet."
                 }
                 actionLabel={activeTab === 'proposed' ? 'Browse Markets' : undefined}
@@ -163,12 +175,12 @@ export default function MyBetsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {tabEntries.map((entry, index) => (
                   <motion.div
-                    key={entry.proposal.id}
+                    key={entry.betView.betId}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                   >
-                    <MyBetCard proposal={entry.proposal} role={entry.role} />
+                    <MyBetCard betView={entry.betView} role={entry.role} />
                   </motion.div>
                 ))}
               </div>

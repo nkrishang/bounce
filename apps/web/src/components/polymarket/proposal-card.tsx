@@ -3,31 +3,32 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Clock, ArrowRight, ShieldCheck, User } from 'lucide-react';
-import type { Proposal } from '@bounce/shared';
-import { formatAddress } from '@bounce/shared';
-import { formatUnits } from 'viem';
+import type { BetView } from '@bounce/shared';
+import { BetStatus, formatAddress } from '@bounce/shared';
 import { FundProposalModal } from './fund-proposal-modal';
+import { formatUsdc } from '@/lib/bet-math';
 
 interface ProposalCardProps {
-  proposal: Proposal;
+  betView: BetView;
 }
 
-export function ProposalCard({ proposal }: ProposalCardProps) {
+export function ProposalCard({ betView }: ProposalCardProps) {
   const [showFundModal, setShowFundModal] = useState(false);
 
-  const proposerStake = formatUnits(BigInt(proposal.proposerContribution), 6);
-  const totalPosition = formatUnits(BigInt(proposal.totalCapital), 6);
-  const funderPortion = parseFloat(totalPosition) - parseFloat(proposerStake);
-  const pct = proposal.outcomePrice ? Math.round(parseFloat(proposal.outcomePrice) * 100) : 50;
+  const { bet, metadata } = betView;
+  const proposerStake = (bet.totalCapital * BigInt(bet.proposerCapitalBps)) / 10000n;
+  const funderPortion = bet.totalCapital - proposerStake;
+  const pct = metadata?.outcomePrice ? Math.round(parseFloat(metadata.outcomePrice) * 100) : 50;
+  const isYesOutcome = metadata?.isYesOutcome ?? true;
 
   return (
     <>
       <div className="w-[360px] flex-shrink-0 rounded-2xl border border-dark-border bg-dark-surface p-6 flex flex-col gap-5">
         {/* Header */}
         <div className="flex items-start gap-3">
-          {proposal.marketImage && (
+          {metadata?.marketImage && (
             <img
-              src={proposal.marketImage}
+              src={metadata.marketImage}
               alt=""
               className="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-white/5"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -35,17 +36,17 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
           )}
           <div className="min-w-0 flex-1">
             <h3 className="font-bold text-[15px] text-white leading-snug line-clamp-2">
-              {proposal.marketQuestion || 'Polymarket Bet'}
+              {metadata?.marketQuestion || 'Polymarket Bet'}
             </h3>
             <div className="flex items-center gap-2 mt-1">
               <span
                 className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase"
                 style={{
-                  background: proposal.isYesOutcome ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                  color: proposal.isYesOutcome ? '#22c55e' : '#ef4444',
+                  background: isYesOutcome ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                  color: isYesOutcome ? '#22c55e' : '#ef4444',
                 }}
               >
-                {proposal.isYesOutcome ? 'Yes' : 'No'}
+                {isYesOutcome ? 'Yes' : 'No'}
               </span>
               <span className="text-xs text-muted-foreground font-mono">{pct}¢</span>
             </div>
@@ -57,7 +58,7 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
           <div className="rounded-xl border border-dark-border bg-[#111113] px-4 py-3">
             <span className="text-[11px] text-muted-foreground font-medium">Total Position</span>
             <p className="text-xl font-bold text-white mt-1 font-mono">
-              ${parseFloat(totalPosition).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              ${formatUsdc(bet.totalCapital)}
             </p>
           </div>
           <div
@@ -69,7 +70,7 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
               <span className="text-[11px] text-success font-semibold">Protected</span>
             </div>
             <p className="text-xl font-bold text-white mt-1 font-mono">
-              ${parseFloat(proposerStake).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              ${formatUsdc(proposerStake)}
             </p>
           </div>
         </div>
@@ -90,11 +91,11 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
         {/* Proposer info */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <User className="w-3 h-3" />
-          <span>Proposed by {formatAddress(proposal.proposer)}</span>
+          <span>Proposed by {formatAddress(bet.proposer)}</span>
         </div>
 
         {/* CTA */}
-        {proposal.status === 'PROPOSED' && (
+        {bet.status === BetStatus.Proposed && (
           <button
             onClick={() => setShowFundModal(true)}
             className="group relative w-full py-3.5 rounded-xl font-bold text-[15px] flex items-center justify-center gap-2 transition-all duration-300 overflow-hidden hover:scale-[1.02] active:scale-[0.98]"
@@ -105,21 +106,21 @@ export function ProposalCard({ proposal }: ProposalCardProps) {
             }}
           >
             <span className="relative z-10 flex items-center gap-2">
-              Protected Buy — ${funderPortion.toLocaleString()} USDC
+              Protected Buy — ${formatUsdc(funderPortion)} USDC
               <ArrowRight size={16} />
             </span>
           </button>
         )}
 
-        {proposal.status !== 'PROPOSED' && (
+        {bet.status !== BetStatus.Proposed && (
           <div className="py-3 rounded-xl bg-white/5 text-center">
-            <span className="text-sm text-muted-foreground font-medium capitalize">{proposal.status.toLowerCase()}</span>
+            <span className="text-sm text-muted-foreground font-medium capitalize">{BetStatus[bet.status]?.toLowerCase()}</span>
           </div>
         )}
       </div>
 
       <FundProposalModal
-        proposal={proposal}
+        betView={betView}
         open={showFundModal}
         onClose={() => setShowFundModal(false)}
       />

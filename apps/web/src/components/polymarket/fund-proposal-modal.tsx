@@ -4,21 +4,21 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Shield, TrendingUp, Loader2, Check, AlertTriangle } from 'lucide-react';
-import type { Proposal } from '@bounce/shared';
+import type { BetView } from '@bounce/shared';
 import { formatAddress } from '@bounce/shared';
-import { formatUnits } from 'viem';
 import { useAuth } from '@/hooks/use-auth';
-import { useFundThesis } from '@/hooks/use-fund-thesis';
+import { useFundBet } from '@/hooks/use-fund-bet';
+import { formatUsdc } from '@/lib/bet-math';
 
 interface FundProposalModalProps {
-  proposal: Proposal;
+  betView: BetView;
   open: boolean;
   onClose: () => void;
 }
 
-export function FundProposalModal({ proposal, open, onClose }: FundProposalModalProps) {
+export function FundProposalModal({ betView, open, onClose }: FundProposalModalProps) {
   const { isAuthenticated, login } = useAuth();
-  const { fundThesis, isLoading, step, error, reset } = useFundThesis();
+  const { fundBet, isLoading, step, error, reset } = useFundBet();
 
   useEffect(() => {
     if (!open) {
@@ -36,14 +36,15 @@ export function FundProposalModal({ proposal, open, onClose }: FundProposalModal
     };
   }, [open, reset]);
 
-  const proposerStake = formatUnits(BigInt(proposal.proposerContribution), 6);
-  const totalPosition = formatUnits(BigInt(proposal.totalCapital), 6);
-  const funderPortion = parseFloat(totalPosition) - parseFloat(proposerStake);
-  const pct = proposal.outcomePrice ? Math.round(parseFloat(proposal.outcomePrice) * 100) : 50;
+  const { bet, metadata } = betView;
+  const proposerStake = (bet.totalCapital * BigInt(bet.proposerCapitalBps)) / 10000n;
+  const funderPortion = bet.totalCapital - proposerStake;
+  const pct = metadata?.outcomePrice ? Math.round(parseFloat(metadata.outcomePrice) * 100) : 50;
+  const isYesOutcome = metadata?.isYesOutcome ?? true;
 
   const handleFund = async () => {
     try {
-      await fundThesis(proposal);
+      await fundBet(betView.betId);
     } catch (err) {
       console.error(err);
     }
@@ -77,23 +78,23 @@ export function FundProposalModal({ proposal, open, onClose }: FundProposalModal
               <div className="p-6 space-y-5">
                 {/* Header */}
                 <div className="flex items-start gap-4">
-                  {proposal.marketImage && (
-                    <img src={proposal.marketImage} alt="" className="w-12 h-12 rounded-xl object-cover border border-white/5" />
+                  {metadata?.marketImage && (
+                    <img src={metadata.marketImage} alt="" className="w-12 h-12 rounded-xl object-cover border border-white/5" />
                   )}
                   <div>
-                    <h3 className="text-lg font-bold text-white">{proposal.marketQuestion || 'Fund Bet'}</h3>
+                    <h3 className="text-lg font-bold text-white">{metadata?.marketQuestion || 'Fund Bet'}</h3>
                     <div className="flex items-center gap-2 mt-1">
                       <span
                         className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold"
                         style={{
-                          background: proposal.isYesOutcome ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                          color: proposal.isYesOutcome ? '#22c55e' : '#ef4444',
+                          background: isYesOutcome ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                          color: isYesOutcome ? '#22c55e' : '#ef4444',
                         }}
                       >
-                        {proposal.isYesOutcome ? 'Yes' : 'No'}
+                        {isYesOutcome ? 'Yes' : 'No'}
                       </span>
                       <span className="text-sm text-muted-foreground font-mono">{pct}¢</span>
-                      <span className="text-xs text-muted-foreground">by {formatAddress(proposal.proposer)}</span>
+                      <span className="text-xs text-muted-foreground">by {formatAddress(bet.proposer)}</span>
                     </div>
                   </div>
                 </div>
@@ -103,16 +104,16 @@ export function FundProposalModal({ proposal, open, onClose }: FundProposalModal
                   <div className="p-4 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Believer Stake (20%)</span>
-                      <span className="font-mono" style={{ color: '#D4AD4A' }}>${parseFloat(proposerStake).toLocaleString()}</span>
+                      <span className="font-mono" style={{ color: '#D4AD4A' }}>${formatUsdc(proposerStake)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Your Funding (80%)</span>
-                      <span className="font-mono font-semibold" style={{ color: '#61A6FB' }}>${funderPortion.toLocaleString()}</span>
+                      <span className="font-mono font-semibold" style={{ color: '#61A6FB' }}>${formatUsdc(funderPortion)}</span>
                     </div>
                     <div className="h-px bg-dark-border" />
                     <div className="flex justify-between font-semibold">
                       <span className="text-white">Total Position</span>
-                      <span className="font-mono text-white">${parseFloat(totalPosition).toLocaleString()}</span>
+                      <span className="font-mono text-white">${formatUsdc(bet.totalCapital)}</span>
                     </div>
                   </div>
                 </div>
@@ -139,7 +140,7 @@ export function FundProposalModal({ proposal, open, onClose }: FundProposalModal
                 <div className="p-3 rounded-xl bg-warning/5 border border-warning/15 flex items-start gap-2.5">
                   <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-muted-foreground">
-                    This will transfer USDC to the Safe and create the thesis on-chain.
+                    This will transfer USDC to the Bounce contract and fund the bet on-chain.
                   </p>
                 </div>
 
@@ -187,14 +188,12 @@ export function FundProposalModal({ proposal, open, onClose }: FundProposalModal
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
                         {step === 'approving' && 'Approving USDC...'}
-                        {step === 'transferring' && 'Transferring USDC...'}
-                        {step === 'creating-thesis' && 'Creating Thesis...'}
-                        {step === 'updating' && 'Finalizing...'}
+                        {step === 'funding' && 'Funding Bet...'}
                       </>
                     ) : (
                       <>
                         <Shield className="w-5 h-5" />
-                        Fund ${funderPortion.toLocaleString()} USDC
+                        Fund ${formatUsdc(funderPortion)} USDC
                       </>
                     )}
                   </motion.button>

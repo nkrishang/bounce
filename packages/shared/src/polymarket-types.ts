@@ -1,35 +1,5 @@
 import type { Address } from './types.js';
 
-export type ProposalStatus =
-  | 'PROPOSED'
-  | 'FUNDED'
-  | 'ORDER_PLACED'
-  | 'MATCHED'
-  | 'SETTLED';
-
-export interface Proposal {
-  id: string;
-  proposer: Address;
-  funder?: Address;
-  safe: Address;
-  guard?: Address;
-  settlement?: Address;
-  totalCapital: string;
-  proposerContribution: string;
-  conditionId: string;
-  outcomeTokenId: string;
-  isYesOutcome: boolean;
-  marketSlug?: string;
-  marketQuestion?: string;
-  marketImage?: string;
-  outcomePrice?: string;
-  metadataUri?: string;
-  status: ProposalStatus;
-  orderId?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface PolymarketToken {
   token_id: string;
   outcome: string;
@@ -64,6 +34,67 @@ export interface PolymarketMarket {
   bestAsk: number;
   best_ask: number;
   negRisk: boolean;
+}
+
+// Mirror contract enum
+export enum BetStatus {
+  None = 0,
+  Proposed = 1,
+  Funded = 2,
+  Traded = 3,
+  Closed = 4,
+  Cancelled = 5,
+  Withdrawn = 6,
+}
+
+// On-chain bet struct (from Bounce.getBet)
+export interface BetOnchain {
+  safe: Address;
+  proposer: Address;
+  funder: Address;
+  exchange: Address;
+  conditionId: `0x${string}`;
+  outcomeIndex: number;
+  indexSet: bigint;
+  positionId: bigint;
+  slugHash: `0x${string}`;
+  totalCapital: bigint;
+  proposerCapitalBps: number;
+  proposerProfitShareBps: number;
+  escrowUSDC: bigint;
+  usdcSpent: bigint;
+  usdcReceived: bigint;
+  positionShares: bigint;
+  proposedAt: number;
+  fundedAt: number;
+  tradedAt: number;
+  closedAt: number;
+  withdrawnAt: number;
+  expiresAt: number;
+  status: BetStatus;
+}
+
+// Off-chain metadata (stored in backend)
+export interface BetMetadata {
+  chainId: number;
+  betId: number;
+  slug: string;
+  conditionId: string;
+  outcomeIndex: number;
+  outcomeTokenId: string;
+  isYesOutcome: boolean;
+  marketQuestion: string;
+  marketImage?: string;
+  outcomePrice: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Combined view for UI
+export interface BetView {
+  betId: number;
+  bet: BetOnchain;
+  metadata?: BetMetadata;
 }
 
 export interface PolymarketEvent {

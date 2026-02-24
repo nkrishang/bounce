@@ -595,6 +595,18 @@ Update `propose-bet-modal.tsx`:
 
 **Goal:** Delete all deprecated ERC-20 trading code and old V2 contract references. This is a hard cut — no backwards compatibility needed.
 
+**Important:** The old code contains many reusable patterns. Before deleting, subagents working on other streams should **read the old code as reference** for:
+- `propose-bet-modal.tsx` / `fund-proposal-modal.tsx` — modal structure, step-based loading UX, portal rendering
+- `use-create-thesis.ts` / `use-fund-thesis.ts` — step-based hook pattern (idle → loading → success), Privy wallet integration, `sendAndConfirm` usage
+- `my-bet-card.tsx` — card layout with role badges, status config pattern, trade structure bar
+- `proposals-carousel.tsx` — horizontal scrollable carousel pattern for browsing proposals
+- `market-card.tsx` — `BetRow` component with hover animations, chance gauge, "3x PROFIT" / "20% Protection" button styling
+- `trade.service.ts` — multicall batching pattern (`chunk`, `CALLS_PER_BATCH`), parallel cache read/write with `mget`/`mset`
+- `proposal.service.ts` — data shape (what fields are needed for off-chain metadata)
+- `lib/transaction.ts` — `createClients`, `sendAndConfirm`, `getWalletAddress` utilities (these are kept)
+- `lib/polymarket-safe.ts` — `deriveSafeAddress`, `isSafeDeployed`, `deployPolySafe` (these are kept)
+- `lib/cache.ts` — cache abstraction with Redis + in-memory fallback (kept)
+
 ### H1. Delete Old Files
 
 Execute the full deletion list from the "What Gets Deleted" section above. This includes:

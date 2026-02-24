@@ -77,7 +77,7 @@ function formatPct(price: number): string {
   return `${Math.round(pct)}%`;
 }
 
-function BetRow({ isYes, probability }: { isYes: boolean; probability: number }) {
+function BetRow({ isYes, probability, onPropose }: { isYes: boolean; probability: number; onPropose?: () => void }) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -116,6 +116,7 @@ function BetRow({ isYes, probability }: { isYes: boolean; probability: number })
       </div>
       <span className="text-white/30 text-base shrink-0">@</span>
       <button
+        onClick={onPropose}
         className="h-9 px-3 rounded-xl text-sm font-bold shrink-0 flex items-center gap-1.5 transition-shadow duration-200 hover:shadow-[0_0_18px_rgba(255,242,49,0.55)]"
         style={{
           background: '#3E3D2A',
@@ -128,6 +129,7 @@ function BetRow({ isYes, probability }: { isYes: boolean; probability: number })
       </button>
       <span className="text-white/30 text-sm shrink-0">/</span>
       <button
+        onClick={onPropose}
         className="h-9 shrink-0 whitespace-nowrap px-3 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-shadow duration-200 hover:shadow-[0_0_18px_rgba(48,144,255,0.55)]"
         style={{
           background: '#1F304D',
@@ -153,7 +155,7 @@ function marketInterestScore(market: PolymarketMarket): number {
   return Math.pow(contention, 2) * Math.log1p(vol);
 }
 
-function ScrollableMarkets({ markets }: { markets: PolymarketMarket[] }) {
+function ScrollableMarkets({ markets, event, onPropose }: { markets: PolymarketMarket[]; event: PolymarketEvent; onPropose: MarketCardProps['onPropose'] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atTop, setAtTop] = useState(true);
   const [atBottom, setAtBottom] = useState(false);
@@ -204,8 +206,12 @@ function ScrollableMarkets({ markets }: { markets: PolymarketMarket[] }) {
                 <ChanceGauge probability={yesPrice} size="small" />
               </div>
               <div className="space-y-2">
-                <BetRow isYes={true} probability={yesPrice} />
-                <BetRow isYes={false} probability={noPrice} />
+                <BetRow isYes={true} probability={yesPrice} onPropose={() => {
+                  if (yes) onPropose(event, market, yes.token_id, 'Yes', yesPrice);
+                }} />
+                <BetRow isYes={false} probability={noPrice} onPropose={() => {
+                  if (no) onPropose(event, market, no.token_id, 'No', noPrice);
+                }} />
               </div>
             </div>
           );
@@ -242,7 +248,7 @@ function ScrollableMarkets({ markets }: { markets: PolymarketMarket[] }) {
   );
 }
 
-export function MarketCard({ event }: MarketCardProps) {
+export function MarketCard({ event, onPropose }: MarketCardProps) {
   const formatVolume = (vol: number) => {
     if (vol >= 1_000_000) return `$${(vol / 1_000_000).toFixed(1)}M`;
     if (vol >= 1_000) return `$${(vol / 1_000).toFixed(1)}K`;
@@ -300,11 +306,17 @@ export function MarketCard({ event }: MarketCardProps) {
       {/* Markets */}
       {isSingleBinary ? (
         <div className="px-4 pb-5 space-y-2">
-          <BetRow isYes={true} probability={probability} />
-          <BetRow isYes={false} probability={noProbability} />
+          <BetRow isYes={true} probability={probability} onPropose={() => {
+            const token = singleTokens.find((t) => t.outcome.toLowerCase() === 'yes');
+            if (token) onPropose(event, event.markets[0], token.token_id, 'Yes', token.price);
+          }} />
+          <BetRow isYes={false} probability={noProbability} onPropose={() => {
+            const token = singleTokens.find((t) => t.outcome.toLowerCase() === 'no');
+            if (token) onPropose(event, event.markets[0], token.token_id, 'No', token.price);
+          }} />
         </div>
       ) : (
-        <ScrollableMarkets markets={event.markets} />
+        <ScrollableMarkets markets={event.markets} event={event} onPropose={onPropose} />
       )}
     </div>
   );

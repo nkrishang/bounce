@@ -6,8 +6,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, TrendingUp, Shield, Loader2, Check, AlertTriangle } from 'lucide-react';
 import type { PolymarketEvent, PolymarketMarket } from '@bounce/shared';
 import { useAuth } from '@/hooks/use-auth';
-import { useCreateThesis } from '@/hooks/use-create-thesis';
-import { formatUnits, parseUnits } from 'viem';
+import { useProposeBet } from '@/hooks/use-propose-bet';
+import { parseUnits } from 'viem';
+import {
+  computeProfitComparison,
+  computeWipeoutPrice,
+  DEFAULT_PROPOSER_CAPITAL_BPS,
+  DEFAULT_PROPOSER_PROFIT_SHARE_BPS,
+} from '@/lib/bet-math';
 
 interface ProposeBetModalProps {
   open: boolean;
@@ -21,7 +27,7 @@ interface ProposeBetModalProps {
 
 export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome, price }: ProposeBetModalProps) {
   const { isAuthenticated, login, address } = useAuth();
-  const { createThesis, isLoading, step, error, reset } = useCreateThesis();
+  const { proposeBet, isLoading, step, error, reset } = useProposeBet();
   const [stakeAmount, setStakeAmount] = useState('10');
 
   useEffect(() => {
@@ -42,23 +48,27 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
   }, [open, reset]);
 
   const stakeNum = parseFloat(stakeAmount) || 0;
-  const totalPosition = stakeNum * 5;
-  const funderPortion = stakeNum * 4;
+  const totalPosition = stakeNum * (10000 / DEFAULT_PROPOSER_CAPITAL_BPS);
+  const funderPortion = totalPosition - stakeNum;
   const pct = Math.round(price * 100);
+
+  const profitComparison = price > 0 ? computeProfitComparison(stakeNum, price) : null;
+  const wipeoutPrice = price > 0 ? computeWipeoutPrice(price) : 0;
 
   const handlePropose = async () => {
     if (!market || !event || stakeNum < 1) return;
     try {
-      const contribution = parseUnits(stakeAmount, 6);
-      await createThesis({
+      const stakeAmountBigint = parseUnits(stakeAmount, 6);
+      await proposeBet({
         conditionId: market.conditionId || market.condition_id,
         outcomeTokenId: tokenId,
         isYesOutcome: outcome.toLowerCase() === 'yes',
-        proposerContribution: contribution,
+        stakeAmount: stakeAmountBigint,
         marketSlug: event.slug,
         marketQuestion: market.question || event.title,
         marketImage: event.image,
         outcomePrice: price.toString(),
+        negRisk: market.negRisk,
       });
     } catch (err) {
       console.error(err);
@@ -164,14 +174,20 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                       <TrendingUp className="w-4 h-4" style={{ color: '#D4AD4A' }} />
                       <span className="text-sm font-semibold" style={{ color: '#D4AD4A' }}>If Profit</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">You earn 60% of gains</p>
+                    <p className="text-xs text-muted-foreground">
+                      {profitComparison
+                        ? `${profitComparison.bounceMultiple.toFixed(1)}x return ($${profitComparison.bounceReturn.toFixed(2)})`
+                        : 'You earn 60% of gains'}
+                    </p>
                   </div>
                   <div className="p-3.5 rounded-xl bg-[#111113] border border-dark-border">
                     <div className="flex items-center gap-2 mb-1">
                       <Shield className="w-4 h-4 text-danger" />
                       <span className="text-sm font-semibold text-danger">If Loss</span>
                     </div>
-                    <p className="text-xs text-muted-foreground">Your 20% absorbs losses first</p>
+                    <p className="text-xs text-muted-foreground">
+                      Wipeout below {Math.round(wipeoutPrice * 100)}¢
+                    </p>
                   </div>
                 </div>
 
@@ -218,12 +234,10 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                     ) : isLoading ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        {step === 'deploying-safe' && 'Deploying Safe...'}
-                        {step === 'deploying-guard' && 'Deploying Guard...'}
-                        {step === 'setting-guard' && 'Setting Guard...'}
+                        {step === 'ensuring-safe' && 'Setting up Safe...'}
                         {step === 'approving' && 'Approving USDC...'}
-                        {step === 'transferring' && 'Transferring USDC...'}
-                        {step === 'registering' && 'Registering...'}
+                        {step === 'proposing' && 'Proposing Bet...'}
+                        {step === 'saving-metadata' && 'Saving...'}
                       </>
                     ) : (
                       <>

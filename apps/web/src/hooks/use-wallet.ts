@@ -5,7 +5,7 @@ import { type Address } from '@bounce/shared';
 import { TOKENS_BY_CHAIN, type SupportedChainId } from '@bounce/shared';
 import { api } from '@/lib/api';
 
-const CHAIN_IDS: SupportedChainId[] = [137, 8453, 143];
+const CHAIN_IDS: SupportedChainId[] = [137];
 
 export type ChainBalances = Record<SupportedChainId, string>;
 
