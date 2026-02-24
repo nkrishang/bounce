@@ -350,11 +350,13 @@ contract BounceTest is Test {
         assertEq(usdc.balanceOf(proposer), proposerBalanceBefore - expectedDeposit);
 
         // Verify indexes.
-        uint256[] memory proposerBets = bounce.getBetsByProposer(proposer);
+        assertEq(bounce.getBetsByProposerCount(proposer), 1);
+        uint256[] memory proposerBets = bounce.getBetsByProposer(proposer, 0, 1);
         assertEq(proposerBets.length, 1);
         assertEq(proposerBets[0], betId);
 
-        uint256[] memory safeBets = bounce.getBetsBySafe(address(safe));
+        assertEq(bounce.getBetsBySafeCount(address(safe)), 1);
+        uint256[] memory safeBets = bounce.getBetsBySafe(address(safe), 0, 1);
         assertEq(safeBets.length, 1);
         assertEq(safeBets[0], betId);
 

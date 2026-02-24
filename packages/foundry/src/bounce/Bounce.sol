@@ -5,6 +5,7 @@ import {Ownable} from "solady/auth/Ownable.sol";
 import {UUPSUpgradeable} from "solady/utils/UUPSUpgradeable.sol";
 import {ReentrancyGuard} from "solady/utils/ReentrancyGuard.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
+import {EnumerableSetLib} from "solady/utils/EnumerableSetLib.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IGuard, Operation} from "../thesis/interfaces/IGuard.sol";
 import {IGnosisSafeMinimal} from "./interfaces/IGnosisSafeMinimal.sol";
@@ -16,6 +17,7 @@ import {IConditionalTokensMinimal} from "./interfaces/IConditionalTokensMinimal.
 ///      As Module: executes all operations on the Safe via execTransactionFromModule.
 ///      Per-bet USDC escrow lives inside this contract, NOT inside the Safe.
 contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
+    using EnumerableSetLib for EnumerableSetLib.Uint256Set;
     // ============================================
     // Constants (Polygon)
     // ============================================
@@ -103,14 +105,14 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     /// @notice Mapping from bet ID to Bet struct.
     mapping(uint256 => Bet) internal _bets;
 
-    /// @notice Index: proposer address => array of bet IDs.
-    mapping(address => uint256[]) internal _betsByProposer;
+    /// @notice Index: proposer address => set of bet IDs.
+    mapping(address => EnumerableSetLib.Uint256Set) internal _betsByProposer;
 
-    /// @notice Index: funder address => array of bet IDs.
-    mapping(address => uint256[]) internal _betsByFunder;
+    /// @notice Index: funder address => set of bet IDs.
+    mapping(address => EnumerableSetLib.Uint256Set) internal _betsByFunder;
 
-    /// @notice Index: safe address => array of bet IDs.
-    mapping(address => uint256[]) internal _betsBySafe;
+    /// @notice Index: safe address => set of bet IDs.
+    mapping(address => EnumerableSetLib.Uint256Set) internal _betsBySafe;
 
     /// @notice Prevents two simultaneous bets on same outcome in same Safe.
     /// @dev key = keccak256(abi.encode(safe, exchange, conditionId, outcomeIndex))
@@ -178,6 +180,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     error NoSharesSold();
     error SlippageExceeded(uint256 received, uint256 minimum);
     error BetExpired();
+    error InvalidRange(uint256 start, uint256 end);
 
     // ============================================
     // Initializer
@@ -309,8 +312,8 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         });
 
         // Update indexes.
-        _betsByProposer[msg.sender].push(betId);
-        _betsBySafe[safe].push(betId);
+        _betsByProposer[msg.sender].add(betId);
+        _betsBySafe[safe].add(betId);
         _activeBetKeyToId[key] = betId;
         _activeBetCount[safe]++;
 
@@ -360,7 +363,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         bet.fundedAt = uint40(block.timestamp);
 
         // Update funder index.
-        _betsByFunder[msg.sender].push(betId);
+        _betsByFunder[msg.sender].add(betId);
 
         emit BetFunded(betId, msg.sender, funderDeposit);
     }
@@ -702,25 +705,64 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         return _bets[betId];
     }
 
-    /// @notice Returns all bet IDs created by a proposer.
+    /// @notice Returns the number of bet IDs created by a proposer.
     /// @param proposer The proposer address.
-    /// @return Array of bet IDs.
-    function getBetsByProposer(address proposer) external view returns (uint256[] memory) {
-        return _betsByProposer[proposer];
+    /// @return The number of bets.
+    function getBetsByProposerCount(address proposer) external view returns (uint256) {
+        return _betsByProposer[proposer].length();
     }
 
-    /// @notice Returns all bet IDs funded by a funder.
+    /// @notice Returns a paginated slice of bet IDs created by a proposer.
+    /// @param proposer The proposer address.
+    /// @param start The start index (inclusive).
+    /// @param end The end index (exclusive).
+    /// @return betIds The slice of bet IDs.
+    function getBetsByProposer(address proposer, uint256 start, uint256 end)
+        external
+        view
+        returns (uint256[] memory betIds)
+    {
+        return _paginateSet(_betsByProposer[proposer], start, end);
+    }
+
+    /// @notice Returns the number of bet IDs funded by a funder.
     /// @param funder The funder address.
-    /// @return Array of bet IDs.
-    function getBetsByFunder(address funder) external view returns (uint256[] memory) {
-        return _betsByFunder[funder];
+    /// @return The number of bets.
+    function getBetsByFunderCount(address funder) external view returns (uint256) {
+        return _betsByFunder[funder].length();
     }
 
-    /// @notice Returns all bet IDs associated with a Safe.
+    /// @notice Returns a paginated slice of bet IDs funded by a funder.
+    /// @param funder The funder address.
+    /// @param start The start index (inclusive).
+    /// @param end The end index (exclusive).
+    /// @return betIds The slice of bet IDs.
+    function getBetsByFunder(address funder, uint256 start, uint256 end)
+        external
+        view
+        returns (uint256[] memory betIds)
+    {
+        return _paginateSet(_betsByFunder[funder], start, end);
+    }
+
+    /// @notice Returns the number of bet IDs associated with a Safe.
     /// @param safe The Safe address.
-    /// @return Array of bet IDs.
-    function getBetsBySafe(address safe) external view returns (uint256[] memory) {
-        return _betsBySafe[safe];
+    /// @return The number of bets.
+    function getBetsBySafeCount(address safe) external view returns (uint256) {
+        return _betsBySafe[safe].length();
+    }
+
+    /// @notice Returns a paginated slice of bet IDs associated with a Safe.
+    /// @param safe The Safe address.
+    /// @param start The start index (inclusive).
+    /// @param end The end index (exclusive).
+    /// @return betIds The slice of bet IDs.
+    function getBetsBySafe(address safe, uint256 start, uint256 end)
+        external
+        view
+        returns (uint256[] memory betIds)
+    {
+        return _paginateSet(_betsBySafe[safe], start, end);
     }
 
     /// @notice Returns the number of active bets for a Safe.
@@ -745,6 +787,24 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     // ============================================
     // Internal Helpers
     // ============================================
+
+    /// @notice Returns a paginated slice [start, end) from an EnumerableSetLib.Uint256Set.
+    /// @param set The set to paginate.
+    /// @param start The start index (inclusive).
+    /// @param end The end index (exclusive).
+    /// @return betIds The slice of values.
+    function _paginateSet(EnumerableSetLib.Uint256Set storage set, uint256 start, uint256 end)
+        internal
+        view
+        returns (uint256[] memory betIds)
+    {
+        uint256 len = set.length();
+        if (start > end || end > len) revert InvalidRange(start, end);
+        betIds = new uint256[](end - start);
+        for (uint256 i = start; i < end; i++) {
+            betIds[i - start] = set.at(i);
+        }
+    }
 
     /// @notice Validates that the Safe has Bounce installed as both module and guard.
     /// @dev Reads the guard from Safe's isolated keccak storage slot via getStorageAt.
