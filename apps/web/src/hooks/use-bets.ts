@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { type Address, createPublicClient, http } from 'viem';
 import { polygon } from 'viem/chains';
-import { POLYMARKET_ADDRESSES, BounceAbi } from '@bounce/contracts';
+import { POLYMARKET_ADDRESSES, BounceAbi, assertBounceConfigured } from '@bounce/contracts';
 import { type BetOnchain, type BetView, type BetMetadata, normalizeBet, validateConditionId } from '@bounce/shared';
 import { api } from '@/lib/api';
 
@@ -13,6 +13,7 @@ const publicClient = createPublicClient({
 });
 
 async function fetchBetOnchain(betId: number): Promise<BetOnchain> {
+  assertBounceConfigured();
   const result = await publicClient.readContract({
     address: POLYMARKET_ADDRESSES.BOUNCE,
     abi: BounceAbi,

@@ -10,8 +10,6 @@ import { formatUnits } from "viem";
 
 const CHAIN_META: Record<number, { name: string; logo: string; explorer: string }> = {
   137: { name: "Polygon", logo: "/logos/polygon-logo.svg", explorer: "https://polygonscan.com" },
-  8453: { name: "Base", logo: "/logos/base-logo.svg", explorer: "https://basescan.org" },
-  143: { name: "Monad", logo: "/logos/monad-logo.svg", explorer: "https://explorer.monad.xyz" },
 };
 
 interface WalletModalProps {
@@ -108,7 +106,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                         />
                       </motion.button>
                     </div>
-                    {([137, 8453, 143] as const).map((chainId) => {
+                    {([137] as const).map((chainId) => {
                       const chain = CHAIN_META[chainId];
                       const bal = balances?.[chainId] ?? "0";
                       const formatted = formatUnits(BigInt(bal), 6);
@@ -157,7 +155,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                       from an external wallet or exchange.
                     </p>
                     <div className="flex flex-wrap gap-3">
-                      {([137, 8453, 143] as const).map((chainId) => {
+                      {([137] as const).map((chainId) => {
                         const chain = CHAIN_META[chainId];
                         return (
                           <a

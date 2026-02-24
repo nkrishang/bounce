@@ -17,6 +17,7 @@
     "@bounce/contracts": "workspace:*",
     "@bounce/shared": "workspace:*",
     "@fastify/cors": "^9.0.1",
+    "@privy-io/server-auth": "^1.32.5",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.1",
     "fastify": "^4.26.2",

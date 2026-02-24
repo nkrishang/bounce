@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { type Address, parseEventLogs } from 'viem';
 import { POLYMARKET_ADDRESSES, BounceAbi, ERC20Abi, assertBounceConfigured } from '@bounce/contracts';
@@ -28,6 +28,7 @@ interface ProposeBetParams {
 
 export function useProposeBet() {
   const { wallets } = useWallets();
+  const { getAccessToken } = usePrivy();
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<Step>('idle');
@@ -131,6 +132,7 @@ export function useProposeBet() {
 
         // Step 4: Save off-chain metadata
         setStep('saving-metadata');
+        const authToken = await getAccessToken();
         await api.post(`/bets/${betId}/metadata`, {
           chainId: 137,
           conditionId: params.conditionId,
@@ -141,7 +143,7 @@ export function useProposeBet() {
           marketQuestion: params.marketQuestion,
           marketImage: params.marketImage,
           outcomePrice: params.outcomePrice,
-        });
+        }, { authToken: authToken || undefined });
 
         await queryClient.invalidateQueries({ queryKey: ['my-bets'] });
         await queryClient.invalidateQueries({ queryKey: ['bets'] });
@@ -157,7 +159,7 @@ export function useProposeBet() {
         setIsLoading(false);
       }
     },
-    [wallets, queryClient],
+    [wallets, getAccessToken, queryClient],
   );
 
   return { proposeBet, reset, isLoading, step, error };

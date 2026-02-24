@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { logger } from '../lib/logger.js';
+import { verifyPrivyToken } from '../lib/privy.js';
 import {
   getBetMetadata,
   getBetMetadataByCondition,
@@ -34,8 +35,16 @@ export async function betRoutes(fastify: FastifyInstance) {
   });
 
   // Save bet metadata (immutable — rejects if betId already exists)
+  // Requires Privy authentication
   fastify.post<{ Params: { betId: string } }>('/:betId/metadata', async (request, reply) => {
     try {
+      // Verify Privy access token
+      try {
+        await verifyPrivyToken(request.headers.authorization);
+      } catch (authErr) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
       const betId = parseInt(request.params.betId, 10);
       if (isNaN(betId)) {
         return reply.status(400).send({ error: 'Invalid betId' });
@@ -46,6 +55,11 @@ export async function betRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({
           error: 'Missing required fields: conditionId, outcomeTokenId',
         });
+      }
+
+      const conditionId = body.conditionId.startsWith('0x') ? body.conditionId : `0x${body.conditionId}`;
+      if (!/^0x[a-fA-F0-9]{64}$/.test(conditionId)) {
+        return reply.status(400).send({ error: 'Invalid conditionId: must be 32 bytes hex' });
       }
 
       const existing = await getBetMetadata(betId);
