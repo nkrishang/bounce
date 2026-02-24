@@ -15,8 +15,6 @@ import { getChain, type ChainId } from '@bounce/contracts';
 
 const RPC_URLS: Record<number, string> = {
   137: process.env.NEXT_PUBLIC_POLYGON_RPC_URL || '',
-  8453: process.env.NEXT_PUBLIC_BASE_RPC_URL || '',
-  143: process.env.NEXT_PUBLIC_MONAD_RPC_URL || '',
 };
 
 export interface SendAndConfirmOptions {

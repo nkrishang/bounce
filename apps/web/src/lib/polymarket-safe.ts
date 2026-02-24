@@ -75,7 +75,6 @@ async function execSafeTransaction(
       functionName: 'execTransaction',
       args: [to, value, data, operation, 0n, 0n, 0n, zeroAddress, zeroAddress, signature],
       account: owner,
-      gas: 1_000_000n,
     }),
   );
 
@@ -170,6 +169,25 @@ export async function isBounceGuardInstalled(
 
 export type SafeReadyStep = 'idle' | 'deploying-safe' | 'enabling-module' | 'setting-guard' | 'ready';
 
+async function getInstalledGuard(
+  publicClient: PublicClient,
+  safeAddress: Address,
+): Promise<Address | null> {
+  try {
+    const result = await publicClient.readContract({
+      address: safeAddress,
+      abi: GnosisSafeAbi,
+      functionName: 'getStorageAt',
+      args: [GUARD_STORAGE_SLOT, 1n],
+    });
+    const guardAddress = ('0x' + (result as `0x${string}`).slice(-40)) as Address;
+    if (guardAddress === zeroAddress) return null;
+    return guardAddress;
+  } catch {
+    return null;
+  }
+}
+
 export async function ensureSafeReady(
   walletClient: WalletClient,
   publicClient: PublicClient,
@@ -183,6 +201,15 @@ export async function ensureSafeReady(
   const deployed = await isSafeDeployed(publicClient, safeAddress);
   if (!deployed) {
     await deployPolySafe(walletClient, publicClient, ownerAddress);
+  }
+
+  // Fail fast if a non-Bounce guard is already installed — direct Safe txs will revert
+  const currentGuard = await getInstalledGuard(publicClient, safeAddress);
+  if (currentGuard && currentGuard.toLowerCase() !== POLYMARKET_ADDRESSES.BOUNCE.toLowerCase()) {
+    throw new Error(
+      `Safe ${safeAddress} already has a non-Bounce guard installed (${currentGuard}). ` +
+      `Remove the existing guard before configuring Bounce.`
+    );
   }
 
   const moduleEnabled = await isBounceModuleEnabled(publicClient, safeAddress);

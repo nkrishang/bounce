@@ -1,91 +1,47 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { eq } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { betMetadata } from '../db/schema.js';
 import { logger } from '../lib/logger.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, '..', '..', 'data');
-const DATA_FILE = join(DATA_DIR, 'bet-metadata.json');
+export type BetMetadataRecord = typeof betMetadata.$inferSelect;
+type BetMetadataInsert = typeof betMetadata.$inferInsert;
 
-export interface BetMetadataRecord {
-  chainId: number;
-  betId: number;
-  slug: string;
-  conditionId: string;
-  outcomeIndex: number;
-  outcomeTokenId: string;
-  isYesOutcome: boolean;
-  marketQuestion: string;
-  marketImage?: string;
-  outcomePrice: string;
-  createdAt: string;
-  updatedAt: string;
+export async function getBetMetadata(betId: number): Promise<BetMetadataRecord | undefined> {
+  const rows = await db.select().from(betMetadata).where(eq(betMetadata.betId, betId));
+  return rows[0];
 }
 
-function ensureDataDir(): void {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
-  }
+export async function getBetMetadataByCondition(conditionId: string): Promise<BetMetadataRecord[]> {
+  return db.select().from(betMetadata).where(eq(betMetadata.conditionId, conditionId));
 }
 
-function readMetadata(): BetMetadataRecord[] {
-  ensureDataDir();
-  if (!existsSync(DATA_FILE)) return [];
-  try {
-    const raw = readFileSync(DATA_FILE, 'utf-8');
-    return JSON.parse(raw) as BetMetadataRecord[];
-  } catch {
-    logger.warn('Failed to read bet metadata file');
-    return [];
-  }
+export async function getAllBetMetadata(): Promise<BetMetadataRecord[]> {
+  return db.select().from(betMetadata);
 }
 
-function writeMetadata(records: BetMetadataRecord[]): void {
-  ensureDataDir();
-  writeFileSync(DATA_FILE, JSON.stringify(records, null, 2));
-}
+export async function saveBetMetadata(
+  data: Omit<BetMetadataInsert, 'createdAt' | 'updatedAt'>,
+): Promise<BetMetadataRecord> {
+  const now = new Date();
 
-export function getBetMetadata(betId: number): BetMetadataRecord | undefined {
-  return readMetadata().find((r) => r.betId === betId);
-}
+  const rows = await db
+    .insert(betMetadata)
+    .values({ ...data, createdAt: now, updatedAt: now })
+    .onConflictDoNothing({ target: betMetadata.betId })
+    .returning();
 
-export function getBetMetadataByCondition(conditionId: string): BetMetadataRecord[] {
-  return readMetadata().filter(
-    (r) => r.conditionId.toLowerCase() === conditionId.toLowerCase()
-  );
-}
-
-export function getAllBetMetadata(): BetMetadataRecord[] {
-  return readMetadata();
-}
-
-export function saveBetMetadata(data: Omit<BetMetadataRecord, 'createdAt' | 'updatedAt'>): BetMetadataRecord {
-  const records = readMetadata();
-  const now = new Date().toISOString();
-
-  // Upsert - update if betId exists, insert if not
-  const existingIdx = records.findIndex((r) => r.betId === data.betId);
-  const record: BetMetadataRecord = {
-    ...data,
-    createdAt: existingIdx >= 0 ? records[existingIdx]!.createdAt : now,
-    updatedAt: now,
-  };
-
-  if (existingIdx >= 0) {
-    records[existingIdx] = record;
-  } else {
-    records.push(record);
+  if (rows.length === 0) {
+    // Row already existed — immutable-after-first-write
+    const existing = await getBetMetadata(data.betId);
+    if (existing) return existing;
+    throw new Error('Failed to insert bet metadata');
   }
 
-  writeMetadata(records);
   logger.info({ betId: data.betId }, 'Bet metadata saved');
-  return record;
+  return rows[0]!;
 }
 
-export function deleteBetMetadata(betId: number): boolean {
-  const records = readMetadata();
-  const filtered = records.filter((r) => r.betId !== betId);
-  if (filtered.length === records.length) return false;
-  writeMetadata(filtered);
-  return true;
+export async function deleteBetMetadata(betId: number): Promise<boolean> {
+  const result = await db.delete(betMetadata).where(eq(betMetadata.betId, betId)).returning();
+  return result.length > 0;
 }

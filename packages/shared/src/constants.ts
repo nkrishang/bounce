@@ -2,6 +2,7 @@ import type { Address, SupportedChainId } from './types.js';
 
 export const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
 
+export const BPS_DENOMINATOR = 10000;
 export const DEFAULT_SLIPPAGE_BPS = 100; // 1%
 
 export const PROPOSER_PROFIT_SHARE_BPS = 6000;
@@ -9,6 +10,10 @@ export const FUNDER_PROFIT_SHARE_BPS = 4000;
 
 export const PROPOSER_CONTRIBUTION_PERCENT = 20;
 export const FUNDER_CONTRIBUTION_PERCENT = 80;
+
+export const PROPOSER_CAPITAL_BPS = PROPOSER_CONTRIBUTION_PERCENT * 100; // 2000
+
+export const DEFAULT_EXPIRY_DAYS = 7;
 
 export const TOKENS_BY_CHAIN: Record<SupportedChainId, {
   USDC: Address;

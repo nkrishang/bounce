@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import { registerRoutes } from './routes/index.js';
 import { logger } from './lib/logger.js';
 import { getRedisClient, disconnectRedis } from './lib/redis.js';
+import { disconnectDb } from './db/index.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -39,6 +40,7 @@ async function main() {
   const shutdown = async () => {
     logger.info('Shutting down...');
     await disconnectRedis();
+    await disconnectDb();
     await fastify.close();
     process.exit(0);
   };

@@ -14,7 +14,7 @@ export async function betRoutes(fastify: FastifyInstance) {
     if (isNaN(betId)) {
       return reply.status(400).send({ error: 'Invalid betId' });
     }
-    const metadata = getBetMetadata(betId);
+    const metadata = await getBetMetadata(betId);
     if (!metadata) {
       return reply.status(404).send({ error: 'Bet metadata not found' });
     }
@@ -23,17 +23,17 @@ export async function betRoutes(fastify: FastifyInstance) {
 
   // Get all bet metadata for a condition
   fastify.get<{ Params: { conditionId: string } }>('/by-condition/:conditionId', async (request) => {
-    const metadata = getBetMetadataByCondition(request.params.conditionId);
+    const metadata = await getBetMetadataByCondition(request.params.conditionId);
     return { data: metadata };
   });
 
   // Get all bet metadata
   fastify.get('/', async () => {
-    const metadata = getAllBetMetadata();
+    const metadata = await getAllBetMetadata();
     return { data: metadata };
   });
 
-  // Save/update bet metadata
+  // Save bet metadata (immutable — rejects if betId already exists)
   fastify.post<{ Params: { betId: string } }>('/:betId/metadata', async (request, reply) => {
     try {
       const betId = parseInt(request.params.betId, 10);
@@ -48,7 +48,12 @@ export async function betRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const metadata = saveBetMetadata({
+      const existing = await getBetMetadata(betId);
+      if (existing) {
+        return reply.status(409).send({ error: 'Bet metadata already exists and is immutable' });
+      }
+
+      const metadata = await saveBetMetadata({
         chainId: body.chainId || 137,
         betId,
         slug: body.slug || '',

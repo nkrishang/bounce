@@ -8,21 +8,27 @@
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@bounce/contracts": "workspace:*",
     "@bounce/shared": "workspace:*",
     "@fastify/cors": "^9.0.1",
     "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.45.1",
     "fastify": "^4.26.2",
+    "ioredis": "^5.4.1",
     "pino": "^8.19.0",
     "pino-pretty": "^11.0.0",
-    "ioredis": "^5.4.1",
+    "postgres": "^3.4.8",
     "viem": "^2.21.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
+    "drizzle-kit": "^0.31.9",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3"
   }

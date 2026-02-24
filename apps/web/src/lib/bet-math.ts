@@ -1,11 +1,16 @@
 'use client';
 
 import { formatUnits } from 'viem';
+import {
+  BPS_DENOMINATOR,
+  PROPOSER_CAPITAL_BPS,
+  PROPOSER_PROFIT_SHARE_BPS,
+  DEFAULT_EXPIRY_DAYS,
+} from '@bounce/shared';
 
-export const BPS_DENOMINATOR = 10000;
-export const DEFAULT_PROPOSER_CAPITAL_BPS = 2000; // 20%
-export const DEFAULT_PROPOSER_PROFIT_SHARE_BPS = 6000; // 60%
-export const DEFAULT_EXPIRY_DAYS = 7;
+export { BPS_DENOMINATOR, DEFAULT_EXPIRY_DAYS };
+export const DEFAULT_PROPOSER_CAPITAL_BPS = PROPOSER_CAPITAL_BPS;
+export const DEFAULT_PROPOSER_PROFIT_SHARE_BPS = PROPOSER_PROFIT_SHARE_BPS;
 
 /**
  * I1. Profit Comparison (1x vs 3x)
