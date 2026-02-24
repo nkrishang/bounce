@@ -16,6 +16,7 @@ export default function PolymarketPage() {
   const [selectedTokenId, setSelectedTokenId] = useState('');
   const [selectedOutcome, setSelectedOutcome] = useState('');
   const [selectedPrice, setSelectedPrice] = useState(0);
+  const [selectedOutcomeIndex, setSelectedOutcomeIndex] = useState(0);
   const [showProposeModal, setShowProposeModal] = useState(false);
 
   const handlePropose = (
@@ -23,13 +24,15 @@ export default function PolymarketPage() {
     market: PolymarketMarket,
     tokenId: string,
     outcome: string,
-    price: number
+    price: number,
+    outcomeIndex: number
   ) => {
     setSelectedEvent(event);
     setSelectedMarket(market);
     setSelectedTokenId(tokenId);
     setSelectedOutcome(outcome);
     setSelectedPrice(price);
+    setSelectedOutcomeIndex(outcomeIndex);
     setShowProposeModal(true);
   };
 
@@ -40,6 +43,7 @@ export default function PolymarketPage() {
     setSelectedTokenId('');
     setSelectedOutcome('');
     setSelectedPrice(0);
+    setSelectedOutcomeIndex(0);
   };
 
   return (
@@ -154,6 +158,7 @@ export default function PolymarketPage() {
         tokenId={selectedTokenId}
         outcome={selectedOutcome}
         price={selectedPrice}
+        outcomeIndex={selectedOutcomeIndex}
       />
     </div>
   );

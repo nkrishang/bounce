@@ -1,5 +1,20 @@
 import type { Address } from 'viem';
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+/**
+ * Throws if the BOUNCE address has not been set (still zero address).
+ * Call at the top of any hook or function that interacts with the Bounce contract.
+ */
+export function assertBounceConfigured(): void {
+  if (POLYMARKET_ADDRESSES.BOUNCE === ZERO_ADDRESS) {
+    throw new Error(
+      'Bounce contract address is not configured (still zero address). ' +
+      'Set POLYMARKET_ADDRESSES.BOUNCE to the deployed proxy address before using the app.',
+    );
+  }
+}
+
 export const POLYMARKET_ADDRESSES = {
   POLYMARKET_SAFE_FACTORY: '0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b' as Address,
   USDC: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174' as Address,

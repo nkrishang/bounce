@@ -13,7 +13,7 @@ import {
   zeroAddress,
 } from 'viem';
 import { polygon } from 'viem/chains';
-import { POLYMARKET_ADDRESSES, PolySafeFactoryAbi, GnosisSafeAbi } from '@bounce/contracts';
+import { POLYMARKET_ADDRESSES, PolySafeFactoryAbi, GnosisSafeAbi, assertBounceConfigured } from '@bounce/contracts';
 import { sendAndConfirm } from './transaction';
 
 interface SafeTxParams {
@@ -176,6 +176,7 @@ export async function ensureSafeReady(
   ownerAddress: Address,
   onStep?: (step: SafeReadyStep) => void,
 ): Promise<Address> {
+  assertBounceConfigured();
   const safeAddress = deriveSafeAddress(ownerAddress);
 
   onStep?.('deploying-safe');

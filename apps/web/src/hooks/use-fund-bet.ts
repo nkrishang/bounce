@@ -3,7 +3,8 @@
 import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { POLYMARKET_ADDRESSES, BounceAbi, ERC20Abi } from '@bounce/contracts';
+import { POLYMARKET_ADDRESSES, BounceAbi, ERC20Abi, assertBounceConfigured } from '@bounce/contracts';
+import { normalizeBet } from '@bounce/shared';
 import { createClients, getWalletAddress, sendAndConfirm } from '@/lib/transaction';
 
 type Step = 'idle' | 'approving' | 'funding' | 'success';
@@ -25,6 +26,7 @@ export function useFundBet() {
     async (betId: number) => {
       const wallet = wallets.find((w) => w.walletClientType === 'privy');
       if (!wallet) throw new Error('No Privy embedded wallet connected');
+      assertBounceConfigured();
 
       setIsLoading(true);
       setError(null);
@@ -37,14 +39,15 @@ export function useFundBet() {
         const address = await getWalletAddress(walletClient);
 
         // Read bet on-chain to get funder deposit amount
-        const bet = await publicClient.readContract({
+        const raw = await publicClient.readContract({
           address: POLYMARKET_ADDRESSES.BOUNCE,
           abi: BounceAbi,
           functionName: 'getBet',
           args: [BigInt(betId)],
-        }) as any;
+        });
+        const bet = normalizeBet(raw as Record<string, unknown>);
 
-        const totalCapital = bet.totalCapital as bigint;
+        const totalCapital = bet.totalCapital;
         const proposerDeposit = (totalCapital * BigInt(bet.proposerCapitalBps)) / 10000n;
         const funderDeposit = totalCapital - proposerDeposit;
 

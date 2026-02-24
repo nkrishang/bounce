@@ -3,8 +3,9 @@
 import { useState, useCallback } from 'react';
 import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
-import { type Address, keccak256, toBytes } from 'viem';
-import { POLYMARKET_ADDRESSES, BounceAbi, ERC20Abi } from '@bounce/contracts';
+import { type Address, parseEventLogs } from 'viem';
+import { POLYMARKET_ADDRESSES, BounceAbi, ERC20Abi, assertBounceConfigured } from '@bounce/contracts';
+import { validateConditionId } from '@bounce/shared';
 import { api } from '@/lib/api';
 import { createClients, getWalletAddress, sendAndConfirm } from '@/lib/transaction';
 import { ensureSafeReady } from '@/lib/polymarket-safe';
@@ -14,7 +15,8 @@ type Step = 'idle' | 'ensuring-safe' | 'approving' | 'proposing' | 'saving-metad
 
 interface ProposeBetParams {
   conditionId: string;
-  outcomeTokenId: string;
+  outcomeIndex: number; // actual index from token list position (not assumed from Yes/No)
+  outcomeTokenId: string; // CLOB token ID = CTF ERC1155 position ID
   isYesOutcome: boolean;
   stakeAmount: bigint; // proposer's 20% in USDC (6 decimals)
   marketSlug: string;
@@ -22,7 +24,6 @@ interface ProposeBetParams {
   marketImage?: string;
   outcomePrice: string;
   negRisk: boolean; // from market's negRisk field
-  positionId?: bigint; // optional, can be derived
 }
 
 export function useProposeBet() {
@@ -43,6 +44,8 @@ export function useProposeBet() {
       const wallet = wallets.find((w) => w.walletClientType === 'privy');
       if (!wallet) throw new Error('No Privy embedded wallet connected');
 
+      assertBounceConfigured();
+
       setIsLoading(true);
       setError(null);
 
@@ -58,12 +61,13 @@ export function useProposeBet() {
         const safeAddress = await ensureSafeReady(walletClient, publicClient, address);
 
         // Compute parameters
+        const conditionIdHex = validateConditionId(params.conditionId);
         const totalCapital = stakeToTotalCapital(params.stakeAmount);
         const exchange = params.negRisk
           ? POLYMARKET_ADDRESSES.NEG_RISK_CTF_EXCHANGE
           : POLYMARKET_ADDRESSES.CTF_EXCHANGE;
-        const outcomeIndex = params.isYesOutcome ? 0 : 1;
-        const positionId = params.positionId ?? 0n;
+        const outcomeIndex = params.outcomeIndex;
+        const positionId = BigInt(params.outcomeTokenId);
         const expiresAt = Math.floor(Date.now() / 1000) + DEFAULT_EXPIRY_DAYS * 86400;
 
         // Step 2: Approve USDC for Bounce contract
@@ -101,7 +105,7 @@ export function useProposeBet() {
               safeAddress,
               '0x0000000000000000000000000000000000000000' as Address, // open funder
               exchange,
-              params.conditionId as `0x${string}`,
+              conditionIdHex,
               outcomeIndex,
               positionId,
               totalCapital,
@@ -115,9 +119,15 @@ export function useProposeBet() {
         );
 
         // Parse BetProposed event to get betId
-        const betProposedTopic = keccak256(toBytes('BetProposed(uint256,address,address,address,address,bytes32,uint8,uint256,uint256,uint256,uint40,string)'));
-        const betLog = receipt.logs.find((log) => log.topics[0] === betProposedTopic);
-        const betId = betLog ? Number(BigInt(betLog.topics[1] || '0')) : 0;
+        const parsedLogs = parseEventLogs({
+          abi: BounceAbi,
+          logs: receipt.logs,
+          eventName: 'BetProposed',
+        });
+        if (parsedLogs.length === 0) {
+          throw new Error('BetProposed event not found in transaction receipt');
+        }
+        const betId = Number(parsedLogs[0].args.betId);
 
         // Step 4: Save off-chain metadata
         setStep('saving-metadata');

@@ -23,9 +23,10 @@ interface ProposeBetModalProps {
   tokenId: string;
   outcome: string;
   price: number;
+  outcomeIndex: number;
 }
 
-export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome, price }: ProposeBetModalProps) {
+export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome, price, outcomeIndex }: ProposeBetModalProps) {
   const { isAuthenticated, login, address } = useAuth();
   const { proposeBet, isLoading, step, error, reset } = useProposeBet();
   const [stakeAmount, setStakeAmount] = useState('10');
@@ -61,6 +62,7 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
       const stakeAmountBigint = parseUnits(stakeAmount, 6);
       await proposeBet({
         conditionId: market.conditionId || market.condition_id,
+        outcomeIndex,
         outcomeTokenId: tokenId,
         isYesOutcome: outcome.toLowerCase() === 'yes',
         stakeAmount: stakeAmountBigint,

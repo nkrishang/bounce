@@ -8,7 +8,7 @@ import type { PolymarketEvent, PolymarketMarket } from '@bounce/shared';
 import { MarketCard } from './market-card';
 
 interface MarketGridProps {
-  onPropose: (event: PolymarketEvent, market: PolymarketMarket, tokenId: string, outcome: string, price: number) => void;
+  onPropose: (event: PolymarketEvent, market: PolymarketMarket, tokenId: string, outcome: string, price: number, outcomeIndex: number) => void;
 }
 
 const PAGE_SIZE = 20;

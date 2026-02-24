@@ -4,8 +4,8 @@ import { Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { createPublicClient, http } from 'viem';
 import { polygon } from 'viem/chains';
-import { POLYMARKET_ADDRESSES, BounceAbi } from '@bounce/contracts';
-import type { BetMetadata, BetView, BetOnchain } from '@bounce/shared';
+import { POLYMARKET_ADDRESSES, BounceAbi, assertBounceConfigured } from '@bounce/contracts';
+import { type BetMetadata, type BetView, type BetOnchain, normalizeBet } from '@bounce/shared';
 import { BetStatus } from '@bounce/shared';
 import { api } from '@/lib/api';
 import { ProposalCard } from './proposal-card';
@@ -19,16 +19,18 @@ function useProposedBets() {
   return useQuery({
     queryKey: ['bets', 'proposed'],
     queryFn: async () => {
+      assertBounceConfigured();
       const { data: allMetadata } = await api.get<{ data: BetMetadata[] }>('/bets');
 
       const betViews: BetView[] = await Promise.all(
         allMetadata.map(async (metadata) => {
-          const bet = await publicClient.readContract({
+          const raw = await publicClient.readContract({
             address: POLYMARKET_ADDRESSES.BOUNCE,
             abi: BounceAbi,
             functionName: 'getBet',
             args: [BigInt(metadata.betId)],
-          }) as unknown as BetOnchain;
+          });
+          const bet = normalizeBet(raw as Record<string, unknown>);
           return { betId: metadata.betId, bet, metadata };
         }),
       );

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { type Address, createPublicClient, http } from 'viem';
 import { polygon } from 'viem/chains';
 import { POLYMARKET_ADDRESSES, BounceAbi } from '@bounce/contracts';
-import { type BetOnchain, type BetView, type BetMetadata } from '@bounce/shared';
+import { type BetOnchain, type BetView, type BetMetadata, normalizeBet, validateConditionId } from '@bounce/shared';
 import { api } from '@/lib/api';
 
 const publicClient = createPublicClient({
@@ -19,7 +19,7 @@ async function fetchBetOnchain(betId: number): Promise<BetOnchain> {
     functionName: 'getBet',
     args: [BigInt(betId)],
   });
-  return result as unknown as BetOnchain;
+  return normalizeBet(result as Record<string, unknown>);
 }
 
 async function fetchBetIds(address: Address): Promise<number[]> {
@@ -109,13 +109,13 @@ export function useBetsByCondition(conditionId: string | undefined) {
     queryKey: ['bets-by-condition', conditionId],
     queryFn: async () => {
       if (!conditionId) throw new Error('No conditionId');
-      const conditionIdHex = conditionId.startsWith('0x') ? conditionId : `0x${conditionId}`;
+      const conditionIdHex = validateConditionId(conditionId);
 
       const count = await publicClient.readContract({
         address: POLYMARKET_ADDRESSES.BOUNCE,
         abi: BounceAbi,
         functionName: 'getBetsByConditionIdCount',
-        args: [conditionIdHex as `0x${string}`],
+        args: [conditionIdHex],
       }) as bigint;
 
       if (count === 0n) return [];
@@ -124,7 +124,7 @@ export function useBetsByCondition(conditionId: string | undefined) {
         address: POLYMARKET_ADDRESSES.BOUNCE,
         abi: BounceAbi,
         functionName: 'getBetsByConditionId',
-        args: [conditionIdHex as `0x${string}`, 0n, count],
+        args: [conditionIdHex, 0n, count],
       }) as bigint[];
 
       return Promise.all(betIds.map((id) => fetchBetView(Number(id))));

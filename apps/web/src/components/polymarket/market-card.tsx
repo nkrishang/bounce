@@ -6,7 +6,7 @@ import type { PolymarketEvent, PolymarketMarket, PolymarketToken } from '@bounce
 
 interface MarketCardProps {
   event: PolymarketEvent;
-  onPropose: (event: PolymarketEvent, market: PolymarketMarket, tokenId: string, outcome: string, price: number) => void;
+  onPropose: (event: PolymarketEvent, market: PolymarketMarket, tokenId: string, outcome: string, price: number, outcomeIndex: number) => void;
 }
 
 function parseTokens(market: PolymarketMarket): PolymarketToken[] {
@@ -195,8 +195,10 @@ function ScrollableMarkets({ markets, event, onPropose }: { markets: PolymarketM
       >
         {[...markets].sort((a, b) => marketInterestScore(b) - marketInterestScore(a)).map((market) => {
           const tokens = parseTokens(market);
-          const yes = tokens.find((t) => t.outcome.toLowerCase() === 'yes');
-          const no = tokens.find((t) => t.outcome.toLowerCase() === 'no');
+          const yesIdx = tokens.findIndex((t) => t.outcome.toLowerCase() === 'yes');
+          const noIdx = tokens.findIndex((t) => t.outcome.toLowerCase() === 'no');
+          const yes = yesIdx >= 0 ? tokens[yesIdx] : undefined;
+          const no = noIdx >= 0 ? tokens[noIdx] : undefined;
           const yesPrice = yes?.price ?? 0.5;
           const noPrice = no?.price ?? (1 - yesPrice);
           return (
@@ -207,10 +209,10 @@ function ScrollableMarkets({ markets, event, onPropose }: { markets: PolymarketM
               </div>
               <div className="space-y-2">
                 <BetRow isYes={true} probability={yesPrice} onPropose={() => {
-                  if (yes) onPropose(event, market, yes.token_id, 'Yes', yesPrice);
+                  if (yes) onPropose(event, market, yes.token_id, 'Yes', yesPrice, yesIdx);
                 }} />
                 <BetRow isYes={false} probability={noPrice} onPropose={() => {
-                  if (no) onPropose(event, market, no.token_id, 'No', noPrice);
+                  if (no) onPropose(event, market, no.token_id, 'No', noPrice, noIdx);
                 }} />
               </div>
             </div>
@@ -263,8 +265,10 @@ export function MarketCard({ event, onPropose }: MarketCardProps) {
 
   const isSingleBinary = event.markets.length === 1;
   const singleTokens = isSingleBinary ? parseTokens(event.markets[0]) : [];
-  const yesToken = singleTokens.find((t) => t.outcome.toLowerCase() === 'yes');
-  const noToken = singleTokens.find((t) => t.outcome.toLowerCase() === 'no');
+  const yesTokenIdx = singleTokens.findIndex((t) => t.outcome.toLowerCase() === 'yes');
+  const noTokenIdx = singleTokens.findIndex((t) => t.outcome.toLowerCase() === 'no');
+  const yesToken = yesTokenIdx >= 0 ? singleTokens[yesTokenIdx] : undefined;
+  const noToken = noTokenIdx >= 0 ? singleTokens[noTokenIdx] : undefined;
   const probability = yesToken?.price ?? 0.5;
   const noProbability = noToken?.price ?? (1 - probability);
 
@@ -307,12 +311,10 @@ export function MarketCard({ event, onPropose }: MarketCardProps) {
       {isSingleBinary ? (
         <div className="px-4 pb-5 space-y-2">
           <BetRow isYes={true} probability={probability} onPropose={() => {
-            const token = singleTokens.find((t) => t.outcome.toLowerCase() === 'yes');
-            if (token) onPropose(event, event.markets[0], token.token_id, 'Yes', token.price);
+            if (yesToken) onPropose(event, event.markets[0], yesToken.token_id, 'Yes', yesToken.price, yesTokenIdx);
           }} />
           <BetRow isYes={false} probability={noProbability} onPropose={() => {
-            const token = singleTokens.find((t) => t.outcome.toLowerCase() === 'no');
-            if (token) onPropose(event, event.markets[0], token.token_id, 'No', token.price);
+            if (noToken) onPropose(event, event.markets[0], noToken.token_id, 'No', noToken.price, noTokenIdx);
           }} />
         </div>
       ) : (
