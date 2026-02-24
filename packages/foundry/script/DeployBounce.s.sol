@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 import {Script, console} from "forge-std/Script.sol";
-import {LibClone} from "solady/utils/LibClone.sol";
 import {Bounce} from "../src/bounce/Bounce.sol";
+import {BounceFactory} from "../src/bounce/BounceFactory.sol";
 
 /// @title DeployBounce
-/// @notice Deploys the Bounce singleton contract behind an ERC1967 UUPS proxy.
+/// @notice Deploys the Bounce singleton contract via BounceFactory for atomic initialization.
 contract DeployBounce is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
@@ -19,28 +19,24 @@ contract DeployBounce is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // Step 1: Deploy Bounce implementation contract.
-        Bounce impl = new Bounce();
-        console.log("Implementation deployed:", address(impl));
+        // Step 1: Deploy factory with deployer as the intended owner.
+        BounceFactory factory = new BounceFactory(deployer);
+        console.log("Factory deployed:", address(factory));
 
-        // Step 2: Deploy ERC1967 proxy pointing to implementation.
-        address proxy = LibClone.deployERC1967(address(impl));
-        console.log("Proxy deployed:", proxy);
-
-        // Step 3: Initialize the proxy with deployer as owner.
-        Bounce bounce = Bounce(proxy);
-        bounce.initialize(deployer);
-        console.log("Proxy initialized");
+        // Step 2: Atomically deploy implementation + proxy + initialize.
+        address proxy = factory.deploy();
+        console.log("Bounce deployed atomically via factory");
 
         vm.stopBroadcast();
 
-        // Step 4: Sanity checks.
+        // Step 3: Sanity checks.
+        Bounce bounce = Bounce(proxy);
         require(bounce.owner() == deployer, "Owner mismatch");
         require(bounce.nextBetId() == 1, "nextBetId mismatch");
 
         console.log("");
         console.log("=== Deployment Results ===");
-        console.log("Implementation:", address(impl));
+        console.log("Factory:", address(factory));
         console.log("Proxy (Bounce):", proxy);
         console.log("Owner:", bounce.owner());
         console.log("Next Bet ID:", bounce.nextBetId());

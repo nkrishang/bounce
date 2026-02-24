@@ -5,7 +5,9 @@ import {MockERC20} from "./MockERC20.sol";
 
 /// @title MockCTF
 /// @notice Mock Conditional Tokens Framework for testing Bounce.
-/// @dev Supports ERC1155-like balanceOf, setApprovalForAll, mint, burn, and redeemPositions.
+/// @dev Faithfully models real CTF authorization: safeTransferFrom enforces approval checks,
+///      but redeemPositions/splitPosition/mergePositions only operate on msg.sender's own tokens
+///      (no approval needed). See: github.com/gnosis/conditional-tokens-contracts
 contract MockCTF {
     /// @notice Approval status: owner => operator => approved.
     mapping(address => mapping(address => bool)) public isApprovedForAll;
@@ -25,7 +27,8 @@ contract MockCTF {
         usdc = _usdc;
     }
 
-    /// @notice Sets approval for an operator.
+    /// @notice Sets approval for an operator to transfer tokens on behalf of msg.sender.
+    /// @dev Matches real CTF: approval is required for safeTransferFrom when from != msg.sender.
     /// @param operator The operator address.
     /// @param approved Whether to approve or revoke.
     function setApprovalForAll(address operator, bool approved) external {
@@ -47,7 +50,7 @@ contract MockCTF {
         payoutPerShare[conditionId] = _payoutPerShare;
     }
 
-    /// @notice Mints position shares to an account.
+    /// @notice Mints position shares to an account (callable by exchange mock during buys).
     /// @param account The recipient.
     /// @param tokenId The ERC1155 token ID.
     /// @param amount The number of shares to mint.
@@ -55,18 +58,25 @@ contract MockCTF {
         balanceOf[account][tokenId] += amount;
     }
 
-    /// @notice Burns position shares from an account.
-    /// @param account The account to burn from.
-    /// @param tokenId The ERC1155 token ID.
-    /// @param amount The number of shares to burn.
-    function burn(address account, uint256 tokenId, uint256 amount) external {
-        require(balanceOf[account][tokenId] >= amount, "CTF: insufficient balance");
-        balanceOf[account][tokenId] -= amount;
+    /// @notice ERC1155 safeTransferFrom with approval enforcement.
+    /// @dev Matches real CTF: requires from == msg.sender OR isApprovedForAll[from][msg.sender].
+    ///      The Polymarket exchange calls this to pull shares from the Safe during sells.
+    /// @param from The token holder.
+    /// @param to The recipient.
+    /// @param id The ERC1155 token ID.
+    /// @param amount The number of tokens to transfer.
+    /// @param data Additional data (unused).
+    function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata data) external {
+        data; // silence unused warning
+        require(from == msg.sender || isApprovedForAll[from][msg.sender], "CTF: need operator approval");
+        require(balanceOf[from][id] >= amount, "CTF: insufficient balance");
+        balanceOf[from][id] -= amount;
+        balanceOf[to][id] += amount;
     }
 
-    /// @notice Redeems resolved positions for USDC.
-    /// @dev Burns all shares of the specified outcomes and transfers USDC payout to caller.
-    ///      For testing: uses payoutPerShare[conditionId] * shares burned.
+    /// @notice Redeems resolved conditional token positions for collateral (USDC).
+    /// @dev Faithfully models real CTF: operates on msg.sender's own balance only,
+    ///      no approval check needed. Burns ALL shares for each position in indexSets.
     /// @param collateralToken The collateral token (USDC).
     /// @param parentCollectionId Unused (bytes32(0) for root).
     /// @param conditionId The resolved condition ID.
@@ -85,6 +95,7 @@ contract MockCTF {
             uint256 positionId = uint256(keccak256(abi.encode(conditionId, indexSets[i])));
             uint256 shares = balanceOf[msg.sender][positionId];
             if (shares > 0) {
+                // Burns ALL shares (matches real CTF — no partial redemption).
                 balanceOf[msg.sender][positionId] = 0;
                 totalPayout += (shares * payoutPerShare[conditionId]) / 1e6;
             }
@@ -95,9 +106,6 @@ contract MockCTF {
             MockERC20(collateralToken).transfer(msg.sender, totalPayout);
         }
     }
-
-    /// @notice ERC1155 safeTransferFrom (simplified mock).
-    function safeTransferFrom(address, address, uint256, uint256, bytes calldata) external {}
 
     /// @notice Kept for backward compatibility with existing tests.
     function setPayoutDenominator(bytes32 conditionId, uint256 denominator) external {

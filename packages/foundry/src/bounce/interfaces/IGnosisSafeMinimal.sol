@@ -25,4 +25,11 @@ interface IGnosisSafeMinimal {
     /// @param owner The address to check.
     /// @return Whether the address is an owner.
     function isOwner(address owner) external view returns (bool);
+
+    /// @notice Reads raw storage from the Safe (inherited from StorageAccessible).
+    /// @dev Used to read the guard address from the isolated keccak storage slot.
+    /// @param offset The storage slot offset to read from.
+    /// @param length The number of 32-byte words to read.
+    /// @return Raw bytes of the storage contents.
+    function getStorageAt(uint256 offset, uint256 length) external view returns (bytes memory);
 }

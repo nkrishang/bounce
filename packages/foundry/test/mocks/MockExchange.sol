@@ -6,8 +6,13 @@ import {MockCTF} from "./MockCTF.sol";
 
 /// @title MockExchange
 /// @notice Mock Polymarket CTF Exchange for testing Bounce trade execution.
-/// @dev Simulates buy/sell operations: pulls USDC on buy and mints CTF shares,
-///      burns CTF shares on sell and transfers USDC.
+/// @dev Faithfully models real exchange behavior:
+///      - buy: pulls USDC from caller via ERC20 transferFrom, mints CTF shares to caller
+///      - sell: pulls CTF shares from caller via ERC1155 safeTransferFrom (requires approval),
+///        transfers USDC to caller
+///      See: github.com/Polymarket/ctf-exchange — the real exchange uses safeTransferFrom
+///      to pull ERC1155 tokens, which requires the seller to have called
+///      CTF.setApprovalForAll(exchange, true).
 contract MockExchange {
     /// @notice The USDC token used for trading.
     MockERC20 public usdc;
@@ -51,18 +56,23 @@ contract MockExchange {
     }
 
     /// @notice Simulates selling conditional token shares.
-    /// @dev Burns CTF shares from caller (Safe), transfers USDC to caller.
-    ///      Requires CTF.setApprovalForAll(exchange, true) to have been called.
+    /// @dev Pulls CTF shares from caller (Safe) via safeTransferFrom — requires
+    ///      CTF.setApprovalForAll(exchange, true) to have been called by the Safe.
+    ///      This matches real Polymarket exchange behavior where the exchange calls
+    ///      CTF.safeTransferFrom(seller, exchange, tokenId, amount, "") to pull shares.
     /// @param positionId The ERC1155 token ID for the position.
     /// @param sharesToSell The number of shares to sell.
     function sell(uint256 positionId, uint256 sharesToSell) external {
-        // Burn CTF shares from caller (the Safe).
-        ctf.burn(msg.sender, positionId, sharesToSell);
+        // Pull CTF shares from caller (the Safe) via safeTransferFrom.
+        // This will revert if CTF.setApprovalForAll(exchange, true) hasn't been called.
+        ctf.safeTransferFrom(msg.sender, address(this), positionId, sharesToSell, "");
 
         // Calculate USDC proceeds based on current price.
         uint256 usdcProceeds = (sharesToSell * pricePerShare) / 1e6;
 
         // Transfer USDC to caller (the Safe).
-        usdc.transfer(msg.sender, usdcProceeds);
+        if (usdcProceeds > 0) {
+            usdc.transfer(msg.sender, usdcProceeds);
+        }
     }
 }

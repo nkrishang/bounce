@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Bounce} from "../src/bounce/Bounce.sol";
+import {BounceFactory} from "../src/bounce/BounceFactory.sol";
 import {IGuard, Operation} from "../src/thesis/interfaces/IGuard.sol";
 import {LibClone} from "solady/utils/LibClone.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
@@ -143,7 +144,7 @@ contract BounceTest is Test {
         Bounce.Bet memory bet = bounce.getBet(betId);
         bytes memory sellData = abi.encodeWithSelector(MockExchange.sell.selector, POSITION_ID, bet.positionShares);
         vm.prank(proposer);
-        bounce.sellPosition(betId, bet.positionShares, 0, sellData);
+        bounce.sellPosition(betId, 0, sellData);
     }
 
     /// @notice Full flow: propose, fund, trade all capital.
@@ -171,6 +172,61 @@ contract BounceTest is Test {
         assertEq(bounce.version(), "1.0.0");
     }
 
+    function test_transferOwnership() public {
+        vm.prank(owner);
+        bounce.transferOwnership(randomUser);
+        assertEq(bounce.owner(), randomUser);
+    }
+
+    function test_transferOwnership_revertsIfNotOwner() public {
+        vm.prank(randomUser);
+        vm.expectRevert();
+        bounce.transferOwnership(randomUser);
+    }
+
+    function test_renounceOwnership() public {
+        vm.prank(owner);
+        bounce.renounceOwnership();
+        assertEq(bounce.owner(), address(0));
+    }
+
+    function test_upgrade_onlyOwner() public {
+        Bounce newImpl = new Bounce();
+        vm.prank(randomUser);
+        vm.expectRevert();
+        bounce.upgradeToAndCall(address(newImpl), "");
+    }
+
+    function test_upgrade_preservesState() public {
+        // Create a bet on V1.
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+
+        Bounce.Bet memory betBefore = bounce.getBet(betId);
+
+        // Deploy new implementation and upgrade.
+        Bounce newImpl = new Bounce();
+        vm.prank(owner);
+        bounce.upgradeToAndCall(address(newImpl), "");
+
+        // Verify all V1 bet data reads correctly after upgrade.
+        Bounce.Bet memory betAfter = bounce.getBet(betId);
+        assertEq(betAfter.safe, betBefore.safe);
+        assertEq(betAfter.proposer, betBefore.proposer);
+        assertEq(betAfter.funder, betBefore.funder);
+        assertEq(betAfter.exchange, betBefore.exchange);
+        assertEq(betAfter.conditionId, betBefore.conditionId);
+        assertEq(betAfter.totalCapital, betBefore.totalCapital);
+        assertEq(betAfter.escrowUSDC, betBefore.escrowUSDC);
+        assertTrue(betAfter.status == betBefore.status);
+
+        // Verify nextBetId preserved.
+        assertEq(bounce.nextBetId(), 2);
+
+        // Verify owner preserved.
+        assertEq(bounce.owner(), owner);
+    }
+
     // ============================================
     // 2. Guard Behavior Tests
     // ============================================
@@ -196,6 +252,69 @@ contract BounceTest is Test {
     function test_guard_checkAfterExecution_noop() public view {
         // Calling checkAfterExecution directly should not revert.
         bounce.checkAfterExecution(bytes32(0), true);
+    }
+
+    function test_guard_verifiedInProposeBet() public {
+        // Deploy new Safe without guard set.
+        MockSafeModule noGuardSafe = new MockSafeModule(proposer);
+        noGuardSafe.enableModule(address(bounce));
+        // Do NOT set guard.
+
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        vm.expectRevert(abi.encodeWithSelector(Bounce.GuardNotInstalled.selector, address(noGuardSafe)));
+        bounce.proposeBet(
+            address(noGuardSafe),
+            funder,
+            CTF_EXCHANGE,
+            CONDITION_ID,
+            OUTCOME_INDEX,
+            POSITION_ID,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            SLUG
+        );
+        vm.stopPrank();
+    }
+
+    function test_guard_verifiedInExecuteTrade() public {
+        // Create bet with properly configured Safe.
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+
+        // Remove guard from Safe.
+        safe.setGuard(address(0));
+
+        bytes memory tradeData = abi.encodeWithSelector(MockExchange.buy.selector, POSITION_ID, TOTAL_CAPITAL);
+        vm.prank(proposer);
+        vm.expectRevert(abi.encodeWithSelector(Bounce.GuardNotInstalled.selector, address(safe)));
+        bounce.executeTrade(betId, TOTAL_CAPITAL, tradeData);
+    }
+
+    function test_guard_verifiedInSellPosition() public {
+        uint256 betId = _proposeAndFundAndTrade();
+
+        // Remove guard from Safe.
+        safe.setGuard(address(0));
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        bytes memory sellData = abi.encodeWithSelector(MockExchange.sell.selector, POSITION_ID, bet.positionShares);
+        vm.prank(proposer);
+        vm.expectRevert(abi.encodeWithSelector(Bounce.GuardNotInstalled.selector, address(safe)));
+        bounce.sellPosition(betId, 0, sellData);
+    }
+
+    function test_guard_verifiedInRedeemPosition() public {
+        uint256 betId = _proposeAndFundAndTrade();
+
+        // Remove guard from Safe.
+        safe.setGuard(address(0));
+
+        ctf.setPayoutPerShare(CONDITION_ID, 1_000_000);
+        vm.prank(proposer);
+        vm.expectRevert(abi.encodeWithSelector(Bounce.GuardNotInstalled.selector, address(safe)));
+        bounce.redeemPosition(betId);
     }
 
     // ============================================
@@ -261,6 +380,7 @@ contract BounceTest is Test {
     function test_proposeBet_revertsIfModuleNotEnabled() public {
         // Deploy new Safe without enabling Bounce module.
         MockSafeModule newSafe = new MockSafeModule(proposer);
+        newSafe.setGuard(address(bounce));
 
         vm.startPrank(proposer);
         usdc.approve(address(bounce), type(uint256).max);
@@ -438,7 +558,7 @@ contract BounceTest is Test {
 
         vm.startPrank(randomUser);
         usdc.approve(address(bounce), type(uint256).max);
-        vm.expectRevert(Bounce.NotProposerOrFunder.selector);
+        vm.expectRevert(Bounce.NotFunder.selector);
         bounce.fundBet(betId);
         vm.stopPrank();
     }
@@ -591,6 +711,15 @@ contract BounceTest is Test {
         assertEq(bet2.escrowUSDC, 0);
     }
 
+    function test_executeTrade_approvalsResetToZero() public {
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+        _executeTrade(betId, TOTAL_CAPITAL);
+
+        // Verify exchange approval is 0 after trade.
+        assertEq(usdc.allowance(address(safe), CTF_EXCHANGE), 0);
+    }
+
     // ============================================
     // 7. sellPosition Tests
     // ============================================
@@ -608,6 +737,19 @@ contract BounceTest is Test {
         assertEq(betAfter.escrowUSDC, TOTAL_CAPITAL);
     }
 
+    function test_sellPosition_proposerCanSell() public {
+        uint256 betId = _proposeAndFundAndTrade();
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        bytes memory sellData = abi.encodeWithSelector(MockExchange.sell.selector, POSITION_ID, bet.positionShares);
+
+        vm.prank(proposer);
+        bounce.sellPosition(betId, 0, sellData);
+
+        Bounce.Bet memory betAfter = bounce.getBet(betId);
+        assertTrue(betAfter.status == Bounce.BetStatus.Closed);
+    }
+
     function test_sellPosition_funderCanSell() public {
         uint256 betId = _proposeAndFundAndTrade();
 
@@ -615,7 +757,7 @@ contract BounceTest is Test {
         bytes memory sellData = abi.encodeWithSelector(MockExchange.sell.selector, POSITION_ID, bet.positionShares);
 
         vm.prank(funder);
-        bounce.sellPosition(betId, bet.positionShares, 0, sellData);
+        bounce.sellPosition(betId, 0, sellData);
 
         Bounce.Bet memory betAfter = bounce.getBet(betId);
         assertTrue(betAfter.status == Bounce.BetStatus.Closed);
@@ -640,7 +782,7 @@ contract BounceTest is Test {
 
         vm.prank(proposer);
         vm.expectRevert();
-        bounce.sellPosition(betId, bet.positionShares, impossibleMin, sellData);
+        bounce.sellPosition(betId, impossibleMin, sellData);
     }
 
     function test_sellPosition_revertsIfNotTraded() public {
@@ -650,7 +792,7 @@ contract BounceTest is Test {
         bytes memory sellData = abi.encodeWithSelector(MockExchange.sell.selector, POSITION_ID, 100);
         vm.prank(proposer);
         vm.expectRevert();
-        bounce.sellPosition(betId, 100, 0, sellData);
+        bounce.sellPosition(betId, 0, sellData);
     }
 
     function test_sellPosition_setsCTFApprovalOnFirstCall() public {
@@ -664,7 +806,18 @@ contract BounceTest is Test {
         emit Bounce.SafeCtfApprovalSet(address(safe), CTF_EXCHANGE);
 
         vm.prank(proposer);
-        bounce.sellPosition(betId, bet.positionShares, 0, sellData);
+        bounce.sellPosition(betId, 0, sellData);
+    }
+
+    function test_sellPosition_revertsIfNotProposerOrFunder() public {
+        uint256 betId = _proposeAndFundAndTrade();
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        bytes memory sellData = abi.encodeWithSelector(MockExchange.sell.selector, POSITION_ID, bet.positionShares);
+
+        vm.prank(randomUser);
+        vm.expectRevert(Bounce.NotProposerOrFunder.selector);
+        bounce.sellPosition(betId, 0, sellData);
     }
 
     // ============================================
@@ -708,6 +861,17 @@ contract BounceTest is Test {
         bounce.redeemPosition(betId);
     }
 
+    function test_redeemPosition_proposerCanRedeem() public {
+        uint256 betId = _proposeAndFundAndTrade();
+        ctf.setPayoutPerShare(CONDITION_ID, 1_000_000);
+
+        vm.prank(proposer);
+        bounce.redeemPosition(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertTrue(bet.status == Bounce.BetStatus.Closed);
+    }
+
     function test_redeemPosition_funderCanRedeem() public {
         uint256 betId = _proposeAndFundAndTrade();
         ctf.setPayoutPerShare(CONDITION_ID, 1_000_000);
@@ -717,6 +881,15 @@ contract BounceTest is Test {
 
         Bounce.Bet memory bet = bounce.getBet(betId);
         assertTrue(bet.status == Bounce.BetStatus.Closed);
+    }
+
+    function test_redeemPosition_revertsIfNotProposerOrFunder() public {
+        uint256 betId = _proposeAndFundAndTrade();
+        ctf.setPayoutPerShare(CONDITION_ID, 1_000_000);
+
+        vm.prank(randomUser);
+        vm.expectRevert(Bounce.NotProposerOrFunder.selector);
+        bounce.redeemPosition(betId);
     }
 
     // ============================================
@@ -750,6 +923,36 @@ contract BounceTest is Test {
         assertTrue(betFinal.status == Bounce.BetStatus.Withdrawn);
         assertEq(betFinal.escrowUSDC, 0);
         assertEq(bounce.getActiveBetCount(address(safe)), 0);
+    }
+
+    function test_withdraw_profitCase_customBps() public {
+        // Propose with 50% proposer capital, 50% profit share.
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        uint256 betId = bounce.proposeBet(
+            address(safe), funder, CTF_EXCHANGE, CONDITION_ID, OUTCOME_INDEX, POSITION_ID, TOTAL_CAPITAL, 5000, 5000, SLUG
+        );
+        vm.stopPrank();
+
+        _fundBet(betId);
+        _executeTrade(betId, TOTAL_CAPITAL);
+
+        // Sell at $0.75 (profit).
+        exchange.setPrice(750_000);
+        _sellAllShares(betId);
+
+        uint256 proposerBefore = usdc.balanceOf(proposer);
+        uint256 funderBefore = usdc.balanceOf(funder);
+
+        vm.prank(proposer);
+        bounce.withdraw(betId);
+
+        // Profit = 500_000. ProposerProfit = 50% of 500_000 = 250_000.
+        // ProposerCapital = 50% of 1_000_000 = 500_000.
+        // ProposerAmount = 500_000 + 250_000 = 750_000.
+        // FunderAmount = 500_000 + 250_000 = 750_000.
+        assertEq(usdc.balanceOf(proposer), proposerBefore + 750_000);
+        assertEq(usdc.balanceOf(funder), funderBefore + 750_000);
     }
 
     function test_withdraw_lossWithinProposerCapital() public {
@@ -872,8 +1075,142 @@ contract BounceTest is Test {
         assertEq(bounce.getActiveBetCount(address(safe)), 1);
     }
 
+    function test_withdraw_revertsIfAlreadyWithdrawn() public {
+        uint256 betId = _proposeAndFundAndTrade();
+        _sellAllShares(betId);
+
+        vm.prank(proposer);
+        bounce.withdraw(betId);
+
+        vm.prank(proposer);
+        vm.expectRevert();
+        bounce.withdraw(betId);
+    }
+
     // ============================================
-    // 10. Full Lifecycle Integration Tests
+    // 10. Multi-bet Integration Tests
+    // ============================================
+
+    function test_multiBet_isolatedAccounting() public {
+        // Deploy MockExchange at NEG_RISK address too for a second market.
+        deployCodeTo(
+            "MockExchange.sol:MockExchange", abi.encode(USDC_ADDRESS, CTF_ADDR, uint256(500_000)), NEG_RISK_CTF_EXCHANGE
+        );
+        MockExchange exchange2 = MockExchange(NEG_RISK_CTF_EXCHANGE);
+        usdc.mint(NEG_RISK_CTF_EXCHANGE, 100_000_000);
+
+        // Bet 1: standard bet.
+        uint256 betId1 = _proposeBet();
+        _fundBet(betId1);
+        _executeTrade(betId1, TOTAL_CAPITAL);
+
+        // Bet 2: different market on same Safe.
+        bytes32 conditionId2 = bytes32(uint256(2));
+        uint256 indexSet2 = 1;
+        uint256 positionId2 = uint256(keccak256(abi.encode(conditionId2, indexSet2)));
+
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        uint256 betId2 = bounce.proposeBet(
+            address(safe), funder, NEG_RISK_CTF_EXCHANGE, conditionId2, 0, positionId2, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, "market-2"
+        );
+        vm.stopPrank();
+
+        vm.startPrank(funder);
+        usdc.approve(address(bounce), type(uint256).max);
+        bounce.fundBet(betId2);
+        vm.stopPrank();
+
+        // Trade bet 2 on neg risk exchange.
+        bytes memory tradeData2 = abi.encodeWithSelector(MockExchange.buy.selector, positionId2, TOTAL_CAPITAL);
+        vm.prank(proposer);
+        bounce.executeTrade(betId2, TOTAL_CAPITAL, tradeData2);
+
+        // Verify both bets tracked independently.
+        assertEq(bounce.getActiveBetCount(address(safe)), 2);
+
+        Bounce.Bet memory bet1 = bounce.getBet(betId1);
+        Bounce.Bet memory bet2 = bounce.getBet(betId2);
+        assertEq(bet1.escrowUSDC, 0);
+        assertEq(bet2.escrowUSDC, 0);
+        assertEq(bet1.positionShares, 2_000_000);
+        assertEq(bet2.positionShares, 2_000_000);
+
+        // Sell bet 1 at profit.
+        exchange.setPrice(750_000);
+        _sellAllShares(betId1);
+
+        // Bet 2 should be unaffected.
+        Bounce.Bet memory bet2AfterSell1 = bounce.getBet(betId2);
+        assertTrue(bet2AfterSell1.status == Bounce.BetStatus.Traded);
+        assertEq(bet2AfterSell1.positionShares, 2_000_000);
+
+        // Sell bet 2 at loss.
+        exchange2.setPrice(250_000);
+        Bounce.Bet memory bet2Data = bounce.getBet(betId2);
+        bytes memory sellData2 = abi.encodeWithSelector(MockExchange.sell.selector, positionId2, bet2Data.positionShares);
+        vm.prank(proposer);
+        bounce.sellPosition(betId2, 0, sellData2);
+
+        // Withdraw both independently.
+        vm.prank(proposer);
+        bounce.withdraw(betId1);
+        vm.prank(proposer);
+        bounce.withdraw(betId2);
+
+        assertEq(bounce.getActiveBetCount(address(safe)), 0);
+    }
+
+    function test_multiBet_cannotCreateDuplicateActiveBet() public {
+        _proposeBet();
+
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        vm.expectRevert();
+        bounce.proposeBet(
+            address(safe), funder, CTF_EXCHANGE, CONDITION_ID, OUTCOME_INDEX, POSITION_ID, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, SLUG
+        );
+        vm.stopPrank();
+    }
+
+    function test_multiBet_canCreateSameMarketAfterWithdrawal() public {
+        uint256 betId1 = _proposeAndFundAndTrade();
+        _sellAllShares(betId1);
+        vm.prank(proposer);
+        bounce.withdraw(betId1);
+
+        // Same market key should now be available.
+        uint256 betId2 = _proposeBet();
+        assertTrue(betId2 > betId1);
+        assertEq(bounce.getActiveBetCount(address(safe)), 1);
+    }
+
+    function test_multiBet_activeBetCountTracking() public {
+        assertEq(bounce.getActiveBetCount(address(safe)), 0);
+
+        uint256 betId1 = _proposeBet();
+        assertEq(bounce.getActiveBetCount(address(safe)), 1);
+
+        // Second bet on different condition.
+        bytes32 conditionId2 = bytes32(uint256(2));
+        uint256 positionId2 = uint256(keccak256(abi.encode(conditionId2, uint256(1))));
+
+        vm.startPrank(proposer);
+        usdc.approve(address(bounce), type(uint256).max);
+        bounce.proposeBet(
+            address(safe), funder, CTF_EXCHANGE, conditionId2, 0, positionId2, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, "market-2"
+        );
+        vm.stopPrank();
+        assertEq(bounce.getActiveBetCount(address(safe)), 2);
+
+        // Cancel bet 1.
+        vm.prank(proposer);
+        bounce.cancelBet(betId1);
+        assertEq(bounce.getActiveBetCount(address(safe)), 1);
+    }
+
+    // ============================================
+    // 11. Full Lifecycle Integration Tests
     // ============================================
 
     function test_fullLifecycle_profit() public {
@@ -962,7 +1299,7 @@ contract BounceTest is Test {
     }
 
     // ============================================
-    // 11. Sweep Tests
+    // 12. Sweep Tests
     // ============================================
 
     function test_sweep_safeOwnerCanSweepWhenNoBets() public {
@@ -985,5 +1322,81 @@ contract BounceTest is Test {
         vm.prank(proposer);
         vm.expectRevert();
         bounce.sweepSafeToken(address(safe), USDC_ADDRESS, proposer, 500_000);
+    }
+
+    function test_sweep_revertsIfNotSafeOwner() public {
+        usdc.mint(address(safe), 500_000);
+
+        vm.prank(randomUser);
+        vm.expectRevert(abi.encodeWithSelector(Bounce.SafeNotOwner.selector, address(safe), randomUser));
+        bounce.sweepSafeToken(address(safe), USDC_ADDRESS, randomUser, 500_000);
+    }
+
+    // ============================================
+    // 13. BounceFactory Tests
+    // ============================================
+
+    function test_factory_deploysAtomically() public {
+        BounceFactory factory = new BounceFactory(owner);
+
+        assertFalse(factory.deployed());
+        assertEq(factory.bounce(), address(0));
+
+        address proxy = factory.deploy();
+
+        assertTrue(factory.deployed());
+        assertEq(factory.bounce(), proxy);
+
+        Bounce deployed = Bounce(proxy);
+        assertEq(deployed.owner(), owner);
+        assertEq(deployed.nextBetId(), 1);
+        assertEq(deployed.version(), "1.0.0");
+    }
+
+    function test_factory_cannotDeployTwice() public {
+        BounceFactory factory = new BounceFactory(owner);
+        factory.deploy();
+
+        vm.expectRevert(BounceFactory.AlreadyDeployed.selector);
+        factory.deploy();
+    }
+
+    function test_factory_cannotFrontRunInitialize() public {
+        // Factory atomically deploys + initializes.
+        // After deploy, calling initialize on the proxy should revert.
+        BounceFactory factory = new BounceFactory(owner);
+        address proxy = factory.deploy();
+
+        vm.prank(randomUser);
+        vm.expectRevert();
+        Bounce(proxy).initialize(randomUser);
+    }
+
+    // ============================================
+    // 14. CTF Approval Model Tests (Mock Fidelity)
+    // ============================================
+
+    function test_ctfApproval_sellRequiresApproval() public {
+        uint256 betId = _proposeAndFundAndTrade();
+
+        // Verify: before first sell, CTF approval is NOT set for (safe, exchange).
+        assertFalse(ctf.isApprovedForAll(address(safe), CTF_EXCHANGE));
+
+        // First sell should set approval via Bounce's lazy setup.
+        _sellAllShares(betId);
+
+        // After sell, approval should be set.
+        assertTrue(ctf.isApprovedForAll(address(safe), CTF_EXCHANGE));
+    }
+
+    function test_ctfApproval_sellWithoutApprovalFails() public {
+        // This test verifies the mock CTF enforces approvals on safeTransferFrom.
+        // Directly calling exchange.sell without CTF approval should fail.
+        ctf.mint(address(this), POSITION_ID, 1000);
+        usdc.mint(CTF_EXCHANGE, 1_000_000);
+
+        // Attempt sell without approval — should revert.
+        vm.expectRevert("CTF: need operator approval");
+        exchange.sell(POSITION_ID, 1000);
     }
 }

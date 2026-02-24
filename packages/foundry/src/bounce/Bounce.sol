@@ -38,6 +38,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     /// @notice Guard interface ID that Safe 1.3.0 checks for.
     bytes4 private constant GUARD_INTERFACE_ID = 0xe6d7a83a;
 
+    /// @notice Safe 1.3.0 guard storage slot: keccak256("guard_manager.guard.address").
+    uint256 private constant GUARD_STORAGE_SLOT = 0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8;
+
     // ============================================
     // Enums
     // ============================================
@@ -152,7 +155,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     // ============================================
 
     error DirectSafeTxDisabled();
+    error NotAuthorized();
     error NotProposer();
+    error NotFunder();
     error NotProposerOrFunder();
     error InvalidStatus(BetStatus current, BetStatus required);
     error InvalidExchange(address exchange);
@@ -161,11 +166,14 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     error ZeroAmount();
     error SafeNotOwner(address safe, address caller);
     error ModuleNotEnabled(address safe);
+    error GuardNotInstalled(address safe);
     error ExecFromModuleFailed(address safe, address to);
     error PositionNotEmpty(uint256 positionShares);
     error ExceedsEscrow(uint256 requested, uint256 available);
+    error ExceedsShares(uint256 requested, uint256 available);
     error ActiveBetExists(bytes32 key, uint256 existingBetId);
     error NoSharesMinted();
+    error NoSharesSold();
     error SlippageExceeded(uint256 received, uint256 minimum);
 
     // ============================================
@@ -324,7 +332,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         if (bet.status != BetStatus.Proposed) revert InvalidStatus(bet.status, BetStatus.Proposed);
 
         // If funder is designated, only that address can fund. Otherwise, first caller becomes funder.
-        if (bet.funder != address(0) && bet.funder != msg.sender) revert NotProposerOrFunder();
+        if (bet.funder != address(0) && bet.funder != msg.sender) revert NotFunder();
         if (bet.funder == address(0)) {
             bet.funder = msg.sender;
         }
@@ -400,6 +408,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         address exchange = bet.exchange;
         uint256 positionId = bet.positionId;
 
+        // Verify Safe is properly configured (module enabled + guard installed).
+        _assertSafeReady(safe);
+
         // Snapshot Safe balances BEFORE funding to detect baseline.
         uint256 safeUsdcBaseline = IERC20(USDC).balanceOf(safe);
         uint256 sharesBefore = IConditionalTokensMinimal(CTF).balanceOf(safe, positionId);
@@ -448,14 +459,13 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
 
     /// @notice Sells conditional token positions on the exchange via the Safe module path.
     /// @dev Makes Safe sell on exchange, pulls USDC proceeds back to Bounce escrow.
+    ///      Polymarket uses a CLOB (Central Limit Order Book), so partial fills are expected
+    ///      when liquidity is insufficient. Call this function multiple times if needed.
+    ///      The bet transitions to Closed only when all position shares are sold.
     /// @param betId The bet ID whose position to sell.
-    /// @param sharesToSell Maximum shares to sell.
     /// @param minUsdcOut Minimum USDC to receive (slippage protection).
     /// @param sellData Encoded exchange calldata (e.g. CTF Exchange sell order).
-    function sellPosition(uint256 betId, uint256 sharesToSell, uint256 minUsdcOut, bytes calldata sellData)
-        external
-        nonReentrant
-    {
+    function sellPosition(uint256 betId, uint256 minUsdcOut, bytes calldata sellData) external nonReentrant {
         Bet storage bet = _bets[betId];
 
         // Must be in Traded status.
@@ -466,6 +476,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
 
         address safe = bet.safe;
         address exchange = bet.exchange;
+
+        // Verify Safe is properly configured (module enabled + guard installed).
+        _assertSafeReady(safe);
 
         // Ensure CTF approval is set for (safe, exchange) — lazy one-time setup.
         if (!_ctfApprovalSet[safe][exchange]) {
@@ -487,9 +500,12 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         uint256 usdcAfter = IERC20(USDC).balanceOf(safe);
         uint256 sharesAfter = IConditionalTokensMinimal(CTF).balanceOf(safe, bet.positionId);
 
-        // Validate: shares must have decreased, and not more than sharesToSell.
+        // Validate: shares must have decreased.
         uint256 sharesSold = sharesBefore - sharesAfter;
-        if (sharesSold == 0) revert NoSharesMinted(); // reusing error: no shares were actually sold
+        if (sharesSold == 0) revert NoSharesSold();
+
+        // Validate: shares sold must not exceed tracked position (prevents accounting underflow).
+        if (sharesSold > bet.positionShares) revert ExceedsShares(sharesSold, bet.positionShares);
 
         // Validate: USDC received meets slippage requirement.
         uint256 usdcDelta = usdcAfter - usdcBefore;
@@ -528,6 +544,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         if (msg.sender != bet.proposer && msg.sender != bet.funder) revert NotProposerOrFunder();
 
         address safe = bet.safe;
+
+        // Verify Safe is properly configured (module enabled + guard installed).
+        _assertSafeReady(safe);
 
         // Snapshot balances before redeem.
         uint256 usdcBefore = IERC20(USDC).balanceOf(safe);
@@ -714,10 +733,14 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     // Internal Helpers
     // ============================================
 
-    /// @notice Validates that the Safe has Bounce installed as module.
+    /// @notice Validates that the Safe has Bounce installed as both module and guard.
+    /// @dev Reads the guard from Safe's isolated keccak storage slot via getStorageAt.
     /// @param safe The Safe address to check.
     function _assertSafeReady(address safe) internal view {
         if (!IGnosisSafeMinimal(safe).isModuleEnabled(address(this))) revert ModuleNotEnabled(safe);
+        bytes memory guardData = IGnosisSafeMinimal(safe).getStorageAt(GUARD_STORAGE_SLOT, 1);
+        address guard = abi.decode(guardData, (address));
+        if (guard != address(this)) revert GuardNotInstalled(safe);
     }
 
     /// @notice Executes a call from the Safe via the module path.
