@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { type Address, createPublicClient, http } from 'viem';
 import { polygon } from 'viem/chains';
-import { POLYMARKET_ADDRESSES, BounceAbi, assertBounceConfigured } from '@bounce/contracts';
+import { POLYMARKET_ADDRESSES, BounceAbi, BouncePeripheryAbi, assertBounceConfigured } from '@bounce/contracts';
 import { type BetOnchain, type BetView, type BetMetadata, normalizeBet, validateConditionId } from '@bounce/shared';
 import { api } from '@/lib/api';
 
@@ -25,15 +25,15 @@ async function fetchBetOnchain(betId: number): Promise<BetOnchain> {
 
 async function fetchBetIds(address: Address): Promise<number[]> {
   const proposerCount = await publicClient.readContract({
-    address: POLYMARKET_ADDRESSES.BOUNCE,
-    abi: BounceAbi,
+    address: POLYMARKET_ADDRESSES.BOUNCE_PERIPHERY,
+    abi: BouncePeripheryAbi,
     functionName: 'getBetsByProposerCount',
     args: [address],
   }) as bigint;
 
   const funderCount = await publicClient.readContract({
-    address: POLYMARKET_ADDRESSES.BOUNCE,
-    abi: BounceAbi,
+    address: POLYMARKET_ADDRESSES.BOUNCE_PERIPHERY,
+    abi: BouncePeripheryAbi,
     functionName: 'getBetsByFunderCount',
     args: [address],
   }) as bigint;
@@ -42,8 +42,8 @@ async function fetchBetIds(address: Address): Promise<number[]> {
 
   if (proposerCount > 0n) {
     const proposerBetIds = await publicClient.readContract({
-      address: POLYMARKET_ADDRESSES.BOUNCE,
-      abi: BounceAbi,
+      address: POLYMARKET_ADDRESSES.BOUNCE_PERIPHERY,
+      abi: BouncePeripheryAbi,
       functionName: 'getBetsByProposer',
       args: [address, 0n, proposerCount],
     }) as bigint[];
@@ -52,8 +52,8 @@ async function fetchBetIds(address: Address): Promise<number[]> {
 
   if (funderCount > 0n) {
     const funderBetIds = await publicClient.readContract({
-      address: POLYMARKET_ADDRESSES.BOUNCE,
-      abi: BounceAbi,
+      address: POLYMARKET_ADDRESSES.BOUNCE_PERIPHERY,
+      abi: BouncePeripheryAbi,
       functionName: 'getBetsByFunder',
       args: [address, 0n, funderCount],
     }) as bigint[];
@@ -113,8 +113,8 @@ export function useBetsByCondition(conditionId: string | undefined) {
       const conditionIdHex = validateConditionId(conditionId);
 
       const count = await publicClient.readContract({
-        address: POLYMARKET_ADDRESSES.BOUNCE,
-        abi: BounceAbi,
+        address: POLYMARKET_ADDRESSES.BOUNCE_PERIPHERY,
+        abi: BouncePeripheryAbi,
         functionName: 'getBetsByConditionIdCount',
         args: [conditionIdHex],
       }) as bigint;
@@ -122,8 +122,8 @@ export function useBetsByCondition(conditionId: string | undefined) {
       if (count === 0n) return [];
 
       const betIds = await publicClient.readContract({
-        address: POLYMARKET_ADDRESSES.BOUNCE,
-        abi: BounceAbi,
+        address: POLYMARKET_ADDRESSES.BOUNCE_PERIPHERY,
+        abi: BouncePeripheryAbi,
         functionName: 'getBetsByConditionId',
         args: [conditionIdHex, 0n, count],
       }) as bigint[];
