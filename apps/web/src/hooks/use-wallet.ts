@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 
 const CHAIN_IDS: SupportedChainId[] = [137];
 
-export type ChainBalances = Record<SupportedChainId, string>;
+export type ChainBalances = Record<SupportedChainId, { usdc: string; native: string }>;
 
 export function useWalletBalances(address: Address | undefined) {
   return useQuery({
@@ -19,12 +19,17 @@ export function useWalletBalances(address: Address | undefined) {
         CHAIN_IDS.map(async (chainId) => {
           try {
             const usdc = TOKENS_BY_CHAIN[chainId].USDC;
-            const response = await api.get<{ data: { balance: string } }>(
-              `/tokens/${usdc}/balance/${address}?chainId=${chainId}`
-            );
-            return [chainId, response.data.balance] as const;
+            const [usdcRes, nativeRes] = await Promise.all([
+              api.get<{ data: { balance: string } }>(
+                `/tokens/${usdc}/balance/${address}?chainId=${chainId}`
+              ),
+              api.get<{ data: { balance: string } }>(
+                `/tokens/native/balance/${address}?chainId=${chainId}`
+              ),
+            ]);
+            return [chainId, { usdc: usdcRes.data.balance, native: nativeRes.data.balance }] as const;
           } catch {
-            return [chainId, '0'] as const;
+            return [chainId, { usdc: '0', native: '0' }] as const;
           }
         })
       );

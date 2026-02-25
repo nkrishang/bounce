@@ -92,7 +92,7 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">
-                        USDC Balances
+                        Balances
                       </span>
                       <motion.button
                         whileHover={{ scale: 1.05 }}
@@ -108,30 +108,49 @@ export function WalletModal({ open, onClose }: WalletModalProps) {
                     </div>
                     {([137] as const).map((chainId) => {
                       const chain = CHAIN_META[chainId];
-                      const bal = balances?.[chainId] ?? "0";
-                      const formatted = formatUnits(BigInt(bal), 6);
+                      const usdcBal = balances?.[chainId]?.usdc ?? "0";
+                      const nativeBal = balances?.[chainId]?.native ?? "0";
+                      const formattedUsdc = formatUnits(BigInt(usdcBal), 6);
+                      const formattedNative = formatUnits(BigInt(nativeBal), 18);
                       return (
-                        <div
-                          key={chainId}
-                          className="flex items-center justify-between p-3 rounded-lg bg-background border border-border"
-                        >
-                          <div className="flex items-center gap-2">
-                            <img
-                              src={chain.logo}
-                              alt={chain.name}
-                              className="w-5 h-5"
-                            />
-                            <span className="text-sm font-medium">
-                              {chain.name}
+                        <div key={chainId} className="space-y-2">
+                          <div className="flex items-center justify-between p-3 rounded-lg bg-background border border-border">
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={chain.logo}
+                                alt={chain.name}
+                                className="w-5 h-5"
+                              />
+                              <span className="text-sm font-medium">
+                                USDC.e
+                              </span>
+                            </div>
+                            <span className="font-mono text-sm">
+                              $
+                              {parseFloat(formattedUsdc).toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
                             </span>
                           </div>
-                          <span className="font-mono text-sm">
-                            $
-                            {parseFloat(formatted).toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            })}
-                          </span>
+                          <div className="flex items-center justify-between p-3 rounded-lg bg-background border border-border">
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={chain.logo}
+                                alt={chain.name}
+                                className="w-5 h-5"
+                              />
+                              <span className="text-sm font-medium">
+                                POL
+                              </span>
+                            </div>
+                            <span className="font-mono text-sm">
+                              {parseFloat(formattedNative).toLocaleString(undefined, {
+                                minimumFractionDigits: 4,
+                                maximumFractionDigits: 4,
+                              })}
+                            </span>
+                          </div>
                         </div>
                       );
                     })}
