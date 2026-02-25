@@ -349,17 +349,6 @@ contract BounceTest is Test {
         assertEq(bet.escrowUSDC, expectedDeposit);
         assertEq(usdc.balanceOf(proposer), proposerBalanceBefore - expectedDeposit);
 
-        // Verify indexes.
-        assertEq(bounce.getBetsByProposerCount(proposer), 1);
-        uint256[] memory proposerBets = bounce.getBetsByProposer(proposer, 0, 1);
-        assertEq(proposerBets.length, 1);
-        assertEq(proposerBets[0], betId);
-
-        assertEq(bounce.getBetsBySafeCount(address(safe)), 1);
-        uint256[] memory safeBets = bounce.getBetsBySafe(address(safe), 0, 1);
-        assertEq(safeBets.length, 1);
-        assertEq(safeBets[0], betId);
-
         assertEq(bounce.getActiveBetCount(address(safe)), 1);
     }
 
@@ -943,7 +932,17 @@ contract BounceTest is Test {
         vm.startPrank(proposer);
         usdc.approve(address(bounce), type(uint256).max);
         uint256 betId = bounce.proposeBet(
-            address(safe), funder, CTF_EXCHANGE, CONDITION_ID, OUTCOME_INDEX, POSITION_ID, TOTAL_CAPITAL, 5000, 5000, EXPIRES_AT, SLUG
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            CONDITION_ID,
+            OUTCOME_INDEX,
+            POSITION_ID,
+            TOTAL_CAPITAL,
+            5000,
+            5000,
+            EXPIRES_AT,
+            SLUG
         );
         vm.stopPrank();
 
@@ -1125,7 +1124,17 @@ contract BounceTest is Test {
         vm.startPrank(proposer);
         usdc.approve(address(bounce), type(uint256).max);
         uint256 betId2 = bounce.proposeBet(
-            address(safe), funder, NEG_RISK_CTF_EXCHANGE, conditionId2, 0, positionId2, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, EXPIRES_AT, "market-2"
+            address(safe),
+            funder,
+            NEG_RISK_CTF_EXCHANGE,
+            conditionId2,
+            0,
+            positionId2,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
+            "market-2"
         );
         vm.stopPrank();
 
@@ -1161,7 +1170,8 @@ contract BounceTest is Test {
         // Sell bet 2 at loss.
         exchange2.setPrice(250_000);
         Bounce.Bet memory bet2Data = bounce.getBet(betId2);
-        bytes memory sellData2 = abi.encodeWithSelector(MockExchange.sell.selector, positionId2, bet2Data.positionShares);
+        bytes memory sellData2 =
+            abi.encodeWithSelector(MockExchange.sell.selector, positionId2, bet2Data.positionShares);
         vm.prank(proposer);
         bounce.sellPosition(betId2, 0, sellData2);
 
@@ -1181,7 +1191,17 @@ contract BounceTest is Test {
         usdc.approve(address(bounce), type(uint256).max);
         vm.expectRevert();
         bounce.proposeBet(
-            address(safe), funder, CTF_EXCHANGE, CONDITION_ID, OUTCOME_INDEX, POSITION_ID, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, EXPIRES_AT, SLUG
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            CONDITION_ID,
+            OUTCOME_INDEX,
+            POSITION_ID,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
+            SLUG
         );
         vm.stopPrank();
     }
@@ -1211,7 +1231,17 @@ contract BounceTest is Test {
         vm.startPrank(proposer);
         usdc.approve(address(bounce), type(uint256).max);
         bounce.proposeBet(
-            address(safe), funder, CTF_EXCHANGE, conditionId2, 0, positionId2, TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, EXPIRES_AT, "market-2"
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            conditionId2,
+            0,
+            positionId2,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
+            "market-2"
         );
         vm.stopPrank();
         assertEq(bounce.getActiveBetCount(address(safe)), 2);
@@ -1520,12 +1550,10 @@ contract BounceTest is Test {
     function test_factory_deploysAtomically() public {
         BounceFactory factory = new BounceFactory(owner);
 
-        assertFalse(factory.deployed());
         assertEq(factory.bounce(), address(0));
 
         address proxy = factory.deploy();
 
-        assertTrue(factory.deployed());
         assertEq(factory.bounce(), proxy);
 
         Bounce deployed = Bounce(proxy);

@@ -16,12 +16,7 @@ contract BounceFactory {
     /// @notice The deployed Bounce proxy address (set after deploy).
     address public bounce;
 
-    /// @notice Whether deploy has been called.
-    bool public deployed;
-
     error AlreadyDeployed();
-
-    event BounceDeployed(address indexed proxy, address indexed implementation, address indexed owner);
 
     /// @param owner_ The owner address for the Bounce contract.
     constructor(address owner_) {
@@ -32,8 +27,7 @@ contract BounceFactory {
     /// @dev Can only be called once. All three steps happen in a single transaction.
     /// @return proxy The address of the initialized Bounce proxy.
     function deploy() external returns (address proxy) {
-        if (deployed) revert AlreadyDeployed();
-        deployed = true;
+        if (bounce != address(0)) revert AlreadyDeployed();
 
         // Step 1: Deploy Bounce implementation.
         Bounce impl = new Bounce();
@@ -45,7 +39,5 @@ contract BounceFactory {
         Bounce(proxy).initialize(owner);
 
         bounce = proxy;
-
-        emit BounceDeployed(proxy, address(impl), owner);
     }
 }

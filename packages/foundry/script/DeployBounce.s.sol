@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Script, console} from "forge-std/Script.sol";
 import {Bounce} from "../src/bounce/Bounce.sol";
 import {BounceFactory} from "../src/bounce/BounceFactory.sol";
+import {BouncePeriphery} from "../src/bounce/BouncePeriphery.sol";
 
 /// @title DeployBounce
 /// @notice Deploys the Bounce singleton contract via BounceFactory for atomic initialization.
@@ -27,9 +28,13 @@ contract DeployBounce is Script {
         address proxy = factory.deploy();
         console.log("Bounce deployed atomically via factory");
 
+        // Step 3: Deploy periphery contract pointing to the proxy.
+        BouncePeriphery periphery = new BouncePeriphery(proxy);
+        console.log("BouncePeriphery deployed:", address(periphery));
+
         vm.stopBroadcast();
 
-        // Step 3: Sanity checks.
+        // Step 4: Sanity checks.
         Bounce bounce = Bounce(proxy);
         require(bounce.owner() == deployer, "Owner mismatch");
         require(bounce.nextBetId() == 1, "nextBetId mismatch");
@@ -38,6 +43,7 @@ contract DeployBounce is Script {
         console.log("=== Deployment Results ===");
         console.log("Factory:", address(factory));
         console.log("Proxy (Bounce):", proxy);
+        console.log("Periphery:", address(periphery));
         console.log("Owner:", bounce.owner());
         console.log("Next Bet ID:", bounce.nextBetId());
         console.log("Version:", bounce.version());
