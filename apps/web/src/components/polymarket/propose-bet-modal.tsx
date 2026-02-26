@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, TrendingUp, Shield, Loader2, Check, Minus, Plus } from 'lucide-react';
+import { X, TrendingUp, Shield, Loader2, Check, Minus, Plus, AlertTriangle } from 'lucide-react';
 import type { PolymarketEvent, PolymarketMarket } from '@bounce/shared';
 import { useAuth } from '@/hooks/use-auth';
 import { useProposeBet } from '@/hooks/use-propose-bet';
+import { useProposePreflight } from '@/hooks/use-propose-preflight';
 import { parseUnits } from 'viem';
 import {
   computeProfitComparison,
@@ -33,6 +34,8 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
   const { isAuthenticated, login, address } = useAuth();
   const { proposeBet, isLoading, step, error, reset } = useProposeBet();
   const [stakeAmount, setStakeAmount] = useState(String(MIN_STAKE));
+  const stakeNum = parseFloat(stakeAmount) || 0;
+  const preflight = useProposePreflight(address as `0x${string}` | undefined, stakeNum);
 
   useEffect(() => {
     if (!open) {
@@ -51,7 +54,6 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
     };
   }, [open, reset]);
 
-  const stakeNum = parseFloat(stakeAmount) || 0;
   const isValidStake = stakeNum >= MIN_STAKE;
   const totalPosition = stakeNum * (10000 / DEFAULT_PROPOSER_CAPITAL_BPS);
   const funderPortion = totalPosition - stakeNum;
@@ -59,6 +61,22 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
 
   const profitComparison = price > 0 && isValidStake ? computeProfitComparison(stakeNum, price) : null;
   const wipeoutPrice = price > 0 ? computeWipeoutPrice(price) : 0;
+
+  // Build the dynamic step list for the visual stepper
+  const txSteps = useMemo(() => {
+    const steps: { key: string; label: string }[] = [];
+    if (!preflight.safeReady) {
+      steps.push({ key: 'ensuring-safe', label: 'Setup Safe' });
+    }
+    steps.push({ key: 'approving', label: 'Approve' });
+    steps.push({ key: 'proposing', label: 'Propose' });
+    return steps;
+  }, [preflight.safeReady]);
+
+  // Map hook step to stepper state
+  const activeStepKey = isLoading ? step : step === 'success' ? '__done__' : null;
+  const stepKeyOrder = ['ensuring-safe', 'approving', 'proposing', 'saving-metadata', '__done__'];
+  const activeIdx = activeStepKey ? stepKeyOrder.indexOf(activeStepKey) : -1;
 
   const adjustStake = useCallback((delta: number) => {
     setStakeAmount((prev) => {
@@ -353,9 +371,96 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                   </div>
                 </div>
 
+                {/* Pre-flight warnings */}
+                {isAuthenticated && !preflight.isLoading && (
+                  <>
+                    {!preflight.hasEnoughUsdc && isValidStake && (
+                      <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+                        <p className="text-xs text-danger">
+                          Insufficient USDC balance. You need ${stakeNum.toLocaleString()} but have ${preflight.usdcBalance.toFixed(2)}.
+                        </p>
+                      </div>
+                    )}
+                    {!preflight.hasEnoughGas && (
+                      <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+                        <p className="text-xs text-danger">
+                          Low POL balance for gas fees. Please add POL to your wallet.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Transaction stepper — visible when safe needs setup or tx is in progress */}
+                {isAuthenticated && (isLoading || step === 'success' || (!preflight.isLoading && !preflight.safeReady)) && (
+                  <div className="px-2 py-3">
+                    <div className="flex items-center">
+                      {txSteps.map((s, i) => {
+                        const sIdx = stepKeyOrder.indexOf(s.key);
+                        const isCompleted = activeIdx > sIdx;
+                        const isActive = activeIdx === sIdx;
+                        return (
+                          <div key={s.key} className="flex items-center flex-1 last:flex-none">
+                            {/* Step circle + label */}
+                            <div className="flex flex-col items-center gap-1.5">
+                              <div
+                                className="w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300"
+                                style={{
+                                  background: isCompleted
+                                    ? '#D4AD4A'
+                                    : isActive
+                                      ? 'rgba(212,173,74,0.15)'
+                                      : 'rgba(255,255,255,0.05)',
+                                  border: isActive
+                                    ? '2px solid #D4AD4A'
+                                    : isCompleted
+                                      ? '2px solid #D4AD4A'
+                                      : '2px solid rgba(255,255,255,0.1)',
+                                }}
+                              >
+                                {isCompleted ? (
+                                  <Check className="w-3.5 h-3.5 text-black" />
+                                ) : isActive ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: '#D4AD4A' }} />
+                                ) : (
+                                  <span className="text-[10px] font-bold text-white/30">{i + 1}</span>
+                                )}
+                              </div>
+                              <span
+                                className="text-[10px] font-medium whitespace-nowrap transition-colors duration-300"
+                                style={{
+                                  color: isCompleted || isActive ? '#D4AD4A' : 'rgba(255,255,255,0.3)',
+                                }}
+                              >
+                                {s.label}
+                              </span>
+                            </div>
+                            {/* Connector line */}
+                            {i < txSteps.length - 1 && (
+                              <div className="flex-1 h-0.5 mx-2 mb-5 rounded-full overflow-hidden bg-white/5">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{
+                                    width: isCompleted ? '100%' : '0%',
+                                    background: '#D4AD4A',
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {error && (
                   <div className="p-3 rounded-xl bg-danger/10 border border-danger/20">
-                    <p className="text-xs text-danger">{error}</p>
+                    <p className="text-sm font-semibold text-danger">{error.title}</p>
+                    <p className="text-xs text-danger/80 mt-1">{error.message}</p>
+                    <p className="text-[10px] text-danger/50 mt-2 font-mono">Ref: {error.errorId}</p>
                   </div>
                 )}
 
@@ -379,7 +484,11 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                     whileHover={!isLoading && step !== 'success' ? { scale: 1.01 } : {}}
                     whileTap={!isLoading && step !== 'success' ? { scale: 0.99 } : {}}
                     onClick={handlePropose}
-                    disabled={isLoading || step === 'success' || !isValidStake}
+                    disabled={
+                      isLoading || step === 'success' || !isValidStake ||
+                      (isAuthenticated && !preflight.hasEnoughUsdc && isValidStake) ||
+                      (isAuthenticated && !preflight.hasEnoughGas)
+                    }
                     className="w-full py-3.5 rounded-xl font-bold text-[15px] disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2 transition-all duration-200"
                     style={
                       step === 'success'

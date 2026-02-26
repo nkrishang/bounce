@@ -9,9 +9,14 @@ import { validateConditionId } from '@bounce/shared';
 import { api } from '@/lib/api';
 import { createClients, getWalletAddress, sendAndConfirm } from '@/lib/transaction';
 import { ensureSafeReady } from '@/lib/polymarket-safe';
+import { parseTransactionError, type ParsedError } from '@/lib/parse-transaction-error';
 import { stakeToTotalCapital, DEFAULT_PROPOSER_CAPITAL_BPS, DEFAULT_PROPOSER_PROFIT_SHARE_BPS, DEFAULT_EXPIRY_DAYS } from '@/lib/bet-math';
 
 type Step = 'idle' | 'ensuring-safe' | 'approving' | 'proposing' | 'saving-metadata' | 'success';
+
+export interface ProposeBetError extends ParsedError {
+  errorId: string;
+}
 
 interface ProposeBetParams {
   conditionId: string;
@@ -32,7 +37,7 @@ export function useProposeBet() {
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<Step>('idle');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ProposeBetError | null>(null);
 
   const reset = useCallback(() => {
     setStep('idle');
@@ -151,8 +156,10 @@ export function useProposeBet() {
         setStep('success');
         return { betId, hash };
       } catch (err) {
-        console.error('Propose bet error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to propose bet');
+        const parsed = parseTransactionError(err);
+        const errorId = `PB-${Date.now().toString(36)}`;
+        console.error(`[${errorId}] Propose bet error:`, err);
+        setError({ ...parsed, errorId });
         setStep('idle');
         throw err;
       } finally {
