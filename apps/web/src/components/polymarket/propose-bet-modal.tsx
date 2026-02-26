@@ -61,7 +61,7 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
     if (step !== 'success') return;
     const timer = setTimeout(() => {
       onClose();
-      router.push('/my-bets');
+      router.push('/my-bets?tab=proposed');
     }, 2000);
     return () => clearTimeout(timer);
   }, [step, onClose, router]);

@@ -9,6 +9,7 @@ import type { PolymarketEvent, PolymarketMarket } from '@bounce/shared';
 import { ProposalsCarousel } from '@/components/polymarket/proposals-carousel';
 import { MarketGrid } from '@/components/polymarket/market-grid';
 import { ProposeBetModal } from '@/components/polymarket/propose-bet-modal';
+import { ProposalsDrawer } from '@/components/polymarket/proposals-drawer';
 
 export default function PolymarketPage() {
   const [selectedEvent, setSelectedEvent] = useState<PolymarketEvent | null>(null);
@@ -18,6 +19,15 @@ export default function PolymarketPage() {
   const [selectedPrice, setSelectedPrice] = useState(0);
   const [selectedOutcomeIndex, setSelectedOutcomeIndex] = useState(0);
   const [showProposeModal, setShowProposeModal] = useState(false);
+  const [showProposalsDrawer, setShowProposalsDrawer] = useState(false);
+  const [drawerConditionId, setDrawerConditionId] = useState('');
+  const [drawerMarketQuestion, setDrawerMarketQuestion] = useState('');
+
+  const handleProtection = (conditionId: string, marketQuestion: string) => {
+    setDrawerConditionId(conditionId);
+    setDrawerMarketQuestion(marketQuestion);
+    setShowProposalsDrawer(true);
+  };
 
   const handlePropose = (
     event: PolymarketEvent,
@@ -145,7 +155,7 @@ export default function PolymarketPage() {
             </p>
           </div>
 
-          <MarketGrid onPropose={handlePropose} />
+          <MarketGrid onPropose={handlePropose} onProtection={handleProtection} />
         </div>
       </section>
 
@@ -159,6 +169,14 @@ export default function PolymarketPage() {
         outcome={selectedOutcome}
         price={selectedPrice}
         outcomeIndex={selectedOutcomeIndex}
+      />
+
+      {/* Proposals Drawer */}
+      <ProposalsDrawer
+        open={showProposalsDrawer}
+        onClose={() => setShowProposalsDrawer(false)}
+        conditionId={drawerConditionId}
+        marketQuestion={drawerMarketQuestion}
       />
     </div>
   );

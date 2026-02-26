@@ -10,9 +10,10 @@ import { formatUsdc } from '@/lib/bet-math';
 
 interface ProposalCardProps {
   betView: BetView;
+  fullWidth?: boolean;
 }
 
-export function ProposalCard({ betView }: ProposalCardProps) {
+export function ProposalCard({ betView, fullWidth }: ProposalCardProps) {
   const [showFundModal, setShowFundModal] = useState(false);
 
   const { bet, metadata } = betView;
@@ -23,7 +24,7 @@ export function ProposalCard({ betView }: ProposalCardProps) {
 
   return (
     <>
-      <div className="w-[360px] flex-shrink-0 rounded-2xl border border-dark-border bg-dark-surface p-6 flex flex-col gap-5">
+      <div className={`${fullWidth ? 'w-full' : 'w-[360px]'} flex-shrink-0 rounded-2xl border border-dark-border bg-dark-surface p-6 flex flex-col gap-5`}>
         {/* Header */}
         <div className="flex items-start gap-3">
           {metadata?.marketImage && (

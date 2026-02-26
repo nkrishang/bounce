@@ -1,45 +1,8 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { createPublicClient, http } from 'viem';
-import { polygon } from 'viem/chains';
-import { POLYMARKET_ADDRESSES, BounceAbi, assertBounceConfigured } from '@bounce/contracts';
-import { type BetMetadata, type BetView, type BetOnchain, normalizeBet } from '@bounce/shared';
-import { BetStatus } from '@bounce/shared';
-import { api } from '@/lib/api';
+import { useProposedBets } from '@/hooks/use-proposed-bets';
 import { ProposalCard } from './proposal-card';
-
-const publicClient = createPublicClient({
-  chain: polygon,
-  transport: http(process.env.NEXT_PUBLIC_POLYGON_RPC_URL || ''),
-});
-
-function useProposedBets() {
-  return useQuery({
-    queryKey: ['bets', 'proposed'],
-    queryFn: async () => {
-      assertBounceConfigured();
-      const { data: allMetadata } = await api.get<{ data: BetMetadata[] }>('/bets');
-
-      const betViews: BetView[] = await Promise.all(
-        allMetadata.map(async (metadata) => {
-          const raw = await publicClient.readContract({
-            address: POLYMARKET_ADDRESSES.BOUNCE,
-            abi: BounceAbi,
-            functionName: 'getBet',
-            args: [BigInt(metadata.betId)],
-          });
-          const bet = normalizeBet(raw as Record<string, unknown>);
-          return { betId: metadata.betId, bet, metadata };
-        }),
-      );
-
-      return betViews.filter((bv) => bv.bet.status === BetStatus.Proposed);
-    },
-    refetchInterval: 30_000,
-  });
-}
 
 export function ProposalsCarousel() {
   const { data: betViews, isLoading, error } = useProposedBets();
@@ -63,16 +26,6 @@ export function ProposalsCarousel() {
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Active Bet Proposals
           </h2>
-          <span
-            className="inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border"
-            style={{
-              color: '#61A6FB',
-              borderColor: 'rgba(97, 166, 251, 0.3)',
-              background: 'rgba(97, 166, 251, 0.08)',
-            }}
-          >
-            For Backers
-          </span>
         </div>
         <p className="text-sm text-muted-foreground">
           Fund proposed Polymarket bets. You cover 80%, Believer covers 20% first-loss.

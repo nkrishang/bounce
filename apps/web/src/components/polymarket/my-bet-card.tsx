@@ -1,12 +1,14 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Shield, TrendingUp, User, Clock, CheckCircle, BarChart3, XCircle, ArrowDownToLine, Loader2 } from 'lucide-react';
+import { Shield, TrendingUp, User, Clock, CheckCircle, BarChart3, XCircle, ArrowDownToLine, Loader2, AlertTriangle, Check } from 'lucide-react';
 import type { BetView } from '@bounce/shared';
 import { BetStatus, formatAddress } from '@bounce/shared';
 import { formatUsdc } from '@/lib/bet-math';
+import { useAuth } from '@/hooks/use-auth';
 import { useCancelBet } from '@/hooks/use-cancel-bet';
 import { useWithdrawBet } from '@/hooks/use-withdraw-bet';
+import { useGasPreflight } from '@/hooks/use-gas-preflight';
 
 interface MyBetCardProps {
   betView: BetView;
@@ -24,8 +26,10 @@ const statusConfig: Record<number, { label: string; color: string; bg: string; i
 
 export function MyBetCard({ betView, role }: MyBetCardProps) {
   const { bet, metadata } = betView;
-  const { cancelBet, isLoading: isCancelling } = useCancelBet();
-  const { withdrawBet, isLoading: isWithdrawing } = useWithdrawBet();
+  const { address } = useAuth();
+  const { cancelBet, isLoading: isCancelling, step: cancelStep, error: cancelError, reset: resetCancel } = useCancelBet();
+  const { withdrawBet, isLoading: isWithdrawing, step: withdrawStep, error: withdrawError, reset: resetWithdraw } = useWithdrawBet();
+  const preflight = useGasPreflight(address as `0x${string}` | undefined);
 
   const proposerStake = (bet.totalCapital * BigInt(bet.proposerCapitalBps)) / 10000n;
   const funderPortion = bet.totalCapital - proposerStake;
@@ -33,6 +37,26 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
   const isYesOutcome = metadata?.isYesOutcome ?? true;
   const status = statusConfig[bet.status] ?? statusConfig[BetStatus.Proposed];
   const StatusIcon = status.icon;
+
+  const showCancelCta = bet.status === BetStatus.Proposed && role === 'believer';
+  const showWithdrawCta = bet.status === BetStatus.Closed;
+
+  const gasBlocked = !preflight.isLoading && !preflight.hasEnoughGas;
+  const activeError = showCancelCta ? cancelError : showWithdrawCta ? withdrawError : null;
+
+  const handleCancel = async () => {
+    resetCancel();
+    try {
+      await cancelBet(betView.betId);
+    } catch { /* error handled by hook */ }
+  };
+
+  const handleWithdraw = async () => {
+    resetWithdraw();
+    try {
+      await withdrawBet(betView.betId);
+    } catch { /* error handled by hook */ }
+  };
 
   return (
     <motion.div
@@ -120,36 +144,70 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
         <span className="text-sm font-medium" style={{ color: status.color }}>{status.label}</span>
       </div>
 
-      {/* CTA Buttons */}
-      {bet.status === BetStatus.Proposed && role === 'believer' && (
+      {/* Gas warning */}
+      {(showCancelCta || showWithdrawCta) && gasBlocked && (
+        <div className="p-2.5 rounded-xl bg-danger/10 border border-danger/20 flex items-start gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 text-danger shrink-0 mt-0.5" />
+          <p className="text-[11px] text-danger">
+            Low POL balance for gas fees. Please add POL to your wallet.
+          </p>
+        </div>
+      )}
+
+      {/* Error display */}
+      {activeError && (
+        <div className="p-2.5 rounded-xl bg-danger/10 border border-danger/20">
+          <p className="text-xs font-semibold text-danger">{activeError.title}</p>
+          <p className="text-[11px] text-danger/80 mt-0.5">{activeError.message}</p>
+          <p className="text-[10px] text-danger/50 mt-1 font-mono">Ref: {activeError.errorId}</p>
+        </div>
+      )}
+
+      {/* Cancel Bet CTA */}
+      {showCancelCta && (
         <button
-          onClick={() => cancelBet(betView.betId)}
-          disabled={isCancelling}
-          className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
-          style={{
-            background: 'rgba(239, 68, 68, 0.08)',
-            border: '1px solid rgba(239, 68, 68, 0.25)',
-            color: '#ef4444',
-          }}
+          onClick={handleCancel}
+          disabled={isCancelling || cancelStep === 'success' || preflight.isLoading || gasBlocked}
+          className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+          style={
+            cancelStep === 'success'
+              ? { background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#22c55e' }
+              : { background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#ef4444' }
+          }
         >
-          {isCancelling ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-          {isCancelling ? 'Cancelling...' : 'Cancel Bet'}
+          {cancelStep === 'success' ? (
+            <><Check className="w-4 h-4" /> Cancelled</>
+          ) : isCancelling ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Cancelling...</>
+          ) : preflight.isLoading ? (
+            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking gas…</>
+          ) : (
+            <><XCircle className="w-4 h-4" /> Cancel Bet</>
+          )}
         </button>
       )}
 
-      {bet.status === BetStatus.Closed && (
+      {/* Withdraw CTA */}
+      {showWithdrawCta && (
         <button
-          onClick={() => withdrawBet(betView.betId)}
-          disabled={isWithdrawing}
-          className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
-          style={{
-            background: 'rgba(97, 166, 251, 0.08)',
-            border: '1px solid rgba(97, 166, 251, 0.25)',
-            color: '#61A6FB',
-          }}
+          onClick={handleWithdraw}
+          disabled={isWithdrawing || withdrawStep === 'success' || preflight.isLoading || gasBlocked}
+          className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+          style={
+            withdrawStep === 'success'
+              ? { background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#22c55e' }
+              : { background: 'rgba(97, 166, 251, 0.08)', border: '1px solid rgba(97, 166, 251, 0.25)', color: '#61A6FB' }
+          }
         >
-          {isWithdrawing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownToLine className="w-4 h-4" />}
-          {isWithdrawing ? 'Withdrawing...' : 'Withdraw'}
+          {withdrawStep === 'success' ? (
+            <><Check className="w-4 h-4" /> Withdrawn</>
+          ) : isWithdrawing ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Withdrawing...</>
+          ) : preflight.isLoading ? (
+            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking gas…</>
+          ) : (
+            <><ArrowDownToLine className="w-4 h-4" /> Withdraw</>
+          )}
         </button>
       )}
     </motion.div>

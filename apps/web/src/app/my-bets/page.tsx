@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TrendingUp, Shield, CheckCircle, Loader2, BarChart3, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
@@ -19,8 +20,14 @@ interface BetEntry {
   role: 'believer' | 'backer';
 }
 
+const VALID_TABS: Tab[] = ['proposed', 'funded', 'active', 'settled'];
+
 export default function MyBetsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('proposed');
+  const searchParams = useSearchParams();
+  const initialTab = VALID_TABS.includes(searchParams.get('tab') as Tab)
+    ? (searchParams.get('tab') as Tab)
+    : 'proposed';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const { isAuthenticated, login, address } = useAuth();
   const { data: betViews, isLoading, error } = useMyBets(address as `0x${string}` | undefined);
 

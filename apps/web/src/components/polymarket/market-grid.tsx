@@ -9,6 +9,7 @@ import { MarketCard } from './market-card';
 
 interface MarketGridProps {
   onPropose: (event: PolymarketEvent, market: PolymarketMarket, tokenId: string, outcome: string, price: number, outcomeIndex: number) => void;
+  onProtection: (conditionId: string, marketQuestion: string) => void;
 }
 
 const PAGE_SIZE = 20;
@@ -21,7 +22,7 @@ function fetchPolymarketPage(offset: number) {
   return api.get<{ data: PolymarketEvent[] }>(`/polymarket/events?${params.toString()}`).then((r) => r.data);
 }
 
-export function MarketGrid({ onPropose }: MarketGridProps) {
+export function MarketGrid({ onPropose, onProtection }: MarketGridProps) {
   const [pages, setPages] = useState(1);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -113,7 +114,7 @@ export function MarketGrid({ onPropose }: MarketGridProps) {
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {allActiveEvents.map((event) => (
-          <MarketCard key={event.id} event={event} onPropose={onPropose} />
+          <MarketCard key={event.id} event={event} onPropose={onPropose} onProtection={onProtection} />
         ))}
       </div>
 

@@ -7,6 +7,7 @@ import type { PolymarketEvent, PolymarketMarket, PolymarketToken } from '@bounce
 interface MarketCardProps {
   event: PolymarketEvent;
   onPropose: (event: PolymarketEvent, market: PolymarketMarket, tokenId: string, outcome: string, price: number, outcomeIndex: number) => void;
+  onProtection: (conditionId: string, marketQuestion: string) => void;
 }
 
 function parseTokens(market: PolymarketMarket): PolymarketToken[] {
@@ -77,7 +78,7 @@ function formatPct(price: number): string {
   return `${Math.round(pct)}%`;
 }
 
-function BetRow({ isYes, probability, onPropose }: { isYes: boolean; probability: number; onPropose?: () => void }) {
+function BetRow({ isYes, probability, onPropose, onProtection }: { isYes: boolean; probability: number; onPropose?: () => void; onProtection?: () => void }) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -129,7 +130,7 @@ function BetRow({ isYes, probability, onPropose }: { isYes: boolean; probability
       </button>
       <span className="text-white/30 text-sm shrink-0">/</span>
       <button
-        onClick={onPropose}
+        onClick={onProtection}
         className="h-9 shrink-0 whitespace-nowrap px-3 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 transition-shadow duration-200 hover:shadow-[0_0_18px_rgba(48,144,255,0.55)]"
         style={{
           background: '#1F304D',
@@ -155,7 +156,7 @@ function marketInterestScore(market: PolymarketMarket): number {
   return Math.pow(contention, 2) * Math.log1p(vol);
 }
 
-function ScrollableMarkets({ markets, event, onPropose }: { markets: PolymarketMarket[]; event: PolymarketEvent; onPropose: MarketCardProps['onPropose'] }) {
+function ScrollableMarkets({ markets, event, onPropose, onProtection }: { markets: PolymarketMarket[]; event: PolymarketEvent; onPropose: MarketCardProps['onPropose']; onProtection: MarketCardProps['onProtection'] }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atTop, setAtTop] = useState(true);
   const [atBottom, setAtBottom] = useState(false);
@@ -210,10 +211,10 @@ function ScrollableMarkets({ markets, event, onPropose }: { markets: PolymarketM
               <div className="space-y-2">
                 <BetRow isYes={true} probability={yesPrice} onPropose={() => {
                   if (yes) onPropose(event, market, yes.token_id, 'Yes', yesPrice, yesIdx);
-                }} />
+                }} onProtection={() => onProtection(market.conditionId || market.condition_id, market.question)} />
                 <BetRow isYes={false} probability={noPrice} onPropose={() => {
                   if (no) onPropose(event, market, no.token_id, 'No', noPrice, noIdx);
-                }} />
+                }} onProtection={() => onProtection(market.conditionId || market.condition_id, market.question)} />
               </div>
             </div>
           );
@@ -250,7 +251,7 @@ function ScrollableMarkets({ markets, event, onPropose }: { markets: PolymarketM
   );
 }
 
-export function MarketCard({ event, onPropose }: MarketCardProps) {
+export function MarketCard({ event, onPropose, onProtection }: MarketCardProps) {
   const formatVolume = (vol: number) => {
     if (vol >= 1_000_000) return `$${(vol / 1_000_000).toFixed(1)}M`;
     if (vol >= 1_000) return `$${(vol / 1_000).toFixed(1)}K`;
@@ -312,13 +313,19 @@ export function MarketCard({ event, onPropose }: MarketCardProps) {
         <div className="px-4 pb-5 space-y-2">
           <BetRow isYes={true} probability={probability} onPropose={() => {
             if (yesToken) onPropose(event, event.markets[0], yesToken.token_id, 'Yes', yesToken.price, yesTokenIdx);
+          }} onProtection={() => {
+            const m = event.markets[0];
+            onProtection(m.conditionId || m.condition_id, m.question || event.title);
           }} />
           <BetRow isYes={false} probability={noProbability} onPropose={() => {
             if (noToken) onPropose(event, event.markets[0], noToken.token_id, 'No', noToken.price, noTokenIdx);
+          }} onProtection={() => {
+            const m = event.markets[0];
+            onProtection(m.conditionId || m.condition_id, m.question || event.title);
           }} />
         </div>
       ) : (
-        <ScrollableMarkets markets={event.markets} event={event} onPropose={onPropose} />
+        <ScrollableMarkets markets={event.markets} event={event} onPropose={onPropose} onProtection={onProtection} />
       )}
     </div>
   );

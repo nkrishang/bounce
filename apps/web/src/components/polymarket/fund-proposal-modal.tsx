@@ -68,7 +68,7 @@ export function FundProposalModal({ betView, open, onClose }: FundProposalModalP
     if (step !== 'success') return;
     const timer = setTimeout(() => {
       onClose();
-      router.push('/my-bets');
+      router.push('/my-bets?tab=funded');
     }, 2000);
     return () => clearTimeout(timer);
   }, [step, onClose, router]);

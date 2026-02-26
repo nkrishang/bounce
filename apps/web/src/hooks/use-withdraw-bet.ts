@@ -5,15 +5,20 @@ import { useWallets } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { POLYMARKET_ADDRESSES, BounceAbi } from '@bounce/contracts';
 import { createClients, getWalletAddress, sendAndConfirm } from '@/lib/transaction';
+import { parseTransactionError, type ParsedError } from '@/lib/parse-transaction-error';
 
 type Step = 'idle' | 'withdrawing' | 'success';
+
+export interface WithdrawBetError extends ParsedError {
+  errorId: string;
+}
 
 export function useWithdrawBet() {
   const { wallets } = useWallets();
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<Step>('idle');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<WithdrawBetError | null>(null);
 
   const reset = useCallback(() => {
     setStep('idle');
@@ -50,12 +55,15 @@ export function useWithdrawBet() {
 
         await queryClient.invalidateQueries({ queryKey: ['my-bets'] });
         await queryClient.invalidateQueries({ queryKey: ['bets'] });
+        await queryClient.invalidateQueries({ queryKey: ['walletBalances', address] });
 
         setStep('success');
         return hash;
       } catch (err) {
-        console.error('Withdraw bet error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to withdraw');
+        const parsed = parseTransactionError(err);
+        const errorId = `WB-${Date.now().toString(36)}`;
+        console.error(`[${errorId}] Withdraw bet error:`, err);
+        setError({ ...parsed, errorId });
         setStep('idle');
         throw err;
       } finally {
