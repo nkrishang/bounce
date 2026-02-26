@@ -464,35 +464,35 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                 {/* ── CTA ── */}
                 {!isAuthenticated ? (
                   <motion.button
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     onClick={login}
-                    className="w-full py-3.5 rounded-xl font-bold text-[15px] transition-all duration-200"
+                    className="w-full py-4 rounded-xl font-bold text-base shadow-lg transition-all duration-200"
                     style={{
-                      background: 'rgba(236, 194, 94, 0.12)',
-                      border: '1px solid rgba(236, 194, 94, 0.3)',
-                      color: '#C8A93E',
+                      background: 'linear-gradient(135deg, #D4AD4A, #ECC25E)',
+                      color: '#1a1a1a',
+                      boxShadow: '0 0 20px rgba(212, 173, 74, 0.3)',
                     }}
                   >
                     Sign In to Propose
                   </motion.button>
                 ) : (
                   <motion.button
-                    whileHover={!isLoading && step !== 'success' ? { scale: 1.01 } : {}}
-                    whileTap={!isLoading && step !== 'success' ? { scale: 0.99 } : {}}
+                    whileHover={!isLoading && step !== 'success' ? { scale: 1.02 } : {}}
+                    whileTap={!isLoading && step !== 'success' ? { scale: 0.98 } : {}}
                     onClick={handlePropose}
                     disabled={
                       isLoading || step === 'success' || !isValidStake ||
                       preflight.isLoading || balanceBlocked
                     }
-                    className="w-full py-3.5 rounded-xl font-bold text-[15px] disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2 transition-all duration-200"
+                    className="w-full py-4 rounded-xl font-bold text-base disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg transition-all duration-200"
                     style={
                       step === 'success'
-                        ? { background: '#22c55e', color: 'white' }
+                        ? { background: '#22c55e', color: 'white', boxShadow: '0 0 20px rgba(34, 197, 94, 0.3)' }
                         : {
-                            background: 'rgba(236, 194, 94, 0.12)',
-                            border: '1px solid rgba(236, 194, 94, 0.3)',
-                            color: '#C8A93E',
+                            background: 'linear-gradient(135deg, #D4AD4A, #ECC25E)',
+                            color: '#1a1a1a',
+                            boxShadow: '0 0 20px rgba(212, 173, 74, 0.3)',
                           }
                     }
                   >
