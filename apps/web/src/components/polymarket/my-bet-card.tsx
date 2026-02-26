@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Shield, TrendingUp, User, Clock, CheckCircle, BarChart3, XCircle, ArrowDownToLine, Loader2, AlertTriangle, Check } from 'lucide-react';
+import { Shield, TrendingUp, User, Clock, CheckCircle, BarChart3, XCircle, ArrowDownToLine, Loader2, AlertTriangle, Check, Send } from 'lucide-react';
 import type { BetView } from '@bounce/shared';
 import { BetStatus, formatAddress } from '@bounce/shared';
 import { formatUsdc } from '@/lib/bet-math';
@@ -9,6 +9,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { useCancelBet } from '@/hooks/use-cancel-bet';
 import { useWithdrawBet } from '@/hooks/use-withdraw-bet';
 import { useGasPreflight } from '@/hooks/use-gas-preflight';
+import { useSignAndSubmitOrder } from '@/hooks/use-sign-and-submit-order';
+import { useTradeStatus } from '@/hooks/use-trade-status';
 
 interface MyBetCardProps {
   betView: BetView;
@@ -18,6 +20,7 @@ interface MyBetCardProps {
 const statusConfig: Record<number, { label: string; color: string; bg: string; icon: typeof Clock }> = {
   [BetStatus.Proposed]: { label: 'Proposed', color: '#D4AD4A', bg: 'rgba(236, 194, 94, 0.08)', icon: Clock },
   [BetStatus.Funded]: { label: 'Funded', color: '#22c55e', bg: 'rgba(34, 197, 94, 0.08)', icon: CheckCircle },
+  [BetStatus.Prepared]: { label: 'Ready to Trade', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.08)', icon: TrendingUp },
   [BetStatus.Traded]: { label: 'Active', color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.08)', icon: BarChart3 },
   [BetStatus.Closed]: { label: 'Closed', color: '#61A6FB', bg: 'rgba(97, 166, 251, 0.08)', icon: TrendingUp },
   [BetStatus.Cancelled]: { label: 'Cancelled', color: '#94a3b8', bg: 'rgba(148, 163, 184, 0.08)', icon: XCircle },
@@ -30,6 +33,10 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
   const { cancelBet, isLoading: isCancelling, step: cancelStep, error: cancelError, reset: resetCancel } = useCancelBet();
   const { withdrawBet, isLoading: isWithdrawing, step: withdrawStep, error: withdrawError, reset: resetWithdraw } = useWithdrawBet();
   const preflight = useGasPreflight(address as `0x${string}` | undefined);
+  const { signAndSubmit, isLoading: isSigning, step: signStep, error: signError, reset: resetSign } = useSignAndSubmitOrder();
+  const { data: tradeStatus } = useTradeStatus(
+    (bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared) ? betView.betId : undefined,
+  );
 
   const proposerStake = (bet.totalCapital * BigInt(bet.proposerCapitalBps)) / 10000n;
   const funderPortion = bet.totalCapital - proposerStake;
@@ -40,9 +47,13 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
 
   const showCancelCta = bet.status === BetStatus.Proposed && role === 'believer';
   const showWithdrawCta = bet.status === BetStatus.Closed;
+  const isProposer = address?.toLowerCase() === bet.proposer.toLowerCase();
+  const showSignOrderCta = bet.status === BetStatus.Prepared && role === 'believer' && isProposer && !tradeStatus?.orderId;
+  const showPreparingIndicator = bet.status === BetStatus.Funded && role === 'believer' && tradeStatus?.prepareStatus === 'pending';
+  const showAwaitingSettlement = bet.status === BetStatus.Prepared && !!tradeStatus?.orderId;
 
   const gasBlocked = !preflight.isLoading && !preflight.hasEnoughGas;
-  const activeError = showCancelCta ? cancelError : showWithdrawCta ? withdrawError : null;
+  const activeError = showCancelCta ? cancelError : showWithdrawCta ? withdrawError : showSignOrderCta ? signError : null;
 
   const handleCancel = async () => {
     resetCancel();
@@ -55,6 +66,13 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
     resetWithdraw();
     try {
       await withdrawBet(betView.betId);
+    } catch { /* error handled by hook */ }
+  };
+
+  const handleSignOrder = async () => {
+    resetSign();
+    try {
+      await signAndSubmit(betView);
     } catch { /* error handled by hook */ }
   };
 
@@ -209,6 +227,56 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
             <><ArrowDownToLine className="w-4 h-4" /> Withdraw</>
           )}
         </button>
+      )}
+
+      {/* Preparing indicator */}
+      {showPreparingIndicator && (
+        <div
+          className="flex items-center justify-center gap-2 py-3 rounded-xl"
+          style={{ background: 'rgba(34, 197, 94, 0.06)', border: '1px solid rgba(34, 197, 94, 0.15)' }}
+        >
+          <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#22c55e' }} />
+          <span className="text-sm font-medium" style={{ color: '#22c55e' }}>Preparing trade…</span>
+        </div>
+      )}
+
+      {/* Sign Order CTA */}
+      {showSignOrderCta && (
+        <button
+          onClick={handleSignOrder}
+          disabled={isSigning || signStep === 'confirmed'}
+          className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+          style={
+            signStep === 'confirmed'
+              ? { background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#22c55e' }
+              : { background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', color: '#f59e0b' }
+          }
+        >
+          {signStep === 'confirmed' ? (
+            <><Check className="w-4 h-4" /> Order Confirmed</>
+          ) : signStep === 'signing' ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Sign Order…</>
+          ) : signStep === 'submitting' ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
+          ) : signStep === 'polling' ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Awaiting Settlement…</>
+          ) : (
+            <><Send className="w-4 h-4" /> Place Order</>
+          )}
+        </button>
+      )}
+
+      {/* Awaiting Settlement indicator */}
+      {showAwaitingSettlement && !showSignOrderCta && (
+        <div
+          className="flex items-center justify-center gap-2 py-3 rounded-xl"
+          style={{ background: 'rgba(245, 158, 11, 0.06)', border: '1px solid rgba(245, 158, 11, 0.15)' }}
+        >
+          <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#f59e0b' }} />
+          <span className="text-sm font-medium" style={{ color: '#f59e0b' }}>
+            Awaiting settlement{tradeStatus?.clobStatus ? ` (${tradeStatus.clobStatus})` : '…'}
+          </span>
+        </div>
       )}
     </motion.div>
   );

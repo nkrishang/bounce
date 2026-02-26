@@ -209,4 +209,71 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
       return reply.status(502).send({ error: 'Failed to fetch Polymarket CLOB order book' });
     }
   });
+
+  // Submit CLOB order (proxied through backend to keep API keys server-side)
+  fastify.post('/clob/order', async (request, reply) => {
+    try {
+      const body = request.body as {
+        betId: number;
+        order: Record<string, unknown>;
+        signature: string;
+      };
+
+      if (!body.betId || !body.order || !body.signature) {
+        return reply.status(400).send({ error: 'Missing betId, order, or signature' });
+      }
+
+      const { upsertTradeExecution } = await import('../services/trade.service.js');
+
+      // Submit order to Polymarket CLOB API
+      const orderPayload = {
+        ...body.order,
+        signature: body.signature,
+      };
+
+      const response = await fetch(`${CLOB_API}/order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderPayload),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        logger.error({ status: response.status, body: errorBody }, 'CLOB order submission failed');
+        return reply.status(response.status).send({ error: 'CLOB order submission failed', details: errorBody });
+      }
+
+      const result = await response.json() as { orderID?: string; status?: string };
+
+      // Track order in DB
+      await upsertTradeExecution({
+        betId: body.betId,
+        orderId: result.orderID || null,
+        clobStatus: result.status || 'MATCHED',
+      });
+
+      logger.info({ betId: body.betId, orderId: result.orderID }, 'CLOB order submitted');
+      return { data: result };
+    } catch (error) {
+      logger.error(error, 'Failed to submit CLOB order');
+      return reply.status(500).send({ error: 'Failed to submit CLOB order' });
+    }
+  });
+
+  // Poll CLOB order status
+  fastify.get<{ Params: { orderId: string } }>('/clob/order/:orderId', async (request, reply) => {
+    const { orderId } = request.params;
+
+    try {
+      const response = await fetch(`${CLOB_API}/order/${orderId}`);
+      if (!response.ok) {
+        return reply.status(response.status).send({ error: 'CLOB order status fetch failed' });
+      }
+      const data = await response.json();
+      return { data };
+    } catch (error) {
+      logger.error(error, 'Failed to fetch CLOB order status');
+      return reply.status(502).send({ error: 'Failed to fetch CLOB order status' });
+    }
+  });
 }

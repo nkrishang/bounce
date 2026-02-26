@@ -41,10 +41,11 @@ export enum BetStatus {
   None = 0,
   Proposed = 1,
   Funded = 2,
-  Traded = 3,
-  Closed = 4,
-  Cancelled = 5,
-  Withdrawn = 6,
+  Prepared = 3,
+  Traded = 4,
+  Closed = 5,
+  Cancelled = 6,
+  Withdrawn = 7,
 }
 
 // On-chain bet struct (from Bounce.getBet)
@@ -72,6 +73,8 @@ export interface BetOnchain {
   withdrawnAt: number;
   expiresAt: number;
   status: BetStatus;
+  inFlightUSDC: bigint;
+  preparedAt: number;
 }
 
 // Off-chain metadata (stored in backend)
@@ -95,6 +98,19 @@ export interface BetView {
   betId: number;
   bet: BetOnchain;
   metadata?: BetMetadata;
+}
+
+// Off-chain trade execution state (from backend)
+export interface BetTradeState {
+  betId: number;
+  prepareStatus: 'pending' | 'confirmed' | 'failed';
+  prepareTxHash?: string;
+  orderId?: string;
+  clobStatus?: 'MATCHED' | 'MINED' | 'CONFIRMED' | 'RETRYING' | 'FAILED';
+  finalizeStatus?: 'pending' | 'confirmed' | 'failed';
+  finalizeTxHash?: string;
+  lastError?: string;
+  updatedAt: string;
 }
 
 /**
@@ -126,6 +142,8 @@ export function normalizeBet(raw: Record<string, unknown>): BetOnchain {
     withdrawnAt: Number(raw.withdrawnAt),
     expiresAt: Number(raw.expiresAt),
     status: Number(raw.status) as BetStatus,
+    inFlightUSDC: raw.inFlightUSDC as bigint,
+    preparedAt: Number(raw.preparedAt),
   };
 }
 

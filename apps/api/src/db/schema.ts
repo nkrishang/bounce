@@ -14,3 +14,16 @@ export const betMetadata = pgTable('bet_metadata', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const tradeExecutions = pgTable('trade_executions', {
+  betId: integer('bet_id').primaryKey(),
+  prepareStatus: text('prepare_status').notNull().default('pending'),
+  prepareTxHash: text('prepare_tx_hash'),
+  orderId: text('order_id'),
+  clobStatus: text('clob_status'),
+  finalizeStatus: text('finalize_status'),
+  finalizeTxHash: text('finalize_tx_hash'),
+  lastError: text('last_error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

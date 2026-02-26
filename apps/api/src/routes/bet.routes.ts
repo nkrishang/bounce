@@ -86,4 +86,37 @@ export async function betRoutes(fastify: FastifyInstance) {
       return reply.status(500).send({ error: 'Failed to save bet metadata' });
     }
   });
+
+  // Get trade execution status for a bet
+  fastify.get<{ Params: { betId: string } }>('/:betId/trade-status', async (request, reply) => {
+    const betId = parseInt(request.params.betId, 10);
+    if (isNaN(betId)) {
+      return reply.status(400).send({ error: 'Invalid betId' });
+    }
+
+    try {
+      const { getTradeExecution } = await import('../services/trade.service.js');
+      const execution = await getTradeExecution(betId);
+      if (!execution) {
+        return { data: null };
+      }
+
+      return {
+        data: {
+          betId: execution.betId,
+          prepareStatus: execution.prepareStatus,
+          prepareTxHash: execution.prepareTxHash,
+          orderId: execution.orderId,
+          clobStatus: execution.clobStatus,
+          finalizeStatus: execution.finalizeStatus,
+          finalizeTxHash: execution.finalizeTxHash,
+          lastError: execution.lastError,
+          updatedAt: execution.updatedAt?.toISOString() || new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      logger.error(error, 'Failed to fetch trade status');
+      return reply.status(500).send({ error: 'Failed to fetch trade status' });
+    }
+  });
 }

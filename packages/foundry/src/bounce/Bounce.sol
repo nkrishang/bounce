@@ -50,6 +50,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         None, // default / non-existent
         Proposed, // proposer deposited their share into Bounce escrow
         Funded, // funder deposited remaining share; escrow == totalCapital
+        Prepared, // Safe funded + approvals set, awaiting CLOB settlement
         Traded, // capital spent on exchange; safe holds conditional token position
         Closed, // position fully exited (sold/redeemed); all USDC back in escrow
         Cancelled, // proposer cancelled before funding; escrow returned
@@ -91,6 +92,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         uint40 expiresAt;
         // --- Status ---
         BetStatus status;
+        // --- New fields for async trade flow ---
+        uint256 inFlightUSDC; // USDC moved to Safe awaiting settlement
+        uint40 preparedAt; // timestamp of prepareTrade
     }
 
     // ============================================
@@ -113,8 +117,11 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     /// @notice Tracks whether CTF setApprovalForAll has been called for (safe, exchange).
     mapping(address => mapping(address => bool)) internal _ctfApprovalSet;
 
+    /// @notice Tracks the in-flight prepared bet per Safe (0 = none).
+    mapping(address => uint256) internal _preparedBetBySafe;
+
     /// @notice Storage gap for future upgrades.
-    uint256[50] private __gap;
+    uint256[49] private __gap;
 
     // ============================================
     // Events
@@ -142,6 +149,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     event BetClosed(uint256 indexed betId, uint256 escrowUSDC);
     event BetWithdrawn(uint256 indexed betId, uint256 totalReturned, uint256 proposerAmount, uint256 funderAmount);
     event SafeCtfApprovalSet(address indexed safe, address indexed exchange);
+    event TradePrepared(uint256 indexed betId, address indexed safe, uint256 amountMoved);
+    event TradeFinalized(uint256 indexed betId, uint256 usdcSpentDelta, uint256 sharesDelta, uint256 usdcLeftoverReturned);
+    event TradeUnprepared(uint256 indexed betId, uint256 amountReturned);
 
     // ============================================
     // Custom Errors
@@ -169,6 +179,10 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     error NoSharesSold();
     error SlippageExceeded(uint256 received, uint256 minimum);
     error BetExpired();
+    error SafeHasPreparedBet(uint256 existingBetId);
+    error TradeAlreadySettled();
+    error ExecuteTradeDeprecated();
+    error SellPositionDeprecated();
 
     // ============================================
     // Initializer
@@ -296,7 +310,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
             closedAt: 0,
             withdrawnAt: 0,
             expiresAt: expiresAt,
-            status: BetStatus.Proposed
+            status: BetStatus.Proposed,
+            inFlightUSDC: 0,
+            preparedAt: 0
         });
 
         // Update indexes.
@@ -380,154 +396,120 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         emit BetCancelled(betId);
     }
 
-    /// @notice Executes a trade on the Polymarket exchange via the Safe module path.
-    /// @dev Sends USDC from Bounce to Safe, makes Safe approve & trade, pulls leftover back.
-    /// @param betId The bet ID to trade.
-    /// @param maxSpend Maximum USDC to spend on this trade.
-    /// @param tradeData Encoded exchange calldata (e.g. CTF Exchange buy order).
-    function executeTrade(uint256 betId, uint256 maxSpend, bytes calldata tradeData) external nonReentrant {
-        Bet storage bet = _bets[betId];
-
-        // Must be Funded or Traded (allows multiple partial trades).
-        if (bet.status != BetStatus.Funded && bet.status != BetStatus.Traded) {
-            revert InvalidStatus(bet.status, BetStatus.Funded);
-        }
-
-        // Only proposer can execute trades (prevents funder from submitting malicious calldata).
-        if (msg.sender != bet.proposer) revert NotProposer();
-
-        // Must not be expired.
-        if (bet.expiresAt != 0 && block.timestamp >= bet.expiresAt) revert BetExpired();
-
-        // maxSpend must not exceed available escrow.
-        if (maxSpend == 0) revert ZeroAmount();
-        if (maxSpend > bet.escrowUSDC) revert ExceedsEscrow(maxSpend, bet.escrowUSDC);
-
-        address safe = bet.safe;
-        address exchange = bet.exchange;
-        uint256 positionId = bet.positionId;
-
-        // Verify Safe is properly configured (module enabled + guard installed).
-        _assertSafeReady(safe);
-
-        // Snapshot Safe balances BEFORE funding to detect baseline.
-        uint256 safeUsdcBaseline = IERC20(USDC).balanceOf(safe);
-        uint256 sharesBefore = IConditionalTokensMinimal(CTF).balanceOf(safe, positionId);
-
-        // Step 1: Transfer maxSpend USDC from Bounce to Safe.
-        SafeTransferLib.safeTransfer(USDC, safe, maxSpend);
-
-        // Step 2: Safe approves exchange for exactly maxSpend.
-        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, maxSpend));
-
-        // Step 3: Safe executes the trade on the exchange.
-        _execFromSafe(safe, exchange, tradeData);
-
-        // Step 4: Reset approval to 0 (approval hygiene).
-        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, 0));
-
-        // Step 5: Snapshot balances after trade.
-        uint256 safeUsdcAfter = IERC20(USDC).balanceOf(safe);
-        uint256 sharesAfter = IConditionalTokensMinimal(CTF).balanceOf(safe, positionId);
-
-        // Step 6: Compute actual spend and shares minted.
-        // spent = (baseline + maxSpend) - safeUsdcAfter. Safe should not have spent pre-existing USDC.
-        uint256 spent = (safeUsdcBaseline + maxSpend) - safeUsdcAfter;
-        uint256 sharesDelta = sharesAfter - sharesBefore;
-        if (sharesDelta == 0) revert NoSharesMinted();
-
-        // Step 7: Pull leftover USDC back from Safe to Bounce.
-        uint256 leftover = safeUsdcAfter - safeUsdcBaseline;
-        if (leftover > 0) {
-            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), leftover));
-        }
-
-        // Step 8: Update bet accounting.
-        bet.escrowUSDC -= spent;
-        bet.usdcSpent += spent;
-        bet.positionShares += sharesDelta;
-
-        // Transition to Traded on first trade.
-        if (bet.status == BetStatus.Funded) {
-            bet.status = BetStatus.Traded;
-            bet.tradedAt = uint40(block.timestamp);
-        }
-
-        emit TradeExecuted(betId, maxSpend, spent, sharesDelta);
+    /// @notice Deprecated — use prepareTrade/finalizeTrade instead.
+    function executeTrade(uint256, uint256, bytes calldata) external pure {
+        revert ExecuteTradeDeprecated();
     }
 
-    /// @notice Sells conditional token positions on the exchange via the Safe module path.
-    /// @dev Makes Safe sell on exchange, pulls USDC proceeds back to Bounce escrow.
-    ///      Polymarket uses a CLOB (Central Limit Order Book), so partial fills are expected
-    ///      when liquidity is insufficient. Call this function multiple times if needed.
-    ///      The bet transitions to Closed only when all position shares are sold.
-    /// @param betId The bet ID whose position to sell.
-    /// @param minUsdcOut Minimum USDC to receive (slippage protection).
-    /// @param sellData Encoded exchange calldata (e.g. CTF Exchange sell order).
-    function sellPosition(uint256 betId, uint256 minUsdcOut, bytes calldata sellData) external nonReentrant {
+    /// @notice Deprecated — sell flow will be re-implemented for async CLOB.
+    function sellPosition(uint256, uint256, bytes calldata) external pure {
+        revert SellPositionDeprecated();
+    }
+
+    /// @notice Prepares a funded bet for CLOB trading by moving USDC to Safe and setting approvals.
+    /// @dev Permissionless — all params derived from on-chain bet struct.
+    /// @param betId The bet ID to prepare.
+    function prepareTrade(uint256 betId) external nonReentrant {
         Bet storage bet = _bets[betId];
 
-        // Must be in Traded status.
-        if (bet.status != BetStatus.Traded) revert InvalidStatus(bet.status, BetStatus.Traded);
-
-        // Only proposer or funder can sell.
-        if (msg.sender != bet.proposer && msg.sender != bet.funder) revert NotProposerOrFunder();
+        if (bet.status != BetStatus.Funded) revert InvalidStatus(bet.status, BetStatus.Funded);
+        if (bet.expiresAt != 0 && block.timestamp >= bet.expiresAt) revert BetExpired();
 
         address safe = bet.safe;
         address exchange = bet.exchange;
 
-        // Verify Safe is properly configured (module enabled + guard installed).
+        if (_preparedBetBySafe[safe] != 0) revert SafeHasPreparedBet(_preparedBetBySafe[safe]);
+
         _assertSafeReady(safe);
 
-        // Ensure CTF approval is set for (safe, exchange) — lazy one-time setup.
+        uint256 amount = bet.escrowUSDC;
+
+        SafeTransferLib.safeTransfer(USDC, safe, amount);
+        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, amount));
+
         if (!_ctfApprovalSet[safe][exchange]) {
             _execFromSafe(
                 safe, CTF, abi.encodeWithSelector(IConditionalTokensMinimal.setApprovalForAll.selector, exchange, true)
             );
             _ctfApprovalSet[safe][exchange] = true;
-            emit SafeCtfApprovalSet(safe, exchange);
         }
 
-        // Snapshot balances before sell.
-        uint256 usdcBefore = IERC20(USDC).balanceOf(safe);
-        uint256 sharesBefore = IConditionalTokensMinimal(CTF).balanceOf(safe, bet.positionId);
+        bet.escrowUSDC = 0;
+        bet.inFlightUSDC = amount;
+        bet.status = BetStatus.Prepared;
+        bet.preparedAt = uint40(block.timestamp);
+        _preparedBetBySafe[safe] = betId;
 
-        // Execute sell from Safe.
-        _execFromSafe(safe, exchange, sellData);
+        emit TradePrepared(betId, safe, amount);
+    }
 
-        // Snapshot balances after sell.
-        uint256 usdcAfter = IERC20(USDC).balanceOf(safe);
-        uint256 sharesAfter = IConditionalTokensMinimal(CTF).balanceOf(safe, bet.positionId);
+    /// @notice Finalizes a prepared trade after CLOB settlement by snapshotting balances and updating accounting.
+    /// @dev Permissionless — verifies shares arrived, pulls leftover USDC back to Bounce.
+    /// @param betId The bet ID to finalize.
+    function finalizeTrade(uint256 betId) external nonReentrant {
+        Bet storage bet = _bets[betId];
 
-        // Validate: shares must have decreased.
-        uint256 sharesSold = sharesBefore - sharesAfter;
-        if (sharesSold == 0) revert NoSharesSold();
+        if (bet.status != BetStatus.Prepared) revert InvalidStatus(bet.status, BetStatus.Prepared);
 
-        // Validate: shares sold must not exceed tracked position (prevents accounting underflow).
-        if (sharesSold > bet.positionShares) revert ExceedsShares(sharesSold, bet.positionShares);
+        address safe = bet.safe;
+        _assertSafeReady(safe);
 
-        // Validate: USDC received meets slippage requirement.
-        uint256 usdcDelta = usdcAfter - usdcBefore;
-        if (usdcDelta < minUsdcOut) revert SlippageExceeded(usdcDelta, minUsdcOut);
+        uint256 sharesNow = IConditionalTokensMinimal(CTF).balanceOf(safe, bet.positionId);
+        uint256 usdcNow = IERC20(USDC).balanceOf(safe);
 
-        // Pull USDC proceeds from Safe back to Bounce escrow.
-        if (usdcDelta > 0) {
-            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), usdcDelta));
+        uint256 sharesDelta = sharesNow - bet.positionShares;
+        if (sharesDelta == 0) revert NoSharesMinted();
+
+        // Cap leftover at inFlightUSDC to avoid sweeping unrelated Safe USDC.
+        uint256 leftover = usdcNow > bet.inFlightUSDC ? bet.inFlightUSDC : usdcNow;
+        uint256 spent = bet.inFlightUSDC - leftover;
+
+        if (leftover > 0) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), leftover));
         }
 
-        // Update bet accounting using deltas.
-        bet.escrowUSDC += usdcDelta;
-        bet.usdcReceived += usdcDelta;
-        bet.positionShares -= sharesSold;
+        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, bet.exchange, 0));
 
-        emit PositionSold(betId, sharesSold, usdcDelta);
+        bet.usdcSpent += spent;
+        bet.positionShares = sharesNow;
+        bet.escrowUSDC = leftover;
+        bet.inFlightUSDC = 0;
+        bet.status = BetStatus.Traded;
+        bet.tradedAt = uint40(block.timestamp);
+        _preparedBetBySafe[safe] = 0;
 
-        // If all shares sold, transition to Closed.
-        if (bet.positionShares == 0) {
-            bet.status = BetStatus.Closed;
-            bet.closedAt = uint40(block.timestamp);
-            emit BetClosed(betId, bet.escrowUSDC);
+        emit TradeFinalized(betId, spent, sharesDelta, leftover);
+    }
+
+    /// @notice Reverts a prepared trade when CLOB order fails or expires (escape hatch).
+    /// @dev Permissionless — returns USDC to Bounce escrow and resets to Funded.
+    /// @param betId The bet ID to unprepare.
+    function unprepareTrade(uint256 betId) external nonReentrant {
+        Bet storage bet = _bets[betId];
+
+        if (bet.status != BetStatus.Prepared) revert InvalidStatus(bet.status, BetStatus.Prepared);
+
+        address safe = bet.safe;
+        _assertSafeReady(safe);
+
+        uint256 sharesNow = IConditionalTokensMinimal(CTF).balanceOf(safe, bet.positionId);
+        if (sharesNow != bet.positionShares) revert TradeAlreadySettled();
+
+        // Cap recovery at inFlightUSDC to avoid sweeping unrelated Safe USDC.
+        uint256 usdcNow = IERC20(USDC).balanceOf(safe);
+        uint256 toRecover = usdcNow > bet.inFlightUSDC ? bet.inFlightUSDC : usdcNow;
+        if (toRecover > 0) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), toRecover));
         }
+
+        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, bet.exchange, 0));
+
+        bet.escrowUSDC = toRecover;
+        bet.inFlightUSDC = 0;
+        bet.status = BetStatus.Funded;
+        _preparedBetBySafe[safe] = 0;
+
+        emit TradeUnprepared(betId, toRecover);
     }
 
     /// @notice Redeems resolved conditional token positions for USDC via the Safe module path.
@@ -693,6 +675,13 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     /// @return The active bet count.
     function getActiveBetCount(address safe) external view returns (uint256) {
         return _activeBetCount[safe];
+    }
+
+    /// @notice Returns the prepared bet ID for a Safe (0 = none).
+    /// @param safe The Safe address.
+    /// @return The prepared bet ID.
+    function getPreparedBetBySafe(address safe) external view returns (uint256) {
+        return _preparedBetBySafe[safe];
     }
 
     /// @notice Returns the next bet ID that will be assigned.

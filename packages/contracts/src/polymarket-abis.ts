@@ -204,6 +204,34 @@ export const BounceAbi = [
   },
   {
     type: 'function',
+    name: 'prepareTrade',
+    inputs: [{ name: 'betId', type: 'uint256', internalType: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'finalizeTrade',
+    inputs: [{ name: 'betId', type: 'uint256', internalType: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'unprepareTrade',
+    inputs: [{ name: 'betId', type: 'uint256', internalType: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'getPreparedBetBySafe',
+    inputs: [{ name: 'safe', type: 'address', internalType: 'address' }],
+    outputs: [{ name: '', type: 'uint256', internalType: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'getBet',
     inputs: [{ name: 'betId', type: 'uint256', internalType: 'uint256' }],
     outputs: [
@@ -235,6 +263,8 @@ export const BounceAbi = [
           { name: 'withdrawnAt', type: 'uint40', internalType: 'uint40' },
           { name: 'expiresAt', type: 'uint40', internalType: 'uint40' },
           { name: 'status', type: 'uint8', internalType: 'enum Bounce.BetStatus' },
+          { name: 'inFlightUSDC', type: 'uint256', internalType: 'uint256' },
+          { name: 'preparedAt', type: 'uint40', internalType: 'uint40' },
         ],
       },
     ],
@@ -376,6 +406,36 @@ export const BounceAbi = [
     ],
     anonymous: false,
   },
+  {
+    type: 'event',
+    name: 'TradePrepared',
+    inputs: [
+      { name: 'betId', type: 'uint256', indexed: true, internalType: 'uint256' },
+      { name: 'safe', type: 'address', indexed: true, internalType: 'address' },
+      { name: 'amountMoved', type: 'uint256', indexed: false, internalType: 'uint256' },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'TradeFinalized',
+    inputs: [
+      { name: 'betId', type: 'uint256', indexed: true, internalType: 'uint256' },
+      { name: 'usdcSpentDelta', type: 'uint256', indexed: false, internalType: 'uint256' },
+      { name: 'sharesDelta', type: 'uint256', indexed: false, internalType: 'uint256' },
+      { name: 'usdcLeftoverReturned', type: 'uint256', indexed: false, internalType: 'uint256' },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'TradeUnprepared',
+    inputs: [
+      { name: 'betId', type: 'uint256', indexed: true, internalType: 'uint256' },
+      { name: 'amountReturned', type: 'uint256', indexed: false, internalType: 'uint256' },
+    ],
+    anonymous: false,
+  },
 ] as const;
 
 export const BouncePeripheryAbi = [
@@ -449,6 +509,16 @@ export const BouncePeripheryAbi = [
       { name: 'end', type: 'uint256', internalType: 'uint256' },
     ],
     outputs: [{ name: '', type: 'uint256[]', internalType: 'uint256[]' }],
+    stateMutability: 'view',
+  },
+] as const;
+
+export const CTFExchangeAbi = [
+  {
+    type: 'function',
+    name: 'nonces',
+    inputs: [{ name: 'usr', type: 'address', internalType: 'address' }],
+    outputs: [{ name: '', type: 'uint256', internalType: 'uint256' }],
     stateMutability: 'view',
   },
 ] as const;
