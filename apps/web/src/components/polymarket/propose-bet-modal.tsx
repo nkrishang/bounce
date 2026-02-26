@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, TrendingUp, Shield, Loader2, Check, Minus, Plus, AlertTriangle } from 'lucide-react';
@@ -31,6 +32,7 @@ interface ProposeBetModalProps {
 }
 
 export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome, price, outcomeIndex }: ProposeBetModalProps) {
+  const router = useRouter();
   const { isAuthenticated, login, address } = useAuth();
   const { proposeBet, isLoading, step, error, reset } = useProposeBet();
   const [stakeAmount, setStakeAmount] = useState(String(MIN_STAKE));
@@ -53,6 +55,16 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
       document.body.style.paddingRight = '';
     };
   }, [open, reset]);
+
+  // Redirect to /my-bets after success
+  useEffect(() => {
+    if (step !== 'success') return;
+    const timer = setTimeout(() => {
+      onClose();
+      router.push('/my-bets');
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [step, onClose, router]);
 
   const isValidStake = stakeNum >= MIN_STAKE;
   const totalPosition = stakeNum * (10000 / DEFAULT_PROPOSER_CAPITAL_BPS);
@@ -371,7 +383,7 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                 )}
 
                 {/* Pre-flight warnings */}
-                {isAuthenticated && !preflight.isLoading && (
+                {isAuthenticated && !preflight.isLoading && step !== 'success' && (
                   <>
                     {!preflight.hasEnoughUsdc && isValidStake && (
                       <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 flex items-start gap-2">

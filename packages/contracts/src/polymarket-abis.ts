@@ -3,9 +3,21 @@ export const PolySafeFactoryAbi = [
     type: 'function',
     name: 'createProxy',
     inputs: [
-      { name: 'owner', type: 'address', internalType: 'address' },
+      { name: 'paymentToken', type: 'address', internalType: 'address' },
+      { name: 'payment', type: 'uint256', internalType: 'uint256' },
+      { name: 'paymentReceiver', type: 'address', internalType: 'address payable' },
+      {
+        name: 'createSig',
+        type: 'tuple',
+        internalType: 'struct SafeProxyFactory.Sig',
+        components: [
+          { name: 'v', type: 'uint8', internalType: 'uint8' },
+          { name: 'r', type: 'bytes32', internalType: 'bytes32' },
+          { name: 's', type: 'bytes32', internalType: 'bytes32' },
+        ],
+      },
     ],
-    outputs: [{ name: 'proxy', type: 'address', internalType: 'address' }],
+    outputs: [],
     stateMutability: 'nonpayable',
   },
 ] as const;

@@ -59,7 +59,7 @@ export function useProposeBet() {
         const chainId = 137;
         await wallet.switchChain(chainId);
         const provider = await wallet.getEthereumProvider();
-        const { walletClient, publicClient, chain } = createClients(chainId, provider);
+        const { walletClient, publicClient } = createClients(chainId, provider);
         const address = await getWalletAddress(walletClient);
 
         // Step 1: Ensure Safe is ready (deploy + module + guard)
@@ -88,41 +88,41 @@ export function useProposeBet() {
         });
 
         if ((existingAllowance as bigint) < proposerDeposit) {
+          const { request: approveRequest } = await publicClient.simulateContract({
+            account: address,
+            address: POLYMARKET_ADDRESSES.USDC,
+            abi: ERC20Abi,
+            functionName: 'approve',
+            args: [POLYMARKET_ADDRESSES.BOUNCE, proposerDeposit],
+          });
           await sendAndConfirm(publicClient, () =>
-            walletClient.writeContract({
-              chain,
-              address: POLYMARKET_ADDRESSES.USDC,
-              abi: ERC20Abi,
-              functionName: 'approve',
-              args: [POLYMARKET_ADDRESSES.BOUNCE, proposerDeposit],
-              account: address,
-            }),
+            walletClient.writeContract(approveRequest),
           );
         }
 
         // Step 3: Call Bounce.proposeBet
         setStep('proposing');
+        const { request: proposeRequest } = await publicClient.simulateContract({
+          account: address,
+          address: POLYMARKET_ADDRESSES.BOUNCE,
+          abi: BounceAbi,
+          functionName: 'proposeBet',
+          args: [
+            safeAddress,
+            '0x0000000000000000000000000000000000000000' as Address, // open funder
+            exchange,
+            conditionIdHex,
+            outcomeIndex,
+            positionId,
+            totalCapital,
+            DEFAULT_PROPOSER_CAPITAL_BPS,
+            DEFAULT_PROPOSER_PROFIT_SHARE_BPS,
+            expiresAt,
+            params.marketSlug,
+          ],
+        });
         const { hash, receipt } = await sendAndConfirm(publicClient, () =>
-          walletClient.writeContract({
-            chain,
-            address: POLYMARKET_ADDRESSES.BOUNCE,
-            abi: BounceAbi,
-            functionName: 'proposeBet',
-            args: [
-              safeAddress,
-              '0x0000000000000000000000000000000000000000' as Address, // open funder
-              exchange,
-              conditionIdHex,
-              outcomeIndex,
-              positionId,
-              totalCapital,
-              DEFAULT_PROPOSER_CAPITAL_BPS,
-              DEFAULT_PROPOSER_PROFIT_SHARE_BPS,
-              expiresAt,
-              params.marketSlug,
-            ],
-            account: address,
-          }),
+          walletClient.writeContract(proposeRequest),
         );
 
         // Parse BetProposed event to get betId

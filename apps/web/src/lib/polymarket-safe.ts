@@ -10,9 +10,9 @@ import {
   parseAbiParameters,
   getCreate2Address,
   encodeFunctionData,
+  parseSignature,
   zeroAddress,
 } from 'viem';
-import { polygon } from 'viem/chains';
 import { POLYMARKET_ADDRESSES, PolySafeFactoryAbi, GnosisSafeAbi, assertBounceConfigured } from '@bounce/contracts';
 import { sendAndConfirm } from './transaction';
 
@@ -67,15 +67,18 @@ async function execSafeTransaction(
 
   const signature = await signSafeTxHash(walletClient, owner, safeTxHash as `0x${string}`);
 
+  const execArgs = [to, value, data, operation, 0n, 0n, 0n, zeroAddress, zeroAddress, signature] as const;
+
+  const { request } = await publicClient.simulateContract({
+    account: owner,
+    address: safeAddress,
+    abi: GnosisSafeAbi,
+    functionName: 'execTransaction',
+    args: execArgs,
+  });
+
   const { hash } = await sendAndConfirm(publicClient, () =>
-    walletClient.writeContract({
-      chain: polygon,
-      address: safeAddress,
-      abi: GnosisSafeAbi,
-      functionName: 'execTransaction',
-      args: [to, value, data, operation, 0n, 0n, 0n, zeroAddress, zeroAddress, signature],
-      account: owner,
-    }),
+    walletClient.writeContract(request),
   );
 
   return hash;
@@ -115,17 +118,48 @@ export async function deployPolySafe(
     return safeAddress;
   }
 
+  const paymentToken = zeroAddress;
+  const payment = 0n;
+  const paymentReceiver = zeroAddress;
+
+  const signature = await walletClient.signTypedData({
+    account: owner,
+    domain: {
+      name: 'Polymarket Contract Proxy Factory',
+      chainId: 137,
+      verifyingContract: POLYMARKET_ADDRESSES.POLYMARKET_SAFE_FACTORY,
+    },
+    types: {
+      CreateProxy: [
+        { name: 'paymentToken', type: 'address' },
+        { name: 'payment', type: 'uint256' },
+        { name: 'paymentReceiver', type: 'address' },
+      ],
+    },
+    primaryType: 'CreateProxy',
+    message: { paymentToken, payment, paymentReceiver },
+  });
+
+  const { v, r, s } = parseSignature(signature);
+
+  const args = [
+    paymentToken,
+    payment,
+    paymentReceiver,
+    { v: Number(v), r, s },
+  ] as const;
+
+  const { request } = await publicClient.simulateContract({
+    account: owner,
+    address: POLYMARKET_ADDRESSES.POLYMARKET_SAFE_FACTORY,
+    abi: PolySafeFactoryAbi,
+    functionName: 'createProxy',
+    args,
+  });
+
   const { hash } = await sendAndConfirm(
     publicClient,
-    () =>
-      walletClient.writeContract({
-        chain: polygon,
-        address: POLYMARKET_ADDRESSES.POLYMARKET_SAFE_FACTORY,
-        abi: PolySafeFactoryAbi,
-        functionName: 'createProxy',
-        args: [owner],
-        account: owner,
-      }),
+    () => walletClient.writeContract(request),
   );
 
   console.log('Safe deployed at:', safeAddress, 'tx:', hash);
