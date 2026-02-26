@@ -674,8 +674,17 @@ contract BounceTest is Test {
         vm.startPrank(proposer);
         usdc.approve(address(bounce), type(uint256).max);
         uint256 betId = bounce.proposeBet(
-            address(safe), funder, CTF_EXCHANGE, CONDITION_ID, OUTCOME_INDEX, POSITION_ID,
-            TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, futureExpiry, SLUG
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            CONDITION_ID,
+            OUTCOME_INDEX,
+            POSITION_ID,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            futureExpiry,
+            SLUG
         );
         vm.stopPrank();
 
@@ -697,8 +706,17 @@ contract BounceTest is Test {
         vm.startPrank(proposer);
         usdc.approve(address(bounce), type(uint256).max);
         uint256 betId2 = bounce.proposeBet(
-            address(safe), funder, CTF_EXCHANGE, conditionId2, 0, positionId2,
-            TOTAL_CAPITAL, PROPOSER_CAPITAL_BPS, PROPOSER_PROFIT_SHARE_BPS, EXPIRES_AT, "market-2"
+            address(safe),
+            funder,
+            CTF_EXCHANGE,
+            conditionId2,
+            0,
+            positionId2,
+            TOTAL_CAPITAL,
+            PROPOSER_CAPITAL_BPS,
+            PROPOSER_PROFIT_SHARE_BPS,
+            EXPIRES_AT,
+            "market-2"
         );
         vm.stopPrank();
 
@@ -1680,5 +1698,177 @@ contract BounceTest is Test {
         // Attempt sell without approval — should revert.
         vm.expectRevert("CTF: need operator approval");
         exchange.sell(POSITION_ID, 1000);
+    }
+
+    // ============================================
+    // 16. Balance Contamination Tests
+    // ============================================
+
+    function test_finalizeTrade_immuneToUsdcDonation() public {
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+        _prepareTrade(betId);
+
+        // Attacker donates USDC to Safe before settlement
+        usdc.mint(address(safe), 5_000_000);
+
+        // Normal settlement
+        _simulateSettlement(betId, TOTAL_CAPITAL);
+        _finalizeTrade(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        // Spent should be exactly TOTAL_CAPITAL (not reduced by donation)
+        assertEq(bet.usdcSpent, TOTAL_CAPITAL);
+        // No leftover since all inFlightUSDC was spent
+        assertEq(bet.escrowUSDC, 0);
+        assertEq(bet.inFlightUSDC, 0);
+        // Donated USDC should remain in Safe, not swept
+        assertEq(usdc.balanceOf(address(safe)), 5_000_000);
+    }
+
+    function test_finalizeTrade_partialFillWithUsdcDonation() public {
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+        _prepareTrade(betId);
+
+        // Attacker donates USDC to Safe
+        usdc.mint(address(safe), 3_000_000);
+
+        // Partial settlement: only spend half
+        uint256 halfCapital = TOTAL_CAPITAL / 2;
+        _simulateSettlement(betId, halfCapital);
+        _finalizeTrade(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        // Spent should be exactly halfCapital
+        assertEq(bet.usdcSpent, halfCapital);
+        // Leftover should be the unspent half of inFlightUSDC
+        assertEq(bet.escrowUSDC, halfCapital);
+        // Donated USDC should remain in Safe
+        assertEq(usdc.balanceOf(address(safe)), 3_000_000);
+    }
+
+    function test_finalizeTrade_immuneToShareDonation() public {
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+        _prepareTrade(betId);
+
+        // Attacker donates CTF shares to Safe before settlement
+        ctf.mint(address(safe), POSITION_ID, 500_000);
+
+        // Normal settlement
+        _simulateSettlement(betId, TOTAL_CAPITAL);
+        _finalizeTrade(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        // positionShares includes both donated + settled shares (absolute balance)
+        assertEq(bet.positionShares, 2_500_000); // 500k donated + 2M from settlement
+        assertEq(bet.usdcSpent, TOTAL_CAPITAL);
+    }
+
+    function test_unprepareTrade_immuneToShareDonation() public {
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+        _prepareTrade(betId);
+
+        // Attacker donates CTF shares to Safe — should NOT block unprepare
+        ctf.mint(address(safe), POSITION_ID, 500_000);
+
+        // Unprepare should still succeed (allowance unchanged = no settlement)
+        bounce.unprepareTrade(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertTrue(bet.status == Bounce.BetStatus.Funded);
+        assertEq(bet.escrowUSDC, TOTAL_CAPITAL);
+    }
+
+    function test_unprepareTrade_immuneToUsdcDonation() public {
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+        _prepareTrade(betId);
+
+        // Attacker donates USDC to Safe
+        usdc.mint(address(safe), 3_000_000);
+
+        bounce.unprepareTrade(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertTrue(bet.status == Bounce.BetStatus.Funded);
+        // Only inFlightUSDC recovered, not the donation
+        assertEq(bet.escrowUSDC, TOTAL_CAPITAL);
+        // Donated USDC stays in Safe
+        assertEq(usdc.balanceOf(address(safe)), 3_000_000);
+    }
+
+    function test_redeemPosition_immuneToShareDonation() public {
+        uint256 betId = _proposeAndFundAndTrade();
+
+        // Attacker donates extra CTF shares to Safe after trading
+        ctf.mint(address(safe), POSITION_ID, 1_000_000);
+
+        // Redeem at $1/share. All shares (including donated) get redeemed.
+        ctf.setPayoutPerShare(CONDITION_ID, 1_000_000);
+        vm.prank(proposer);
+        bounce.redeemPosition(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        // Should close successfully without underflow
+        assertTrue(bet.status == Bounce.BetStatus.Closed);
+        assertEq(bet.positionShares, 0);
+        // 3M shares (2M + 1M donated) * $1 = 3M USDC
+        assertEq(bet.escrowUSDC, 3_000_000);
+    }
+
+    function test_finalizeTrade_safePreExistingUsdc() public {
+        // Safe has USDC from a previous bet or direct deposit
+        usdc.mint(address(safe), 2_000_000);
+
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+        _prepareTrade(betId);
+
+        // Full settlement
+        _simulateSettlement(betId, TOTAL_CAPITAL);
+        _finalizeTrade(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertEq(bet.usdcSpent, TOTAL_CAPITAL);
+        assertEq(bet.escrowUSDC, 0);
+        // Pre-existing USDC should remain untouched in Safe
+        assertEq(usdc.balanceOf(address(safe)), 2_000_000);
+    }
+
+    function test_unprepareTrade_safePreExistingUsdc() public {
+        // Safe has pre-existing USDC
+        usdc.mint(address(safe), 2_000_000);
+
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+        _prepareTrade(betId);
+
+        bounce.unprepareTrade(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertEq(bet.escrowUSDC, TOTAL_CAPITAL);
+        // Pre-existing USDC untouched
+        assertEq(usdc.balanceOf(address(safe)), 2_000_000);
+    }
+
+    function test_redeemPosition_safePreExistingUsdc() public {
+        uint256 betId = _proposeAndFundAndTrade();
+
+        // Someone sends USDC to Safe after trading
+        usdc.mint(address(safe), 2_000_000);
+
+        ctf.setPayoutPerShare(CONDITION_ID, 1_000_000);
+        vm.prank(proposer);
+        bounce.redeemPosition(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertTrue(bet.status == Bounce.BetStatus.Closed);
+        // Only delta from redemption goes to escrow (2M shares * $1 = 2M USDC)
+        assertEq(bet.escrowUSDC, 2_000_000);
+        // Pre-existing USDC stays in Safe
+        assertEq(usdc.balanceOf(address(safe)), 2_000_000);
     }
 }
