@@ -268,17 +268,17 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                 {/* ── Win / Loss — side-by-side mini-cards ── */}
                 <div className="grid grid-cols-2 gap-2.5">
                   {/* If Win */}
-                  <div className="rounded-xl border border-dark-border bg-[#111113] p-3.5">
+                  <div className="rounded-xl border border-[#4ade80]/20 bg-[#0f1a14] p-3.5">
                     <div className="flex items-center gap-1.5 mb-3">
-                      <TrendingUp className="w-3.5 h-3.5" style={{ color: '#D4AD4A' }} />
-                      <span className="text-[11px] font-semibold" style={{ color: '#D4AD4A' }}>If You Win</span>
+                      <TrendingUp className="w-4 h-4" style={{ color: '#4ade80' }} />
+                      <span className="text-sm font-semibold" style={{ color: '#4ade80' }}>If You Win</span>
                     </div>
 
                     {profitComparison ? (
                       <div className="space-y-2.5">
                         <div>
-                          <span className="text-[10px] text-muted-foreground block mb-0.5">Regular</span>
-                          <span className="text-sm font-mono text-muted-foreground">
+                          <span className="text-[12px] text-muted-foreground block mb-0.5">Regular</span>
+                          <span className="text-base font-mono text-muted-foreground">
                             +${profitComparison.regularProfit.toFixed(2)}
                           </span>
                           <div className="h-1 rounded-full bg-white/5 overflow-hidden mt-1">
@@ -286,14 +286,14 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                           </div>
                         </div>
                         <div>
-                          <span className="text-[10px] text-white font-medium block mb-0.5">Bounce</span>
-                          <span className="text-sm font-mono font-bold" style={{ color: '#D4AD4A' }}>
+                          <span className="text-[12px] text-white font-medium block mb-0.5">Bounce</span>
+                          <span className="text-base font-mono font-bold" style={{ color: '#4ade80' }}>
                             +${profitComparison.bounceProfit.toFixed(2)}
                           </span>
                           <div className="h-1 rounded-full bg-white/5 overflow-hidden mt-1">
                             <motion.div
                               className="h-full rounded-full"
-                              style={{ background: 'linear-gradient(90deg, #D4AD4A, #ECC25E)' }}
+                              style={{ background: 'linear-gradient(90deg, #4ade80, #86efac)' }}
                               initial={{ width: '33.3%' }}
                               animate={{ width: '100%' }}
                               transition={{ duration: 0.6, ease: 'easeOut', delay: 0.15 }}
@@ -301,27 +301,27 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                           </div>
                         </div>
                         <span
-                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
-                          style={{ background: 'rgba(212,173,74,0.12)', color: '#D4AD4A' }}
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold"
+                          style={{ background: 'rgba(74, 222, 128, 0.12)', color: '#4ade80' }}
                         >
                           3× more profit
                         </span>
                       </div>
                     ) : (
-                      <p className="text-[10px] text-muted-foreground">Enter a stake to see</p>
+                      <p className="text-[11px] text-muted-foreground">Enter a stake to see</p>
                     )}
                   </div>
 
                   {/* If Loss */}
-                  <div className="rounded-xl border border-dark-border bg-[#111113] p-3.5">
+                  <div className="rounded-xl border border-[#E03537]/20 bg-[#1a0f11] p-3.5">
                     <div className="flex items-center gap-1.5 mb-3">
-                      <Shield className="w-3.5 h-3.5 text-danger" />
-                      <span className="text-[11px] font-semibold text-danger">If Loss</span>
+                      <Shield className="w-4 h-4" style={{ color: '#E03537' }} />
+                      <span className="text-sm font-semibold" style={{ color: '#E03537' }}>If Loss</span>
                     </div>
 
                     <div className="space-y-2.5">
                       <div>
-                        <span className="text-[10px] text-muted-foreground block mb-1">
+                        <span className="text-[12px] text-muted-foreground block mb-4">
                           Your capital absorbs the first 20% loss
                         </span>
                         <div className="h-1.5 rounded-full bg-white/10 overflow-hidden relative">
@@ -330,29 +330,29 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                             style={{
                               left: `${(1 - DEFAULT_PROPOSER_CAPITAL_BPS / 10000) * 100}%`,
                               right: 0,
-                              background: 'rgba(239, 68, 68, 0.5)',
+                              background: 'rgba(224, 53, 55, 0.5)',
                               borderRadius: '0 9999px 9999px 0',
                             }}
                           />
                         </div>
                         <div className="flex justify-between mt-1 relative">
-                          <span className="text-[10px] text-muted-foreground font-mono">0¢</span>
+                          <span className="text-[11px] text-muted-foreground font-mono">0¢</span>
                           <span
-                            className="text-[10px] font-mono absolute"
+                            className="text-[11px] font-mono absolute"
                             style={{
                               left: `${(1 - DEFAULT_PROPOSER_CAPITAL_BPS / 10000) * 100}%`,
                               transform: 'translateX(-50%)',
-                              color: '#ef4444',
+                              color: '#E03537',
                             }}
                           >
                             {Math.round(wipeoutPrice * 100)}¢
                           </span>
-                          <span className="text-[10px] text-muted-foreground font-mono">{pct}¢</span>
+                          <span className="text-[11px] text-muted-foreground font-mono">{pct}¢</span>
                         </div>
                       </div>
                       <span
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
-                        style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444' }}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold"
+                        style={{ background: 'rgba(224, 53, 55, 0.08)', color: '#E03537' }}
                       >
                         −20% wipeout
                       </span>
