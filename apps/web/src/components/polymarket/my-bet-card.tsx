@@ -38,7 +38,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-dark-border bg-dark-surface p-5 flex flex-col gap-4"
+      className="rounded-2xl border border-dark-border bg-dark-surface p-6 flex flex-col gap-5"
     >
       {/* Header */}
       <div className="flex items-start gap-3">
@@ -46,7 +46,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
           <img
             src={metadata.marketImage}
             alt=""
-            className="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-white/5"
+            className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-white/5"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
         )}
@@ -56,7 +56,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
           </h3>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span
-              className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase"
+              className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold uppercase"
               style={{
                 background: isYesOutcome ? 'rgba(34, 197, 94, 0.12)' : 'rgba(239, 68, 68, 0.12)',
                 color: isYesOutcome ? '#22c55e' : '#ef4444',
@@ -65,33 +65,23 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
               {isYesOutcome ? 'Yes' : 'No'}
             </span>
             <span className="text-xs text-muted-foreground font-mono">{pct}¢</span>
-            <span
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase"
-              style={{
-                background: role === 'believer' ? 'rgba(236, 194, 94, 0.12)' : 'rgba(97, 166, 251, 0.12)',
-                color: role === 'believer' ? '#D4AD4A' : '#61A6FB',
-              }}
-            >
-              {role === 'believer' ? <TrendingUp className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
-              {role === 'believer' ? 'Believer' : 'Backer'}
-            </span>
           </div>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-dark-border bg-[#111113] px-3 py-2.5">
-          <span className="text-[11px] text-muted-foreground font-medium">
+        <div className="rounded-xl border border-dark-border bg-[#111113] px-4 py-3">
+          <span className="text-xs text-muted-foreground font-medium">
             {role === 'believer' ? 'Your Stake' : 'Your Funding'}
           </span>
-          <p className="text-lg font-bold text-white mt-0.5 font-mono">
+          <p className="text-lg font-bold text-white mt-1 font-mono">
             ${role === 'believer' ? formatUsdc(proposerStake) : formatUsdc(funderPortion)}
           </p>
         </div>
-        <div className="rounded-xl border border-dark-border bg-[#111113] px-3 py-2.5">
-          <span className="text-[11px] text-muted-foreground font-medium">Total Position</span>
-          <p className="text-lg font-bold text-white mt-0.5 font-mono">
+        <div className="rounded-xl border border-dark-border bg-[#111113] px-4 py-3">
+          <span className="text-xs text-muted-foreground font-medium">Total Position</span>
+          <p className="text-lg font-bold text-white mt-1 font-mono">
             ${formatUsdc(bet.totalCapital)}
           </p>
         </div>
@@ -99,20 +89,20 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
 
       {/* Trade Structure Bar */}
       <div>
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Trade Structure</span>
-        <div className="mt-1.5 h-2 rounded-full overflow-hidden flex">
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Trade Structure</span>
+        <div className="mt-2 h-2 rounded-full overflow-hidden flex">
           <div className="h-full rounded-l-full" style={{ width: '20%', background: 'linear-gradient(90deg, #C8A43A, #D4AD4A)' }} />
           <div className="h-full rounded-r-full" style={{ width: '80%', background: 'linear-gradient(90deg, #4A80C4, #5B93D4)' }} />
         </div>
-        <div className="flex items-center justify-between mt-1">
-          <span className="text-[10px] font-medium" style={{ color: '#D4AD4A' }}>20% Believer</span>
-          <span className="text-[10px] font-medium" style={{ color: '#5B93D4' }}>80% Backer</span>
+        <div className="flex items-center justify-between mt-1.5">
+          <span className="text-[11px] font-medium" style={{ color: '#D4AD4A' }}>20% Believer</span>
+          <span className="text-[11px] font-medium" style={{ color: '#5B93D4' }}>80% Backer</span>
         </div>
       </div>
 
       {/* Counterparty */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <User className="w-3 h-3" />
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <User className="w-3.5 h-3.5" />
         <span>
           {role === 'believer'
             ? bet.funder !== '0x0000000000000000000000000000000000000000' ? `Backed by ${formatAddress(bet.funder)}` : 'Awaiting Backer'
@@ -123,7 +113,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
 
       {/* Status */}
       <div
-        className="flex items-center justify-center gap-2 py-2.5 rounded-xl"
+        className="flex items-center justify-center gap-2 py-3 rounded-xl"
         style={{ background: status.bg, border: `1px solid ${status.color}25` }}
       >
         <StatusIcon className="w-4 h-4" style={{ color: status.color }} />
@@ -135,7 +125,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
         <button
           onClick={() => cancelBet(betView.betId)}
           disabled={isCancelling}
-          className="w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+          className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
           style={{
             background: 'rgba(239, 68, 68, 0.08)',
             border: '1px solid rgba(239, 68, 68, 0.25)',
@@ -151,7 +141,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
         <button
           onClick={() => withdrawBet(betView.betId)}
           disabled={isWithdrawing}
-          className="w-full py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+          className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
           style={{
             background: 'rgba(97, 166, 251, 0.08)',
             border: '1px solid rgba(97, 166, 251, 0.25)',
