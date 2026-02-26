@@ -65,6 +65,7 @@ export function useProposeBet() {
         // Step 1: Ensure Safe is ready (deploy + module + guard)
         setStep('ensuring-safe');
         const safeAddress = await ensureSafeReady(walletClient, publicClient, address);
+        await queryClient.invalidateQueries({ queryKey: ['safe-status', address] });
 
         // Compute parameters
         const conditionIdHex = validateConditionId(params.conditionId);
@@ -154,6 +155,7 @@ export function useProposeBet() {
         await queryClient.invalidateQueries({ queryKey: ['bets'] });
 
         setStep('success');
+        await queryClient.invalidateQueries({ queryKey: ['walletBalances', address] });
         return { betId, hash };
       } catch (err) {
         const parsed = parseTransactionError(err);

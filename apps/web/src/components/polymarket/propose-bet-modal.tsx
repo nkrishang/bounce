@@ -62,21 +62,29 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
   const profitComparison = price > 0 && isValidStake ? computeProfitComparison(stakeNum, price) : null;
   const wipeoutPrice = price > 0 ? computeWipeoutPrice(price) : 0;
 
-  // Build the dynamic step list for the visual stepper
+  // Build the dynamic step list — include Safe step if preflight says not ready OR if hook is currently in that step
   const txSteps = useMemo(() => {
     const steps: { key: string; label: string }[] = [];
-    if (!preflight.safeReady) {
+    if (!preflight.safeReady || step === 'ensuring-safe') {
       steps.push({ key: 'ensuring-safe', label: 'Setup Safe' });
     }
     steps.push({ key: 'approving', label: 'Approve' });
     steps.push({ key: 'proposing', label: 'Propose' });
     return steps;
-  }, [preflight.safeReady]);
+  }, [preflight.safeReady, step]);
 
-  // Map hook step to stepper state
+  // Map hook step to stepper state — derive index from txSteps directly to prevent drift
   const activeStepKey = isLoading ? step : step === 'success' ? '__done__' : null;
-  const stepKeyOrder = ['ensuring-safe', 'approving', 'proposing', 'saving-metadata', '__done__'];
-  const activeIdx = activeStepKey ? stepKeyOrder.indexOf(activeStepKey) : -1;
+  const activeIdx = useMemo(() => {
+    if (!activeStepKey) return -1;
+    if (activeStepKey === '__done__') return txSteps.length;
+    // saving-metadata maps to after the last visible step (proposing)
+    if (activeStepKey === 'saving-metadata') {
+      const proposeIdx = txSteps.findIndex(s => s.key === 'proposing');
+      return proposeIdx >= 0 ? proposeIdx + 1 : txSteps.length;
+    }
+    return txSteps.findIndex(s => s.key === activeStepKey);
+  }, [activeStepKey, txSteps]);
 
   const adjustStake = useCallback((delta: number) => {
     setStakeAmount((prev) => {
@@ -89,7 +97,12 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
   const handlePropose = async () => {
     if (!market || !event || !isValidStake) return;
     try {
-      const stakeAmountBigint = parseUnits(stakeAmount, 6);
+      let stakeAmountBigint: bigint;
+      try {
+        stakeAmountBigint = parseUnits(stakeAmount, 6);
+      } catch {
+        return;
+      }
       await proposeBet({
         conditionId: market.conditionId || market.condition_id,
         outcomeIndex,
@@ -111,6 +124,12 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
 
   const proposerPct = DEFAULT_PROPOSER_CAPITAL_BPS / 100;
   const backerPct = 100 - proposerPct;
+
+  // Preflight-aware button disable
+  const preflightReady = !preflight.isLoading;
+  const balanceBlocked = preflightReady && isAuthenticated && (
+    (!preflight.hasEnoughUsdc && isValidStake) || !preflight.hasEnoughGas
+  );
 
   return createPortal(
     <AnimatePresence>
@@ -161,7 +180,7 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                 </div>
               </div>
 
-              <div className="px-5 pb-5 space-y-4">
+              <div className="px-5 pb-5 space-y-3">
                 {/* ── Bet Amount ── */}
                 <div className="rounded-xl border border-dark-border bg-[#111113] p-4">
                   {/* Amount input row */}
@@ -219,92 +238,59 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                     })}
                   </div>
 
+                  {/* Inline position summary — merged into amount card */}
+                  {isValidStake && (
+                    <div className="mt-3 pt-3 border-t border-white/[0.06]">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] text-muted-foreground">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full mr-1" style={{ background: '#D4AD4A' }} />
+                          You {proposerPct}%
+                          <span className="mx-1.5 text-white/15">·</span>
+                          <span className="inline-block w-1.5 h-1.5 rounded-full mr-1" style={{ background: '#61A6FB' }} />
+                          Backer {backerPct}%
+                        </span>
+                        <span className="text-[11px] font-mono font-semibold" style={{ color: '#61A6FB' }}>
+                          ${totalPosition.toLocaleString()} total
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-white/5 overflow-hidden flex">
+                        <div className="h-full" style={{ width: `${proposerPct}%`, background: '#D4AD4A', borderRadius: '9999px 0 0 9999px' }} />
+                        <div className="h-full" style={{ width: `${backerPct}%`, background: '#61A6FB', borderRadius: '0 9999px 9999px 0' }} />
+                      </div>
+                    </div>
+                  )}
+
                   {!isValidStake && stakeAmount !== '' && (
                     <p className="text-xs text-danger mt-2">Minimum stake is ${MIN_STAKE} USDC</p>
                   )}
                 </div>
 
-                {/* ── Position & Outcomes ── */}
-                <div className="rounded-xl border border-dark-border bg-[#111113] overflow-hidden">
-                  {/* Position Breakdown */}
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="text-xs font-semibold text-white">Position</span>
-                      <span
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold"
-                        style={{ background: 'rgba(97, 166, 251, 0.12)', color: '#61A6FB' }}
-                      >
-                        ${isValidStake ? totalPosition.toLocaleString() : '—'} total
-                      </span>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between items-baseline mb-1.5">
-                        <span className="text-xs text-muted-foreground">
-                          <span className="inline-block w-1.5 h-1.5 rounded-full mr-1" style={{ background: '#D4AD4A' }} />
-                          You {proposerPct}%
-                          <span className="mx-1.5 text-white/20">·</span>
-                          <span className="inline-block w-1.5 h-1.5 rounded-full mr-1" style={{ background: '#61A6FB' }} />
-                          Backer {backerPct}%
-                        </span>
-                      </div>
-                      <div className="h-2 rounded-full bg-white/5 overflow-hidden flex">
-                        <div className="h-full" style={{ width: `${proposerPct}%`, background: '#D4AD4A', borderRadius: '9999px 0 0 9999px' }} />
-                        <div className="h-full" style={{ width: `${backerPct}%`, background: '#61A6FB', borderRadius: '0 9999px 9999px 0' }} />
-                      </div>
-                      <div className="flex justify-between mt-1.5">
-                        <span className="text-sm font-mono font-semibold" style={{ color: '#D4AD4A' }}>
-                          ${isValidStake ? stakeNum.toLocaleString() : '—'}
-                        </span>
-                        <span className="text-sm font-mono font-semibold" style={{ color: '#61A6FB' }}>
-                          ${isValidStake ? funderPortion.toLocaleString() : '—'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="h-px bg-dark-border" />
-                  {/* If You Win */}
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-1.5">
-                        <TrendingUp className="w-3.5 h-3.5" style={{ color: '#D4AD4A' }} />
-                        <span className="text-xs font-semibold" style={{ color: '#D4AD4A' }}>If You Win</span>
-                      </div>
-                      {profitComparison && (
-                        <span
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold"
-                          style={{ background: 'rgba(212,173,74,0.15)', color: '#D4AD4A' }}
-                        >
-                          3× more profit
-                        </span>
-                      )}
+                {/* ── Win / Loss — side-by-side mini-cards ── */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* If Win */}
+                  <div className="rounded-xl border border-dark-border bg-[#111113] p-3.5">
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <TrendingUp className="w-3.5 h-3.5" style={{ color: '#D4AD4A' }} />
+                      <span className="text-[11px] font-semibold" style={{ color: '#D4AD4A' }}>If You Win</span>
                     </div>
 
                     {profitComparison ? (
-                      <div className="space-y-3">
-                        {/* Regular bet */}
+                      <div className="space-y-2.5">
                         <div>
-                          <div className="flex justify-between items-baseline mb-1.5">
-                            <span className="text-xs text-muted-foreground">Regular bet</span>
-                            <span className="text-sm font-mono text-muted-foreground">
-                              +${profitComparison.regularProfit.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                          <span className="text-[10px] text-muted-foreground block mb-0.5">Regular</span>
+                          <span className="text-sm font-mono text-muted-foreground">
+                            +${profitComparison.regularProfit.toFixed(2)}
+                          </span>
+                          <div className="h-1 rounded-full bg-white/5 overflow-hidden mt-1">
                             <div className="h-full rounded-full bg-white/20" style={{ width: '33.3%' }} />
                           </div>
                         </div>
-
-                        {/* Bounce bet */}
                         <div>
-                          <div className="flex justify-between items-baseline mb-1.5">
-                            <span className="text-xs text-white font-medium">With Bounce</span>
-                            <span className="text-sm font-mono font-bold" style={{ color: '#D4AD4A' }}>
-                              +${profitComparison.bounceProfit.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                          <span className="text-[10px] text-white font-medium block mb-0.5">Bounce</span>
+                          <span className="text-sm font-mono font-bold" style={{ color: '#D4AD4A' }}>
+                            +${profitComparison.bounceProfit.toFixed(2)}
+                          </span>
+                          <div className="h-1 rounded-full bg-white/5 overflow-hidden mt-1">
                             <motion.div
                               className="h-full rounded-full"
                               style={{ background: 'linear-gradient(90deg, #D4AD4A, #ECC25E)' }}
@@ -314,62 +300,75 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                             />
                           </div>
                         </div>
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          style={{ background: 'rgba(212,173,74,0.12)', color: '#D4AD4A' }}
+                        >
+                          3× more profit
+                        </span>
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">Enter a valid stake to see comparison</p>
+                      <p className="text-[10px] text-muted-foreground">Enter a stake to see</p>
                     )}
                   </div>
 
-                  {/* Divider */}
-                  <div className="h-px bg-dark-border" />
-
                   {/* If Loss */}
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-1.5">
-                        <Shield className="w-3.5 h-3.5 text-danger" />
-                        <span className="text-xs font-semibold text-danger">If Loss</span>
+                  <div className="rounded-xl border border-dark-border bg-[#111113] p-3.5">
+                    <div className="flex items-center gap-1.5 mb-3">
+                      <Shield className="w-3.5 h-3.5 text-danger" />
+                      <span className="text-[11px] font-semibold text-danger">If Loss</span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <div>
+                        <span className="text-[10px] text-muted-foreground block mb-1">
+                          Your capital absorbs the first 20% loss
+                        </span>
+                        <div className="h-1.5 rounded-full bg-white/10 overflow-hidden relative">
+                          <div
+                            className="absolute top-0 h-full"
+                            style={{
+                              left: `${(1 - DEFAULT_PROPOSER_CAPITAL_BPS / 10000) * 100}%`,
+                              right: 0,
+                              background: 'rgba(239, 68, 68, 0.5)',
+                              borderRadius: '0 9999px 9999px 0',
+                            }}
+                          />
+                        </div>
+                        <div className="flex justify-between mt-1 relative">
+                          <span className="text-[10px] text-muted-foreground font-mono">0¢</span>
+                          <span
+                            className="text-[10px] font-mono absolute"
+                            style={{
+                              left: `${(1 - DEFAULT_PROPOSER_CAPITAL_BPS / 10000) * 100}%`,
+                              transform: 'translateX(-50%)',
+                              color: '#ef4444',
+                            }}
+                          >
+                            {Math.round(wipeoutPrice * 100)}¢
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-mono">{pct}¢</span>
+                        </div>
                       </div>
                       <span
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold"
-                        style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+                        style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444' }}
                       >
                         −20% wipeout
                       </span>
                     </div>
-
-                    <div>
-                      <div className="flex justify-between items-baseline mb-1.5">
-                        <span className="text-xs text-muted-foreground">Your ${isValidStake ? stakeNum.toLocaleString() : '—'} capital bears the first 20% loss</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-white/15 overflow-hidden relative">
-                        <div
-                          className="absolute top-0 h-full"
-                          style={{
-                            left: `${(1 - DEFAULT_PROPOSER_CAPITAL_BPS / 10000) * 100}%`,
-                            right: 0,
-                            background: 'rgba(239, 68, 68, 0.5)',
-                            borderRadius: '0 9999px 9999px 0',
-                          }}
-                        />
-                      </div>
-                      <div className="flex justify-between mt-1.5 relative">
-                        <span className="text-[11px] text-muted-foreground font-mono">0¢</span>
-                        <span
-                          className="text-[11px] font-mono absolute"
-                          style={{
-                            left: `${(1 - DEFAULT_PROPOSER_CAPITAL_BPS / 10000) * 100}%`,
-                            transform: 'translateX(-50%)',
-                            color: '#ef4444',
-                          }}
-                        >
-                          {Math.round(wipeoutPrice * 100)}¢
-                        </span>
-                        <span className="text-[11px] text-muted-foreground font-mono">{pct}¢</span>
-                      </div>
-                    </div>
                   </div>
                 </div>
+
+                {/* Safe setup note */}
+                {isAuthenticated && !preflight.isLoading && !preflight.safeReady && !isLoading && step !== 'success' && (
+                  <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center gap-2">
+                    <Shield className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <p className="text-[11px] text-muted-foreground">
+                      One-time Safe wallet setup required ({preflight.safeTxsNeeded} tx{preflight.safeTxsNeeded !== 1 ? 's' : ''})
+                    </p>
+                  </div>
+                )}
 
                 {/* Pre-flight warnings */}
                 {isAuthenticated && !preflight.isLoading && (
@@ -393,17 +392,16 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                   </>
                 )}
 
-                {/* Transaction stepper — visible when safe needs setup or tx is in progress */}
-                {isAuthenticated && (isLoading || step === 'success' || (!preflight.isLoading && !preflight.safeReady)) && (
+                {/* Transaction stepper — only during active tx or success */}
+                {isAuthenticated && (isLoading || step === 'success') && (
                   <div className="px-2 py-3">
                     <div className="flex items-center">
                       {txSteps.map((s, i) => {
-                        const sIdx = stepKeyOrder.indexOf(s.key);
+                        const sIdx = txSteps.findIndex(ts => ts.key === s.key);
                         const isCompleted = activeIdx > sIdx;
                         const isActive = activeIdx === sIdx;
                         return (
                           <div key={s.key} className="flex items-center flex-1 last:flex-none">
-                            {/* Step circle + label */}
                             <div className="flex flex-col items-center gap-1.5">
                               <div
                                 className="w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300"
@@ -437,7 +435,6 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                                 {s.label}
                               </span>
                             </div>
-                            {/* Connector line */}
                             {i < txSteps.length - 1 && (
                               <div className="flex-1 h-0.5 mx-2 mb-5 rounded-full overflow-hidden bg-white/5">
                                 <div
@@ -486,8 +483,7 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                     onClick={handlePropose}
                     disabled={
                       isLoading || step === 'success' || !isValidStake ||
-                      (isAuthenticated && !preflight.hasEnoughUsdc && isValidStake) ||
-                      (isAuthenticated && !preflight.hasEnoughGas)
+                      preflight.isLoading || balanceBlocked
                     }
                     className="w-full py-3.5 rounded-xl font-bold text-[15px] disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2 transition-all duration-200"
                     style={
@@ -509,6 +505,11 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                         {step === 'approving' && 'Approving USDC...'}
                         {step === 'proposing' && 'Proposing Bet...'}
                         {step === 'saving-metadata' && 'Saving...'}
+                      </>
+                    ) : preflight.isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Checking balances…
                       </>
                     ) : (
                       <>

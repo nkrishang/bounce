@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { createPublicClient, http, formatUnits, type Address } from 'viem';
+import { createPublicClient, http, formatUnits, parseUnits, type Address } from 'viem';
 import { polygon } from 'viem/chains';
 import {
   deriveSafeAddress,
@@ -12,12 +12,12 @@ import {
 } from '@/lib/polymarket-safe';
 import { useWalletBalances } from '@/hooks/use-wallet';
 
-const MIN_GAS_POL = 0.02;
+const MIN_GAS_WEI = parseUnits('0.02', 18);
 
-const publicClient = createPublicClient({
-  chain: polygon,
-  transport: http(process.env.NEXT_PUBLIC_POLYGON_RPC_URL || ''),
-});
+const rpcUrl = process.env.NEXT_PUBLIC_POLYGON_RPC_URL;
+const publicClient = rpcUrl
+  ? createPublicClient({ chain: polygon, transport: http(rpcUrl) })
+  : null;
 
 interface SafeStatus {
   deployed: boolean;
@@ -47,6 +47,7 @@ export function useProposePreflight(
     queryKey: ['safe-status', address],
     queryFn: async (): Promise<SafeStatus> => {
       if (!address) throw new Error('No address');
+      if (!publicClient) throw new Error('Missing NEXT_PUBLIC_POLYGON_RPC_URL');
       const safeAddress = deriveSafeAddress(address);
       const [deployed, moduleEnabled, guardInstalled] = await Promise.all([
         isSafeDeployed(publicClient, safeAddress),
@@ -61,15 +62,15 @@ export function useProposePreflight(
 
   return useMemo(() => {
     const chainBalances = balances?.[137];
-    const usdcBalance = chainBalances
-      ? parseFloat(formatUnits(BigInt(chainBalances.usdc), 6))
-      : 0;
-    const nativeBalance = chainBalances
-      ? parseFloat(formatUnits(BigInt(chainBalances.native), 18))
-      : 0;
+    const usdcRaw = chainBalances ? BigInt(chainBalances.usdc) : 0n;
+    const nativeRaw = chainBalances ? BigInt(chainBalances.native) : 0n;
 
-    const hasEnoughUsdc = usdcBalance >= stakeAmount;
-    const hasEnoughGas = nativeBalance >= MIN_GAS_POL;
+    const usdcBalance = parseFloat(formatUnits(usdcRaw, 6));
+    const nativeBalance = parseFloat(formatUnits(nativeRaw, 18));
+
+    const stakeWei = parseUnits(String(Math.max(0, stakeAmount)), 6);
+    const hasEnoughUsdc = usdcRaw >= stakeWei;
+    const hasEnoughGas = nativeRaw >= MIN_GAS_WEI;
 
     const safeReady = safeStatus
       ? safeStatus.deployed && safeStatus.moduleEnabled && safeStatus.guardInstalled
@@ -81,7 +82,6 @@ export function useProposePreflight(
         (!safeStatus.guardInstalled ? 1 : 0)
       : 0;
 
-    // Total steps: safe setup txs + approve + propose + save metadata
     const totalSteps = safeTxsNeeded + 1 + 1 + 1;
 
     return {
