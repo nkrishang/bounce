@@ -49,14 +49,18 @@ async function main() {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 
+  let sweepInterval: ReturnType<typeof setInterval> | undefined;
+  fastify.addHook('onClose', async () => {
+    if (sweepInterval) clearInterval(sweepInterval);
+  });
+
   try {
     await fastify.listen({ port: PORT, host: HOST });
     logger.info(`Server running at http://${HOST}:${PORT}`);
 
     // Resume polling for any in-flight CLOB orders from before restart
     void sweepPendingOrders();
-    const sweepInterval = setInterval(() => void sweepPendingOrders(), 30_000);
-    fastify.addHook('onClose', async () => clearInterval(sweepInterval));
+    sweepInterval = setInterval(() => void sweepPendingOrders(), 30_000);
   } catch (err) {
     logger.error(err, 'Failed to start server');
     process.exit(1);
