@@ -363,33 +363,50 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         emit BetFunded(betId, msg.sender, funderDeposit);
     }
 
-    /// @notice Cancels a proposed bet before it is funded. Refunds proposer.
+    /// @notice Cancels a bet before trading begins. Refunds deposited capital.
+    /// @dev If Proposed: only proposer can cancel, refunds proposer's deposit.
+    ///      If Funded: either proposer or funder can cancel, refunds each party's capital share.
     /// @param betId The bet ID to cancel.
     function cancelBet(uint256 betId) external nonReentrant {
         Bet storage bet = _bets[betId];
 
-        // Must be in Proposed status.
-        if (bet.status != BetStatus.Proposed) revert InvalidStatus(bet.status, BetStatus.Proposed);
+        if (bet.status == BetStatus.Proposed) {
+            // Only proposer can cancel before funding.
+            if (msg.sender != bet.proposer) revert NotProposer();
 
-        // Only proposer can cancel.
-        if (msg.sender != bet.proposer) revert NotProposer();
+            uint256 refundAmount = bet.escrowUSDC;
 
-        // Cache refund amount before zeroing.
-        uint256 refundAmount = bet.escrowUSDC;
+            bet.status = BetStatus.Cancelled;
+            bet.escrowUSDC = 0;
 
-        // Update state before external call (checks-effects-interactions).
-        bet.status = BetStatus.Cancelled;
-        bet.escrowUSDC = 0;
+            bytes32 key = keccak256(abi.encode(bet.safe, bet.exchange, bet.conditionId, bet.outcomeIndex));
+            delete _activeBetKeyToId[key];
+            _activeBetCount[bet.safe]--;
 
-        // Clear active bet key and decrement count.
-        bytes32 key = keccak256(abi.encode(bet.safe, bet.exchange, bet.conditionId, bet.outcomeIndex));
-        delete _activeBetKeyToId[key];
-        _activeBetCount[bet.safe]--;
+            SafeTransferLib.safeTransfer(USDC, bet.proposer, refundAmount);
 
-        // Refund USDC to proposer.
-        SafeTransferLib.safeTransfer(USDC, bet.proposer, refundAmount);
+            emit BetCancelled(betId);
+        } else if (bet.status == BetStatus.Funded) {
+            // Either party can cancel after funding but before trading.
+            if (msg.sender != bet.proposer && msg.sender != bet.funder) revert NotProposerOrFunder();
 
-        emit BetCancelled(betId);
+            uint256 proposerCapital = (bet.totalCapital * bet.proposerCapitalBps) / BPS_DENOMINATOR;
+            uint256 funderCapital = bet.totalCapital - proposerCapital;
+
+            bet.status = BetStatus.Cancelled;
+            bet.escrowUSDC = 0;
+
+            bytes32 key = keccak256(abi.encode(bet.safe, bet.exchange, bet.conditionId, bet.outcomeIndex));
+            delete _activeBetKeyToId[key];
+            _activeBetCount[bet.safe]--;
+
+            SafeTransferLib.safeTransfer(USDC, bet.proposer, proposerCapital);
+            SafeTransferLib.safeTransfer(USDC, bet.funder, funderCapital);
+
+            emit BetCancelled(betId);
+        } else {
+            revert InvalidStatus(bet.status, BetStatus.Funded);
+        }
     }
 
     /// @notice Deprecated — use prepareTrade/finalizeTrade instead.

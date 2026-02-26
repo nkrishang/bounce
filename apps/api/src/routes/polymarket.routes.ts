@@ -249,8 +249,14 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
       await upsertTradeExecution({
         betId: body.betId,
         orderId: result.orderID || null,
-        clobStatus: result.status || 'MATCHED',
+        clobStatus: result.status || 'SUBMITTED',
       });
+
+      // Start backend polling for settlement + auto-finalize
+      if (result.orderID) {
+        const { startClobPolling } = await import('../services/clob-poller.js');
+        startClobPolling(body.betId, result.orderID);
+      }
 
       logger.info({ betId: body.betId, orderId: result.orderID }, 'CLOB order submitted');
       return { data: result };

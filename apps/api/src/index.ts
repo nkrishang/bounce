@@ -5,6 +5,7 @@ import { registerRoutes } from './routes/index.js';
 import { logger } from './lib/logger.js';
 import { getRedisClient, disconnectRedis } from './lib/redis.js';
 import { disconnectDb } from './db/index.js';
+import { sweepPendingOrders } from './services/clob-poller.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -51,6 +52,11 @@ async function main() {
   try {
     await fastify.listen({ port: PORT, host: HOST });
     logger.info(`Server running at http://${HOST}:${PORT}`);
+
+    // Resume polling for any in-flight CLOB orders from before restart
+    void sweepPendingOrders();
+    const sweepInterval = setInterval(() => void sweepPendingOrders(), 30_000);
+    fastify.addHook('onClose', async () => clearInterval(sweepInterval));
   } catch (err) {
     logger.error(err, 'Failed to start server');
     process.exit(1);

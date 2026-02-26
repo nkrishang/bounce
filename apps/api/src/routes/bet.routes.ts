@@ -7,6 +7,8 @@ import {
   getAllBetMetadata,
   saveBetMetadata,
 } from '../services/bet.service.js';
+import { getTradeExecution } from '../services/trade.service.js';
+import { callPrepareTrade } from '../services/trade-orchestrator.js';
 
 export async function betRoutes(fastify: FastifyInstance) {
   // Get metadata for a specific bet
@@ -117,6 +119,40 @@ export async function betRoutes(fastify: FastifyInstance) {
     } catch (error) {
       logger.error(error, 'Failed to fetch trade status');
       return reply.status(500).send({ error: 'Failed to fetch trade status' });
+    }
+  });
+
+  // Prepare a funded bet for trading (calls prepareTrade on-chain via backend signer)
+  // Requires Privy authentication
+  fastify.post<{ Params: { betId: string } }>('/:betId/prepare', async (request, reply) => {
+    try {
+      try {
+        await verifyPrivyToken(request.headers.authorization);
+      } catch {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const betId = parseInt(request.params.betId, 10);
+      if (isNaN(betId)) {
+        return reply.status(400).send({ error: 'Invalid betId' });
+      }
+
+      // Idempotency: if already confirmed, return existing tx hash
+      const existing = await getTradeExecution(betId);
+      if (existing?.prepareStatus === 'confirmed' && existing.prepareTxHash) {
+        return { data: { txHash: existing.prepareTxHash } };
+      }
+
+      // Reject if already pending (concurrent request)
+      if (existing?.prepareStatus === 'pending') {
+        return reply.status(409).send({ error: 'Prepare already in progress' });
+      }
+
+      const txHash = await callPrepareTrade(betId);
+      return { data: { txHash } };
+    } catch (error) {
+      logger.error(error, 'Failed to prepare trade');
+      return reply.status(500).send({ error: 'Failed to prepare trade' });
     }
   });
 }

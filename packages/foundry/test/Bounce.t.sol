@@ -611,17 +611,69 @@ contract BounceTest is Test {
         bounce.cancelBet(betId);
     }
 
-    function test_cancelBet_revertsIfAlreadyFunded() public {
+    function test_cancelBet_clearsActiveKey() public {
+        uint256 betId = _proposeBet();
+
+        vm.prank(proposer);
+        bounce.cancelBet(betId);
+
+        // Should be able to propose the same bet again.
+        _proposeBet();
+        assertEq(bounce.getActiveBetCount(address(safe)), 1);
+    }
+
+    function test_cancelBet_funded_proposerCancels() public {
         uint256 betId = _proposeBet();
         _fundBet(betId);
 
+        uint256 proposerBefore = usdc.balanceOf(proposer);
+        uint256 funderBefore = usdc.balanceOf(funder);
+
+        uint256 proposerCapital = (TOTAL_CAPITAL * PROPOSER_CAPITAL_BPS) / 10_000;
+        uint256 funderCapital = TOTAL_CAPITAL - proposerCapital;
+
         vm.prank(proposer);
-        vm.expectRevert();
+        bounce.cancelBet(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertTrue(bet.status == Bounce.BetStatus.Cancelled);
+        assertEq(bet.escrowUSDC, 0);
+        assertEq(usdc.balanceOf(proposer), proposerBefore + proposerCapital);
+        assertEq(usdc.balanceOf(funder), funderBefore + funderCapital);
+        assertEq(bounce.getActiveBetCount(address(safe)), 0);
+    }
+
+    function test_cancelBet_funded_funderCancels() public {
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+
+        uint256 proposerBefore = usdc.balanceOf(proposer);
+        uint256 funderBefore = usdc.balanceOf(funder);
+
+        uint256 proposerCapital = (TOTAL_CAPITAL * PROPOSER_CAPITAL_BPS) / 10_000;
+        uint256 funderCapital = TOTAL_CAPITAL - proposerCapital;
+
+        vm.prank(funder);
+        bounce.cancelBet(betId);
+
+        Bounce.Bet memory bet = bounce.getBet(betId);
+        assertTrue(bet.status == Bounce.BetStatus.Cancelled);
+        assertEq(usdc.balanceOf(proposer), proposerBefore + proposerCapital);
+        assertEq(usdc.balanceOf(funder), funderBefore + funderCapital);
+    }
+
+    function test_cancelBet_funded_revertsIfRandomUser() public {
+        uint256 betId = _proposeBet();
+        _fundBet(betId);
+
+        vm.prank(randomUser);
+        vm.expectRevert(Bounce.NotProposerOrFunder.selector);
         bounce.cancelBet(betId);
     }
 
-    function test_cancelBet_clearsActiveKey() public {
+    function test_cancelBet_funded_clearsActiveKey() public {
         uint256 betId = _proposeBet();
+        _fundBet(betId);
 
         vm.prank(proposer);
         bounce.cancelBet(betId);

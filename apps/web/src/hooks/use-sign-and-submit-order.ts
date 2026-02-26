@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useWallets } from '@privy-io/react-auth';
+import { useWallets, usePrivy } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { POLYMARKET_ADDRESSES, BounceAbi, CTFExchangeAbi } from '@bounce/contracts';
 import type { BetView } from '@bounce/shared';
@@ -11,7 +11,7 @@ import { buildBuyOrder, signOrder } from '@/lib/polymarket-clob';
 import { parseTransactionError, type ParsedError } from '@/lib/parse-transaction-error';
 import { api } from '@/lib/api';
 
-type Step = 'idle' | 'checking' | 'signing' | 'submitting' | 'polling' | 'confirmed' | 'failed';
+type Step = 'idle' | 'checking' | 'preparing' | 'signing' | 'submitting' | 'polling' | 'confirmed' | 'failed';
 
 export interface SignOrderError extends ParsedError {
   errorId: string;
@@ -19,6 +19,7 @@ export interface SignOrderError extends ParsedError {
 
 export function useSignAndSubmitOrder() {
   const { wallets } = useWallets();
+  const { getAccessToken } = usePrivy();
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<Step>('idle');
@@ -45,16 +46,32 @@ export function useSignAndSubmitOrder() {
         const { walletClient, publicClient } = createClients(chainId, provider);
         const address = await getWalletAddress(walletClient);
 
-        // Step 1: Check bet is Prepared and read fresh nonce
+        // Step 1: Check bet status and prepare if needed
         setStep('checking');
 
-        const raw = await publicClient.readContract({
+        let raw = await publicClient.readContract({
           address: POLYMARKET_ADDRESSES.BOUNCE,
           abi: BounceAbi,
           functionName: 'getBet',
           args: [BigInt(betView.betId)],
         });
-        const bet = normalizeBet(raw as Record<string, unknown>);
+        let bet = normalizeBet(raw as Record<string, unknown>);
+
+        if (bet.status === BetStatus.Funded) {
+          setStep('preparing');
+          const authToken = await getAccessToken();
+          await api.post(`/bets/${betView.betId}/prepare`, {}, { authToken: authToken || undefined });
+
+          // Re-read on-chain to confirm Prepared status
+          setStep('checking');
+          raw = await publicClient.readContract({
+            address: POLYMARKET_ADDRESSES.BOUNCE,
+            abi: BounceAbi,
+            functionName: 'getBet',
+            args: [BigInt(betView.betId)],
+          });
+          bet = normalizeBet(raw as Record<string, unknown>);
+        }
 
         if (bet.status !== BetStatus.Prepared) {
           throw new Error('Bet is not in Prepared status');
@@ -120,7 +137,7 @@ export function useSignAndSubmitOrder() {
           throw new Error('No order ID returned from CLOB');
         }
 
-        // Step 4: Poll for settlement
+        // Step 4: Poll backend trade-status until finalizeTrade completes
         setStep('polling');
 
         const maxAttempts = 60; // 5 minutes at 5s intervals
@@ -128,12 +145,17 @@ export function useSignAndSubmitOrder() {
           await new Promise((resolve) => setTimeout(resolve, 5000));
 
           try {
-            const statusResult = await api.get<{ data: { status?: string } }>(
-              `/polymarket/clob/order/${orderId}`,
-            );
-            const clobStatus = statusResult.data?.status;
+            const statusResult = await api.get<{
+              data: {
+                clobStatus?: string;
+                finalizeStatus?: string;
+                lastError?: string;
+              } | null;
+            }>(`/bets/${betView.betId}/trade-status`);
 
-            if (clobStatus === 'CONFIRMED' || clobStatus === 'MINED') {
+            const tradeStatus = statusResult.data;
+
+            if (tradeStatus?.finalizeStatus === 'confirmed') {
               setStep('confirmed');
               queryClient.invalidateQueries({ queryKey: ['my-bets'] });
               queryClient.invalidateQueries({ queryKey: ['bet', betView.betId] });
@@ -142,8 +164,12 @@ export function useSignAndSubmitOrder() {
               return orderId;
             }
 
-            if (clobStatus === 'FAILED') {
-              throw new Error('CLOB order failed');
+            if (tradeStatus?.clobStatus === 'FAILED' || tradeStatus?.clobStatus === 'CANCELED') {
+              throw new Error(`CLOB order ${tradeStatus.clobStatus}`);
+            }
+
+            if (tradeStatus?.finalizeStatus === 'failed') {
+              throw new Error(tradeStatus.lastError || 'Trade finalization failed');
             }
           } catch (pollErr) {
             if (i === maxAttempts - 1) throw pollErr;
@@ -162,7 +188,7 @@ export function useSignAndSubmitOrder() {
         setIsLoading(false);
       }
     },
-    [wallets, queryClient],
+    [wallets, getAccessToken, queryClient],
   );
 
   return { signAndSubmit, step, isLoading, error, reset };
