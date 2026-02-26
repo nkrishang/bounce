@@ -3,6 +3,7 @@ import { logger } from '../lib/logger.js';
 import { cache } from '../lib/cache.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
+const CLOB_API = 'https://clob.polymarket.com';
 
 function parseMarketPrices(market: any): { pYes: number; pNo: number } {
   try {
@@ -175,6 +176,37 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
     } catch (error) {
       logger.error(error, 'Failed to fetch Polymarket markets');
       return reply.status(502).send({ error: 'Failed to fetch Polymarket markets' });
+    }
+  });
+
+  // Proxy: Get CLOB order book
+  fastify.get('/clob/book', async (request, reply) => {
+    const { token_id } = request.query as { token_id?: string };
+
+    if (!token_id) {
+      return reply.status(400).send({ error: 'token_id is required' });
+    }
+
+    const cacheKey = `polymarket-clob-book-${token_id}`;
+
+    try {
+      const data = await cache.getOrFetch(
+        cacheKey,
+        async () => {
+          const url = `${CLOB_API}/book?token_id=${token_id}`;
+          logger.info({ url }, 'Fetching Polymarket CLOB order book');
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`CLOB API error: ${response.status}`);
+          }
+          return response.json();
+        },
+        5
+      );
+      return { data };
+    } catch (error) {
+      logger.error(error, 'Failed to fetch Polymarket CLOB order book');
+      return reply.status(502).send({ error: 'Failed to fetch Polymarket CLOB order book' });
     }
   });
 }

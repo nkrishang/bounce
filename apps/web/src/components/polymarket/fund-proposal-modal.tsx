@@ -10,6 +10,7 @@ import { formatAddress } from '@bounce/shared';
 import { useAuth } from '@/hooks/use-auth';
 import { useFundBet } from '@/hooks/use-fund-bet';
 import { useFundPreflight } from '@/hooks/use-fund-preflight';
+import { useLiquidityCheck } from '@/hooks/use-liquidity-check';
 import { formatUnits } from 'viem';
 import { formatUsdc, DEFAULT_PROPOSER_PROFIT_SHARE_BPS } from '@/lib/bet-math';
 
@@ -46,6 +47,7 @@ export function FundProposalModal({ betView, open, onClose }: FundProposalModalP
   const regularLossAtWipeout = funderPortionNum * (bet.proposerCapitalBps / 10000);
 
   const preflight = useFundPreflight(address as `0x${string}` | undefined, funderPortion);
+  const liquidity = useLiquidityCheck(metadata?.outcomeTokenId, totalCapitalNum);
 
   useEffect(() => {
     if (!open) {
@@ -63,16 +65,6 @@ export function FundProposalModal({ betView, open, onClose }: FundProposalModalP
     };
   }, [open, reset]);
 
-  // Redirect to /my-bets after success
-  useEffect(() => {
-    if (step !== 'success') return;
-    const timer = setTimeout(() => {
-      onClose();
-      router.push('/my-bets?tab=funded');
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [step, onClose, router]);
-
   // Transaction stepper steps
   const txSteps = useMemo(() => [
     { key: 'approving', label: 'Approve' },
@@ -89,6 +81,12 @@ export function FundProposalModal({ betView, open, onClose }: FundProposalModalP
   const handleFund = async () => {
     try {
       await fundBet(betView.betId);
+      // Schedule redirect outside React lifecycle so it survives
+      // if query refetch unmounts this component before it fires.
+      setTimeout(() => {
+        onClose();
+        router.push('/my-bets?tab=funded');
+      }, 2000);
     } catch (err) {
       console.error(err);
     }
@@ -99,6 +97,7 @@ export function FundProposalModal({ betView, open, onClose }: FundProposalModalP
   const balanceBlocked = preflightReady && isAuthenticated && (
     !preflight.hasEnoughUsdc || !preflight.hasEnoughGas
   );
+  const liquidityBlocked = !liquidity.isLoading && !liquidity.isError && !liquidity.canFill && !!metadata?.outcomeTokenId;
 
   return createPortal(
     <AnimatePresence>
@@ -283,6 +282,37 @@ export function FundProposalModal({ betView, open, onClose }: FundProposalModalP
                   </div>
                 </div>
 
+                {/* Liquidity check indicator */}
+                {step !== 'success' && (
+                  <>
+                    {liquidity.isLoading && (
+                      <div className="p-3 rounded-xl bg-white/5 border border-dark-border flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 text-muted-foreground animate-spin shrink-0" />
+                        <p className="text-xs text-muted-foreground">Checking market liquidity…</p>
+                      </div>
+                    )}
+                    {!liquidity.isLoading && !liquidity.isError && liquidity.canFill && (
+                      <div className="p-3 rounded-xl bg-[#4ade80]/5 border border-[#4ade80]/20 flex items-center gap-2">
+                        <Check className="w-4 h-4 shrink-0" style={{ color: '#4ade80' }} />
+                        <p className="text-xs" style={{ color: '#4ade80' }}>
+                          Market liquidity available — est. avg price {(liquidity.estimatedAvgPrice * 100).toFixed(1)}¢
+                          {liquidity.priceImpact > 0.005 && (
+                            <span className="text-muted-foreground"> · {(liquidity.priceImpact * 100).toFixed(1)}% price impact</span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {liquidityBlocked && (
+                      <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+                        <p className="text-xs text-danger">
+                          Insufficient market liquidity. Only ${liquidity.availableLiquidity.toFixed(2)} available on the order book — this ${formatUsdc(bet.totalCapital)} order may not fill.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
                 {/* Pre-flight warnings */}
                 {isAuthenticated && !preflight.isLoading && step !== 'success' && (
                   <>
@@ -395,7 +425,7 @@ export function FundProposalModal({ betView, open, onClose }: FundProposalModalP
                     whileHover={!isLoading && step !== 'success' ? { scale: 1.02 } : {}}
                     whileTap={!isLoading && step !== 'success' ? { scale: 0.98 } : {}}
                     onClick={handleFund}
-                    disabled={isLoading || step === 'success' || preflight.isLoading || balanceBlocked}
+                    disabled={isLoading || step === 'success' || preflight.isLoading || balanceBlocked || liquidity.isLoading || liquidityBlocked}
                     className="w-full py-4 rounded-xl font-bold text-base disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg transition-all duration-200"
                     style={
                       step === 'success'
@@ -415,10 +445,15 @@ export function FundProposalModal({ betView, open, onClose }: FundProposalModalP
                         {step === 'approving' && 'Approving USDC...'}
                         {step === 'funding' && 'Funding Bet...'}
                       </>
-                    ) : preflight.isLoading ? (
+                    ) : preflight.isLoading || liquidity.isLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Checking balances…
+                        Checking {liquidity.isLoading ? 'liquidity' : 'balances'}…
+                      </>
+                    ) : liquidityBlocked ? (
+                      <>
+                        <AlertTriangle className="w-5 h-5" />
+                        Insufficient Liquidity
                       </>
                     ) : (
                       <>

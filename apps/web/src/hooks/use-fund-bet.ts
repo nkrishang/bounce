@@ -91,11 +91,13 @@ export function useFundBet() {
           walletClient.writeContract(fundRequest),
         );
 
-        await queryClient.invalidateQueries({ queryKey: ['my-bets'] });
-        await queryClient.invalidateQueries({ queryKey: ['bets'] });
-
         setStep('success');
-        await queryClient.invalidateQueries({ queryKey: ['walletBalances', address] });
+
+        // Fire-and-forget: don't await so the component stays mounted
+        // long enough for the redirect effect to fire.
+        queryClient.invalidateQueries({ queryKey: ['my-bets'] });
+        queryClient.invalidateQueries({ queryKey: ['bets'] });
+        queryClient.invalidateQueries({ queryKey: ['walletBalances', address] });
         return hash;
       } catch (err) {
         const parsed = parseTransactionError(err);
