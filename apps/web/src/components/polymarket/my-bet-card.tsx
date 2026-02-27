@@ -260,7 +260,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
       )}
 
       {/* Trade Structure Bar */}
-      <div>
+      {!isActive && <div>
         <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Trade Structure</span>
         <div className="mt-2 h-2 rounded-full overflow-hidden flex">
           <div className="h-full rounded-l-full" style={{ width: '20%', background: 'linear-gradient(90deg, #C8A43A, #D4AD4A)' }} />
@@ -270,7 +270,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
           <span className="text-[11px] font-medium" style={{ color: '#D4AD4A' }}>20% Believer</span>
           <span className="text-[11px] font-medium" style={{ color: '#5B93D4' }}>80% Backer</span>
         </div>
-      </div>
+      </div>}
 
       {/* Counterparty */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
