@@ -1,5 +1,14 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -16,8 +25,8 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-      throw new Error(error.message || `HTTP ${response.status}`);
+      const body = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new ApiError(body.message || `HTTP ${response.status}`, response.status);
     }
 
     return response.json();
@@ -37,8 +46,9 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-      throw new Error(error.message || `HTTP ${response.status}`);
+      const body = await response.json().catch(() => ({ message: 'Unknown error' }));
+      const err = new ApiError(body.message || `HTTP ${response.status}`, response.status);
+      throw err;
     }
 
     return response.json();
@@ -54,8 +64,8 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Unknown error' }));
-      throw new Error(error.message || `HTTP ${response.status}`);
+      const body = await response.json().catch(() => ({ message: 'Unknown error' }));
+      throw new ApiError(body.message || `HTTP ${response.status}`, response.status);
     }
 
     return response.json();

@@ -6,13 +6,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { type Address, parseEventLogs } from 'viem';
 import { POLYMARKET_ADDRESSES, BounceAbi, ERC20Abi, assertBounceConfigured } from '@bounce/contracts';
 import { validateConditionId } from '@bounce/shared';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { createClients, getWalletAddress, sendAndConfirm } from '@/lib/transaction';
 import { ensureSafeReady } from '@/lib/polymarket-safe';
 import { parseTransactionError, type ParsedError } from '@/lib/parse-transaction-error';
 import { stakeToTotalCapital, DEFAULT_PROPOSER_CAPITAL_BPS, DEFAULT_PROPOSER_PROFIT_SHARE_BPS, DEFAULT_EXPIRY_DAYS } from '@/lib/bet-math';
 
-type Step = 'idle' | 'ensuring-safe' | 'approving' | 'proposing' | 'saving-metadata' | 'success';
+type Step = 'idle' | 'ensuring-safe' | 'approving' | 'proposing' | 'saving-metadata' | 'success' | 'success-needs-refresh';
 
 export interface ProposeBetError extends ParsedError {
   errorId: string;
@@ -38,11 +38,13 @@ export function useProposeBet() {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<Step>('idle');
   const [error, setError] = useState<ProposeBetError | null>(null);
+  const [warning, setWarning] = useState<ProposeBetError | null>(null);
 
   const reset = useCallback(() => {
     setStep('idle');
     setIsLoading(false);
     setError(null);
+    setWarning(null);
   }, []);
 
   const proposeBet = useCallback(
@@ -136,25 +138,41 @@ export function useProposeBet() {
         }
         const betId = Number(parsedLogs[0].args.betId);
 
-        // Step 4: Save off-chain metadata
+        // Step 4: Save off-chain metadata (best-effort — on-chain tx already confirmed)
         setStep('saving-metadata');
         const authToken = await getAccessToken();
-        await api.post(`/bets/${betId}/metadata`, {
-          chainId: 137,
-          conditionId: params.conditionId,
-          outcomeIndex,
-          outcomeTokenId: params.outcomeTokenId,
-          isYesOutcome: params.isYesOutcome,
-          slug: params.marketSlug,
-          marketQuestion: params.marketQuestion,
-          marketImage: params.marketImage,
-          outcomePrice: params.outcomePrice,
-        }, { authToken: authToken || undefined });
 
-        await queryClient.invalidateQueries({ queryKey: ['my-bets'] });
-        await queryClient.invalidateQueries({ queryKey: ['bets'] });
+        try {
+          await api.post(`/bets/${betId}/metadata`, {
+            chainId: 137,
+            conditionId: params.conditionId,
+            outcomeIndex,
+            outcomeTokenId: params.outcomeTokenId,
+            isYesOutcome: params.isYesOutcome,
+            slug: params.marketSlug,
+            marketQuestion: params.marketQuestion,
+            marketImage: params.marketImage,
+            outcomePrice: params.outcomePrice,
+          }, { authToken: authToken || undefined });
 
-        setStep('success');
+          await queryClient.invalidateQueries({ queryKey: ['my-bets'] });
+          await queryClient.invalidateQueries({ queryKey: ['bets'] });
+          setStep('success');
+        } catch (metaErr) {
+          if (metaErr instanceof ApiError && metaErr.status === 409) {
+            // Metadata already exists (race / retry) — treat as success
+            await queryClient.invalidateQueries({ queryKey: ['my-bets'] });
+            await queryClient.invalidateQueries({ queryKey: ['bets'] });
+            setStep('success');
+          } else {
+            const parsed = parseTransactionError(metaErr);
+            const errorId = `PB-META-${Date.now().toString(36)}`;
+            console.error(`[${errorId}] Metadata save failed (on-chain tx succeeded):`, metaErr);
+            setWarning({ ...parsed, errorId });
+            setStep('success-needs-refresh');
+          }
+        }
+
         await queryClient.invalidateQueries({ queryKey: ['walletBalances', address] });
         return { betId, hash };
       } catch (err) {
@@ -171,5 +189,5 @@ export function useProposeBet() {
     [wallets, getAccessToken, queryClient],
   );
 
-  return { proposeBet, reset, isLoading, step, error };
+  return { proposeBet, reset, isLoading, step, error, warning };
 }

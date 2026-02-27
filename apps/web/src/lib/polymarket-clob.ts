@@ -15,6 +15,48 @@ export interface Order {
   signatureType: number;
 }
 
+// ClobAuth EIP-712 types for L1 credential derivation
+export const CLOB_AUTH_DOMAIN = {
+  name: 'ClobAuthDomain',
+  version: '1',
+  chainId: 137,
+} as const;
+
+export const CLOB_AUTH_TYPES = {
+  ClobAuth: [
+    { name: 'address', type: 'address' },
+    { name: 'timestamp', type: 'string' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'message', type: 'string' },
+  ],
+} as const;
+
+const CLOB_AUTH_MESSAGE = 'This message attests that I control the given wallet';
+
+export async function signClobAuth(
+  walletClient: WalletClient,
+  address: Address,
+): Promise<{ signature: `0x${string}`; timestamp: number; nonce: number }> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const nonce = 0;
+
+  const signature = await walletClient.signTypedData({
+    account: address,
+    domain: CLOB_AUTH_DOMAIN,
+    types: CLOB_AUTH_TYPES,
+    primaryType: 'ClobAuth',
+    message: {
+      address,
+      timestamp: `${timestamp}`,
+      nonce: BigInt(nonce),
+      message: CLOB_AUTH_MESSAGE,
+    },
+  });
+
+  return { signature, timestamp, nonce };
+}
+
+// Order EIP-712 types for Polymarket CTF Exchange
 export const ORDER_TYPES = {
   Order: [
     { name: 'salt', type: 'uint256' },
@@ -42,8 +84,11 @@ export function getExchangeDomain(exchangeAddress: Address) {
 }
 
 export function generateSalt(): bigint {
-  const bytes = new Uint8Array(32);
+  // Must fit in a JS safe integer for Polymarket's orderToJson (parseInt roundtrip)
+  const bytes = new Uint8Array(7); // 56 bits > 53-bit safe integer range
   crypto.getRandomValues(bytes);
+  // Mask to 53 bits to stay within Number.MAX_SAFE_INTEGER
+  bytes[0] = bytes[0] & 0x1f; // keep only lower 5 bits of first byte
   return BigInt('0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''));
 }
 
@@ -61,12 +106,24 @@ export function buildBuyOrder(params: {
   // makerAmount = USDC to spend
   // takerAmount = shares to receive = usdcAmount / price
   // price is in the range (0, 1), e.g. 0.50 means 50 cents per share
-  // Use integer math to avoid floating point precision issues
-  const makerAmount = params.usdcAmount;
-  const priceMicro = BigInt(Math.round(params.price * 1_000_000));
-  const takerAmount = priceMicro > 0n
+  // Round price to tick size (0.01) — Polymarket rejects finer granularity
+  const roundedPrice = Math.round(params.price * 100) / 100;
+  const priceMicro = BigInt(Math.round(roundedPrice * 1_000_000));
+
+  // Polymarket BUY order: takerAmount (size) is primary, makerAmount = price × size.
+  // Precision rules (raw 6-decimal token units):
+  //   takerAmount (shares): max 2 human decimals → raw divisible by 10_000
+  //   makerAmount (USDC):   max 4 human decimals → raw divisible by 100
+
+  // 1) Compute size from USDC budget, round DOWN to 2 decimals
+  const rawSize = priceMicro > 0n
     ? (params.usdcAmount * 1_000_000n) / priceMicro
     : 0n;
+  const takerAmount = (rawSize / 10_000n) * 10_000n;
+
+  // 2) Derive makerAmount = price × size, round DOWN to 4 decimals
+  let makerAmount = (takerAmount * priceMicro) / 1_000_000n;
+  makerAmount = (makerAmount / 100n) * 100n;
 
   return {
     salt: generateSalt(),
@@ -89,7 +146,7 @@ export async function signOrder(
   order: Order,
   exchangeAddress: Address,
 ): Promise<`0x${string}`> {
-  const account = walletClient.account;
+  const [account] = await walletClient.getAddresses();
   if (!account) throw new Error('No account on wallet client');
 
   const domain = getExchangeDomain(exchangeAddress);

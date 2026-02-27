@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { logger } from '../lib/logger.js';
 import { cache } from '../lib/cache.js';
+import { createL2Headers, deriveCredentialsForAddress, getClobCredentialsForAddress, clearClobCredentials } from '../lib/clob-auth.js';
+import { verifyPrivyToken } from '../lib/privy.js';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
 const CLOB_API = 'https://clob.polymarket.com';
@@ -210,6 +212,40 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
     }
   });
 
+  // Derive CLOB API credentials for a user's signer address
+  fastify.post('/clob/derive-key', async (request, reply) => {
+    try {
+      try {
+        await verifyPrivyToken(request.headers.authorization);
+      } catch {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const body = request.body as {
+        address: string;
+        signature: string;
+        timestamp: number;
+        nonce: number;
+      };
+
+      if (!body.address || !body.signature || body.timestamp == null) {
+        return reply.status(400).send({ error: 'Missing address, signature, or timestamp' });
+      }
+
+      const creds = await deriveCredentialsForAddress(
+        body.address,
+        body.signature,
+        body.timestamp,
+        body.nonce ?? 0,
+      );
+
+      return { data: { apiKey: creds.apiKey } };
+    } catch (error) {
+      logger.error(error, 'Failed to derive CLOB credentials');
+      return reply.status(500).send({ error: 'Failed to derive CLOB credentials' });
+    }
+  });
+
   // Submit CLOB order (proxied through backend to keep API keys server-side)
   fastify.post('/clob/order', async (request, reply) => {
     try {
@@ -217,6 +253,7 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
         betId: number;
         order: Record<string, unknown>;
         signature: string;
+        orderType?: string;
       };
 
       if (!body.betId || !body.order || !body.signature) {
@@ -225,21 +262,83 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
 
       const { upsertTradeExecution } = await import('../services/trade.service.js');
 
-      // Submit order to Polymarket CLOB API
+      // Look up per-signer CLOB credentials (must be derived first via /clob/derive-key)
+      const signerAddress = String(body.order.signer);
+      const creds = getClobCredentialsForAddress(signerAddress);
+      if (!creds) {
+        return reply.status(409).send({ error: 'CLOB credentials not found — call /clob/derive-key first' });
+      }
+
+      // Build CLOB-formatted payload matching Polymarket's orderToJson() field order exactly
+      const sideMap: Record<number, string> = { 0: 'BUY', 1: 'SELL' };
+      const saltNum = Number(body.order.salt);
+      if (!Number.isSafeInteger(saltNum) || saltNum < 0) {
+        return reply.status(400).send({ error: 'Salt exceeds safe integer range' });
+      }
+
+      // Field order matches official @polymarket/clob-client orderToJson():
+      // salt, maker, signer, taker, tokenId, makerAmount, takerAmount, side,
+      // expiration, nonce, feeRateBps, signatureType, signature
       const orderPayload = {
-        ...body.order,
-        signature: body.signature,
+        deferExec: false,
+        order: {
+          salt: saltNum,
+          maker: body.order.maker,
+          signer: body.order.signer,
+          taker: body.order.taker,
+          tokenId: String(body.order.tokenId),
+          makerAmount: String(body.order.makerAmount),
+          takerAmount: String(body.order.takerAmount),
+          side: sideMap[body.order.side as number] || String(body.order.side),
+          expiration: String(body.order.expiration),
+          nonce: String(body.order.nonce),
+          feeRateBps: String(body.order.feeRateBps),
+          signatureType: body.order.signatureType,
+          signature: body.signature,
+        },
+        owner: creds.apiKey,
+        orderType: body.orderType || 'GTC',
       };
+
+      const requestBody = JSON.stringify(orderPayload);
+      const l2Headers = createL2Headers(creds, signerAddress, 'POST', '/order', requestBody);
+
+      logger.info(
+        { signerAddress, apiKey: creds.apiKey, bodyLength: requestBody.length, maker: body.order.maker },
+        'Submitting CLOB order to Polymarket',
+      );
+
+      // Pre-flight: check what CLOB API sees for balance/allowance
+      try {
+        const balCheckHeaders = createL2Headers(creds, signerAddress, 'GET', '/balance-allowance');
+        const balParams = new URLSearchParams({ asset_type: 'COLLATERAL', signature_type: '2' });
+        const balRes = await fetch(`${CLOB_API}/balance-allowance?${balParams}`, {
+          headers: balCheckHeaders,
+        });
+        const balData = balRes.ok ? await balRes.json() : await balRes.text();
+        logger.info({ status: balRes.status, balanceAllowance: balData }, 'CLOB balance-allowance pre-check');
+      } catch (balErr) {
+        logger.warn({ err: balErr }, 'CLOB balance-allowance pre-check failed');
+      }
 
       const response = await fetch(`${CLOB_API}/order`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderPayload),
+        headers: {
+          'Content-Type': 'application/json',
+          ...l2Headers,
+        },
+        body: requestBody,
       });
 
       if (!response.ok) {
         const errorBody = await response.text();
         logger.error({ status: response.status, body: errorBody }, 'CLOB order submission failed');
+
+        // Invalidate cached credentials on auth failure so retries re-derive
+        if (response.status === 401) {
+          clearClobCredentials(signerAddress);
+        }
+
         return reply.status(response.status).send({ error: 'CLOB order submission failed', details: errorBody });
       }
 

@@ -48,8 +48,8 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
   const showCancelCta = bet.status === BetStatus.Proposed && role === 'believer';
   const showWithdrawCta = bet.status === BetStatus.Closed;
   const isProposer = address?.toLowerCase() === bet.proposer.toLowerCase();
-  const showSignOrderCta = bet.status === BetStatus.Prepared && role === 'believer' && isProposer && !tradeStatus?.orderId;
-  const showPreparingIndicator = bet.status === BetStatus.Funded && role === 'believer' && tradeStatus?.prepareStatus === 'pending';
+  const showSignOrderCta = (bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared) && role === 'believer' && isProposer && !tradeStatus?.orderId;
+  const showPreparingIndicator = bet.status === BetStatus.Funded && role === 'believer' && tradeStatus?.prepareStatus === 'pending' && !showSignOrderCta;
   const showAwaitingSettlement = bet.status === BetStatus.Prepared && !!tradeStatus?.orderId;
 
   const gasBlocked = !preflight.isLoading && !preflight.hasEnoughGas;
@@ -154,13 +154,15 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
       </div>
 
       {/* Status */}
-      <div
-        className="flex items-center justify-center gap-2 py-3 rounded-xl"
-        style={{ background: status.bg, border: `1px solid ${status.color}25` }}
-      >
-        <StatusIcon className="w-4 h-4" style={{ color: status.color }} />
-        <span className="text-sm font-medium" style={{ color: status.color }}>{status.label}</span>
-      </div>
+      {!showSignOrderCta && (
+        <div
+          className="flex items-center justify-center gap-2 py-3 rounded-xl"
+          style={{ background: status.bg, border: `1px solid ${status.color}25` }}
+        >
+          <StatusIcon className="w-4 h-4" style={{ color: status.color }} />
+          <span className="text-sm font-medium" style={{ color: status.color }}>{status.label}</span>
+        </div>
+      )}
 
       {/* Gas warning */}
       {(showCancelCta || showWithdrawCta) && gasBlocked && (
@@ -249,11 +251,19 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
           style={
             signStep === 'confirmed'
               ? { background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#22c55e' }
+              : signStep === 'failed'
+              ? { background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#ef4444' }
               : { background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', color: '#f59e0b' }
           }
         >
           {signStep === 'confirmed' ? (
             <><Check className="w-4 h-4" /> Order Confirmed</>
+          ) : signStep === 'failed' ? (
+            <><Send className="w-4 h-4" /> Retry Place Order</>
+          ) : signStep === 'checking' ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Checking…</>
+          ) : signStep === 'preparing' ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Preparing Trade…</>
           ) : signStep === 'signing' ? (
             <><Loader2 className="w-4 h-4 animate-spin" /> Sign Order…</>
           ) : signStep === 'submitting' ? (

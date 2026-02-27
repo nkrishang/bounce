@@ -7,7 +7,7 @@ import { POLYMARKET_ADDRESSES, BounceAbi, CTFExchangeAbi } from '@bounce/contrac
 import type { BetView } from '@bounce/shared';
 import { BetStatus, normalizeBet } from '@bounce/shared';
 import { createClients, getWalletAddress } from '@/lib/transaction';
-import { buildBuyOrder, signOrder } from '@/lib/polymarket-clob';
+import { buildBuyOrder, signOrder, signClobAuth } from '@/lib/polymarket-clob';
 import { parseTransactionError, type ParsedError } from '@/lib/parse-transaction-error';
 import { api } from '@/lib/api';
 
@@ -19,7 +19,7 @@ export interface SignOrderError extends ParsedError {
 
 export function useSignAndSubmitOrder() {
   const { wallets } = useWallets();
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken, ready, authenticated } = usePrivy();
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<Step>('idle');
@@ -40,11 +40,19 @@ export function useSignAndSubmitOrder() {
       setError(null);
 
       try {
+        // Ensure Privy session is active before doing anything
+        if (!ready) throw new Error('Wallet not ready — please wait and try again');
+        if (!authenticated) throw new Error('Please sign in to place an order');
+
         const chainId = 137;
         await wallet.switchChain(chainId);
         const provider = await wallet.getEthereumProvider();
         const { walletClient, publicClient } = createClients(chainId, provider);
         const address = await getWalletAddress(walletClient);
+
+        // Acquire auth token upfront — fail fast if unavailable
+        const authToken = await getAccessToken();
+        if (!authToken) throw new Error('Session expired — please sign in again');
 
         // Step 1: Check bet status and prepare if needed
         setStep('checking');
@@ -59,8 +67,7 @@ export function useSignAndSubmitOrder() {
 
         if (bet.status === BetStatus.Funded) {
           setStep('preparing');
-          const authToken = await getAccessToken();
-          await api.post(`/bets/${betView.betId}/prepare`, {}, { authToken: authToken || undefined });
+          await api.post(`/bets/${betView.betId}/prepare`, {}, { authToken });
 
           // Re-read on-chain to confirm Prepared status
           setStep('checking');
@@ -86,8 +93,17 @@ export function useSignAndSubmitOrder() {
           args: [bet.safe as `0x${string}`],
         }) as bigint;
 
-        // Step 2: Build and sign order
+        // Step 2: Derive CLOB API credentials for this signer (idempotent)
         setStep('signing');
+        const clobAuth = await signClobAuth(walletClient, address);
+        await api.post('/polymarket/clob/derive-key', {
+          address,
+          signature: clobAuth.signature,
+          timestamp: clobAuth.timestamp,
+          nonce: clobAuth.nonce,
+        }, { authToken });
+
+        // Step 3: Build and sign order
 
         const tokenId = betView.metadata?.outcomeTokenId;
         if (!tokenId) throw new Error('Missing outcome token ID in bet metadata');
@@ -103,7 +119,7 @@ export function useSignAndSubmitOrder() {
           usdcAmount: bet.inFlightUSDC,
           price,
           nonce,
-          expiration: bet.expiresAt || 0,
+          expiration: 0,
           exchange: exchangeAddress,
         });
 
@@ -188,7 +204,7 @@ export function useSignAndSubmitOrder() {
         setIsLoading(false);
       }
     },
-    [wallets, getAccessToken, queryClient],
+    [wallets, getAccessToken, ready, authenticated, queryClient],
   );
 
   return { signAndSubmit, step, isLoading, error, reset };

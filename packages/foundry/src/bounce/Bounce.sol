@@ -438,7 +438,14 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         uint256 amount = bet.escrowUSDC;
 
         SafeTransferLib.safeTransfer(USDC, safe, amount);
-        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, amount));
+
+        // Approve the actual USDC spender (CTF_EXCHANGE for neg-risk, exchange otherwise).
+        address spender = _usdcSpender(exchange);
+        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, spender, amount));
+        // For neg-risk, also approve the wrapper exchange (NEG_RISK_CTF_EXCHANGE).
+        if (spender != exchange) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, amount));
+        }
 
         if (!_ctfApprovalSet[safe][exchange]) {
             _execFromSafe(
@@ -472,7 +479,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         // Use remaining USDC allowance to determine spent vs leftover.
         // The allowance was set to inFlightUSDC in prepareTrade and only decreases
         // when the exchange calls transferFrom — immune to donated USDC.
-        uint256 remainingAllowance = IERC20(USDC).allowance(safe, exchange);
+        // For neg-risk, CTF_EXCHANGE is the actual spender that consumes the allowance.
+        address spender = _usdcSpender(exchange);
+        uint256 remainingAllowance = IERC20(USDC).allowance(safe, spender);
         uint256 spent = bet.inFlightUSDC - remainingAllowance;
         uint256 usdcLeftover = remainingAllowance;
 
@@ -491,7 +500,11 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
             usdcLeftover = toReturn;
         }
 
-        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, 0));
+        // Clear USDC approvals (spender + wrapper for neg-risk).
+        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, spender, 0));
+        if (spender != exchange) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, 0));
+        }
 
         bet.usdcSpent += spent;
         bet.positionShares = sharesNow;
@@ -518,9 +531,10 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         address exchange = bet.exchange;
         _assertSafeReady(safe);
 
-        // Detect settlement via allowance: if exchange consumed any allowance, trade has settled.
-        // This is immune to donated CTF shares inflating the Safe's share balance.
-        uint256 remainingAllowance = IERC20(USDC).allowance(safe, exchange);
+        // Detect settlement via allowance: if the actual spender consumed any allowance, trade has settled.
+        // For neg-risk, CTF_EXCHANGE is the actual spender.
+        address spender = _usdcSpender(exchange);
+        uint256 remainingAllowance = IERC20(USDC).allowance(safe, spender);
         if (remainingAllowance != bet.inFlightUSDC) revert TradeAlreadySettled();
 
         // Recover inFlightUSDC, capped at actual Safe balance for safety.
@@ -530,7 +544,11 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
             _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), toRecover));
         }
 
-        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, 0));
+        // Clear USDC approvals (spender + wrapper for neg-risk).
+        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, spender, 0));
+        if (spender != exchange) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, 0));
+        }
 
         bet.escrowUSDC += toRecover;
         bet.inFlightUSDC = 0;
@@ -730,6 +748,14 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     // ============================================
     // Internal Helpers
     // ============================================
+
+    /// @notice Returns the address that actually pulls USDC during CLOB settlement.
+    /// @dev For neg-risk markets, CTF_EXCHANGE is the underlying spender even though
+    ///      the order routes through NEG_RISK_CTF_EXCHANGE. The CLOB API checks
+    ///      allowance on CTF_EXCHANGE for all market types.
+    function _usdcSpender(address exchange) internal pure returns (address) {
+        return exchange == NEG_RISK_CTF_EXCHANGE ? CTF_EXCHANGE : exchange;
+    }
 
     /// @notice Validates that the Safe has Bounce installed as both module and guard.
     /// @dev Reads the guard from Safe's isolated keccak storage slot via getStorageAt.

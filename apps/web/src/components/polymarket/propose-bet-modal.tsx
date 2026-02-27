@@ -34,7 +34,7 @@ interface ProposeBetModalProps {
 export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome, price, outcomeIndex }: ProposeBetModalProps) {
   const router = useRouter();
   const { isAuthenticated, login, address } = useAuth();
-  const { proposeBet, isLoading, step, error, reset } = useProposeBet();
+  const { proposeBet, isLoading, step, error, warning, reset } = useProposeBet();
   const [stakeAmount, setStakeAmount] = useState(String(MIN_STAKE));
   const stakeNum = parseFloat(stakeAmount) || 0;
   const preflight = useProposePreflight(address as `0x${string}` | undefined, stakeNum);
@@ -56,9 +56,9 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
     };
   }, [open, reset]);
 
-  // Redirect to /my-bets after success
+  // Redirect to /my-bets after success (including partial success)
   useEffect(() => {
-    if (step !== 'success') return;
+    if (step !== 'success' && step !== 'success-needs-refresh') return;
     const timer = setTimeout(() => {
       onClose();
       router.push('/my-bets?tab=proposed');
@@ -86,7 +86,7 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
   }, [preflight.safeReady, step]);
 
   // Map hook step to stepper state — derive index from txSteps directly to prevent drift
-  const activeStepKey = isLoading ? step : step === 'success' ? '__done__' : null;
+  const activeStepKey = isLoading ? step : (step === 'success' || step === 'success-needs-refresh') ? '__done__' : null;
   const activeIdx = useMemo(() => {
     if (!activeStepKey) return -1;
     if (activeStepKey === '__done__') return txSteps.length;
@@ -405,7 +405,7 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                 )}
 
                 {/* Transaction stepper — only during active tx or success */}
-                {isAuthenticated && (isLoading || step === 'success') && (
+                {isAuthenticated && (isLoading || step === 'success' || step === 'success-needs-refresh') && (
                   <div className="px-2 py-3">
                     <div className="flex items-center">
                       {txSteps.map((s, i) => {
@@ -465,7 +465,17 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                   </div>
                 )}
 
-                {error && (
+                {step === 'success-needs-refresh' && warning && (
+                  <div className="p-3 rounded-xl bg-[#22c55e]/10 border border-[#22c55e]/20">
+                    <p className="text-sm font-semibold text-white">Bet proposed successfully</p>
+                    <p className="text-xs text-white/70 mt-1">
+                      An unexpected error occurred after the on-chain transaction. Refreshing will resolve it.
+                    </p>
+                    <p className="text-[10px] text-white/40 mt-2 font-mono">Ref: {warning.errorId}</p>
+                  </div>
+                )}
+
+                {error && step !== 'success-needs-refresh' && (
                   <div className="p-3 rounded-xl bg-danger/10 border border-danger/20">
                     <p className="text-sm font-semibold text-danger">{error.title}</p>
                     <p className="text-xs text-danger/80 mt-1">{error.message}</p>
@@ -490,16 +500,16 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                   </motion.button>
                 ) : (
                   <motion.button
-                    whileHover={!isLoading && step !== 'success' ? { scale: 1.02 } : {}}
-                    whileTap={!isLoading && step !== 'success' ? { scale: 0.98 } : {}}
+                    whileHover={!isLoading && step !== 'success' && step !== 'success-needs-refresh' ? { scale: 1.02 } : {}}
+                    whileTap={!isLoading && step !== 'success' && step !== 'success-needs-refresh' ? { scale: 0.98 } : {}}
                     onClick={handlePropose}
                     disabled={
-                      isLoading || step === 'success' || !isValidStake ||
+                      isLoading || step === 'success' || step === 'success-needs-refresh' || !isValidStake ||
                       preflight.isLoading || balanceBlocked
                     }
                     className="w-full py-4 rounded-xl font-bold text-base disabled:cursor-not-allowed disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg transition-all duration-200"
                     style={
-                      step === 'success'
+                      step === 'success' || step === 'success-needs-refresh'
                         ? { background: '#22c55e', color: 'white', boxShadow: '0 0 20px rgba(34, 197, 94, 0.3)' }
                         : {
                             background: 'linear-gradient(135deg, #D4AD4A, #ECC25E)',
@@ -510,6 +520,8 @@ export function ProposeBetModal({ open, onClose, event, market, tokenId, outcome
                   >
                     {step === 'success' ? (
                       <><Check className="w-5 h-5" /> Bet Proposed!</>
+                    ) : step === 'success-needs-refresh' ? (
+                      <><Check className="w-5 h-5" /> Bet Proposed — Redirecting…</>
                     ) : isLoading ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin" />

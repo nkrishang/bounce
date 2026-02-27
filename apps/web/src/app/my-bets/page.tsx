@@ -44,7 +44,7 @@ export default function MyBetsPage() {
     [entries]
   );
   const fundedEntries = useMemo(
-    () => entries.filter((e) => e.betView.bet.status === BetStatus.Funded),
+    () => entries.filter((e) => e.betView.bet.status === BetStatus.Funded || e.betView.bet.status === BetStatus.Prepared),
     [entries]
   );
   const activeEntries = useMemo(
