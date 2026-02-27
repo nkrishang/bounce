@@ -107,7 +107,7 @@ export interface BetTradeState {
   prepareStatus: 'pending' | 'confirmed' | 'failed';
   prepareTxHash?: string;
   orderId?: string;
-  clobStatus?: 'MATCHED' | 'MINED' | 'CONFIRMED' | 'RETRYING' | 'FAILED';
+  clobStatus?: 'MATCHED' | 'MINED' | 'CONFIRMED' | 'RETRYING' | 'FAILED' | 'CANCELED';
   finalizeStatus?: 'pending' | 'confirmed' | 'failed';
   finalizeTxHash?: string;
   lastError?: string;

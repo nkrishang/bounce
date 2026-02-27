@@ -8,7 +8,7 @@ import { ClobClient } from '@polymarket/clob-client';
 import { POLYMARKET_ADDRESSES, BounceAbi } from '@bounce/contracts';
 import type { BetView } from '@bounce/shared';
 import { BetStatus, normalizeBet } from '@bounce/shared';
-import { createClients, getWalletAddress } from '@/lib/transaction';
+import { createClients } from '@/lib/transaction';
 import { parseTransactionError, type ParsedError } from '@/lib/parse-transaction-error';
 import { api } from '@/lib/api';
 
@@ -78,18 +78,26 @@ export function useSignAndSubmitOrder() {
           setStep('preparing');
           await api.post(`/bets/${betView.betId}/prepare`, {}, { authToken });
 
+          // Poll for Prepared status — RPC may lag behind chain finality
           setStep('checking');
-          raw = await publicClient.readContract({
-            address: POLYMARKET_ADDRESSES.BOUNCE,
-            abi: BounceAbi,
-            functionName: 'getBet',
-            args: [BigInt(betView.betId)],
-          });
-          bet = normalizeBet(raw as Record<string, unknown>);
-        }
-
-        if (bet.status !== BetStatus.Prepared) {
-          throw new Error('Bet is not in Prepared status');
+          let prepared = false;
+          for (let attempt = 0; attempt < 10; attempt++) {
+            raw = await publicClient.readContract({
+              address: POLYMARKET_ADDRESSES.BOUNCE,
+              abi: BounceAbi,
+              functionName: 'getBet',
+              args: [BigInt(betView.betId)],
+            });
+            bet = normalizeBet(raw as Record<string, unknown>);
+            if (bet.status === BetStatus.Prepared) {
+              prepared = true;
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+          if (!prepared) {
+            throw new Error('Prepare confirmed but bet not yet visible as Prepared — please retry in a few seconds');
+          }
         }
 
         const safeAddress = bet.safe as string;
@@ -110,13 +118,22 @@ export function useSignAndSubmitOrder() {
           safeAddress,
         );
 
-        // Step 3b: Force CLOB to re-read on-chain balance/allowance after prepareTrade
-        await clobClient.updateBalanceAllowance({
-          asset_type: 'COLLATERAL' as any,
-        });
-
-        // Step 4: Build and submit order as a market order for immediate fill
+        // Step 3b: Wait for CLOB to index the new balance/allowance after prepareTrade
         setStep('submitting');
+
+        for (let attempt = 0; attempt < 12; attempt++) {
+          try {
+            await clobClient.updateBalanceAllowance({
+              asset_type: 'COLLATERAL' as any,
+            });
+            break;
+          } catch {
+            if (attempt === 11) {
+              throw new Error('CLOB has not indexed the new allowance yet — please retry shortly');
+            }
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
+        }
 
         const tokenId = betView.metadata?.outcomeTokenId;
         if (!tokenId) throw new Error('Missing outcome token ID in bet metadata');
@@ -161,8 +178,19 @@ export function useSignAndSubmitOrder() {
           throw new Error(`No order ID in CLOB response: ${JSON.stringify(result)}`);
         }
 
-        // Step 5: Register order with backend for polling + finalization
-        await api.post(`/bets/${betView.betId}/register-order`, { orderId }, { authToken });
+        // Step 5: Register order with backend for polling + finalization (with retry)
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            await api.post(`/bets/${betView.betId}/register-order`, { orderId }, { authToken });
+            break;
+          } catch (registerErr) {
+            if (attempt === 4) {
+              console.error('Failed to register order after retries:', registerErr);
+              throw new Error(`Order placed (${orderId}) but failed to register with backend. Please contact support.`);
+            }
+            await new Promise((resolve) => setTimeout(resolve, 500 * Math.pow(2, attempt)));
+          }
+        }
 
         // Step 6: Poll backend trade-status until finalizeTrade completes
         setStep('polling');

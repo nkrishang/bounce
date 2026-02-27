@@ -1,5 +1,5 @@
 import { type PublicClient } from 'viem';
-import { POLYMARKET_ADDRESSES, BounceAbi, ERC20Abi } from '@bounce/contracts';
+import { POLYMARKET_ADDRESSES, BounceAbi } from '@bounce/contracts';
 import { normalizeBet, BetStatus } from '@bounce/shared';
 import { logger } from '../lib/logger.js';
 import { publicClient } from '../lib/viem.js';
@@ -15,18 +15,8 @@ const MAX_POLL_DURATION_MS = 10 * 60 * 1_000; // 10 minutes
 const activePollers = new Set<number>();
 
 /**
- * Returns the address that actually pulls USDC during CLOB settlement.
- * For neg-risk markets, CTF_EXCHANGE is the underlying spender.
- */
-function usdcSpender(exchange: string): `0x${string}` {
-  return exchange.toLowerCase() === POLYMARKET_ADDRESSES.NEG_RISK_CTF_EXCHANGE.toLowerCase()
-    ? POLYMARKET_ADDRESSES.CTF_EXCHANGE
-    : exchange as `0x${string}`;
-}
-
-/**
- * Starts polling on-chain state for settlement detection.
- * When the exchange has consumed the USDC allowance (trade settled),
+ * Starts polling CLOB order status and on-chain state for settlement detection.
+ * When the CLOB order is matched or shares appear on-chain,
  * automatically calls finalizeTrade via the backend signer.
  * Fire-and-forget — does not throw.
  */
@@ -76,29 +66,74 @@ async function pollLoop(betId: number, orderId: string): Promise<void> {
         return;
       }
 
-      // Detect settlement: check if the exchange has consumed the USDC allowance
-      const spender = usdcSpender(bet.exchange);
-      const remainingAllowance = await client.readContract({
-        address: POLYMARKET_ADDRESSES.USDC,
-        abi: ERC20Abi,
-        functionName: 'allowance',
-        args: [bet.safe as `0x${string}`, spender],
-      }) as bigint;
+      // Primary: poll CLOB order status API
+      try {
+        const clobRes = await fetch(`https://clob.polymarket.com/order/${orderId}`);
+        if (clobRes.ok) {
+          const orderData = await clobRes.json() as { status?: string };
+          const status = String(orderData.status || '').toUpperCase();
+          if (status) {
+            await updateTradeExecution(bounceAddress, betId, { clobStatus: status as any });
+          }
 
-      if (remainingAllowance !== bet.inFlightUSDC) {
-        // Allowance changed → exchange pulled USDC → trade settled
-        logger.info({ betId, orderId, remainingAllowance: remainingAllowance.toString(), inFlightUSDC: bet.inFlightUSDC.toString() }, 'Settlement detected on-chain, finalizing trade');
-        await updateTradeExecution(bounceAddress, betId, { clobStatus: 'CONFIRMED' });
-        await finalize(betId);
-        return;
+          if (status === 'MATCHED' || status === 'CONFIRMED' || status === 'MINED') {
+            logger.info({ betId, orderId, clobStatus: status }, 'CLOB order settled, attempting finalize');
+            // Add a short delay to allow on-chain state to propagate
+            await sleep(3000);
+            await finalize(betId);
+            return;
+          }
+
+          if (status === 'CANCELED' || status === 'FAILED') {
+            logger.warn({ betId, orderId, clobStatus: status }, 'CLOB order failed/cancelled');
+            await updateTradeExecution(bounceAddress, betId, {
+              clobStatus: status as any,
+              lastError: `CLOB order ${status}`,
+            });
+            return;
+          }
+        }
+      } catch (clobErr) {
+        logger.warn({ betId, orderId, err: clobErr }, 'CLOB order status check failed, using fallback');
+      }
+
+      // Fallback: check if shares have appeared (most reliable on-chain signal)
+      try {
+        const IConditionalTokensAbi = [{
+          inputs: [{ name: 'account', type: 'address' }, { name: 'id', type: 'uint256' }],
+          name: 'balanceOf',
+          outputs: [{ name: '', type: 'uint256' }],
+          stateMutability: 'view',
+          type: 'function',
+        }] as const;
+
+        const sharesNow = await client.readContract({
+          address: POLYMARKET_ADDRESSES.CONDITIONAL_TOKENS,
+          abi: IConditionalTokensAbi,
+          functionName: 'balanceOf',
+          args: [bet.safe as `0x${string}`, bet.positionId],
+        }) as bigint;
+
+        if (sharesNow > bet.positionShares) {
+          logger.info({ betId, orderId, sharesNow: sharesNow.toString(), prevShares: bet.positionShares.toString() }, 'Shares detected on-chain, finalizing trade');
+          await updateTradeExecution(bounceAddress, betId, { clobStatus: 'CONFIRMED' });
+          await finalize(betId);
+          return;
+        }
+      } catch (shareErr) {
+        logger.warn({ betId, err: shareErr }, 'Fallback share balance check failed');
       }
     } catch (err) {
       logger.warn({ betId, orderId, err }, 'Settlement poll iteration error');
     }
   }
 
+  // Timeout: set terminal status so UI can show "failed, reset is safe"
   logger.warn({ betId, orderId }, 'Settlement polling timed out');
-  await updateTradeExecution(bounceAddress, betId, { lastError: 'Settlement polling timed out' });
+  await updateTradeExecution(bounceAddress, betId, {
+    clobStatus: 'FAILED',
+    lastError: 'Settlement polling timed out',
+  });
 }
 
 async function finalize(betId: number): Promise<void> {

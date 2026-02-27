@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Shield, TrendingUp, User, Clock, CheckCircle, BarChart3, XCircle, ArrowDownToLine, Loader2, AlertTriangle, Check, Send } from 'lucide-react';
+import { TrendingUp, User, Clock, CheckCircle, BarChart3, XCircle, ArrowDownToLine, Loader2, AlertTriangle, Check, Send } from 'lucide-react';
 import type { BetView } from '@bounce/shared';
 import { BetStatus, formatAddress } from '@bounce/shared';
 import { formatUsdc } from '@/lib/bet-math';
@@ -37,7 +37,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
   const preflight = useGasPreflight(address as `0x${string}` | undefined);
   const { signAndSubmit, isLoading: isSigning, step: signStep, error: signError, reset: resetSign } = useSignAndSubmitOrder();
   const { unprepare, isLoading: isUnpreparing, step: unprepareStep, error: unprepareError, reset: resetUnprepare } = useUnprepareTrade();
-  const { data: tradeStatus } = useTradeStatus(
+  const { data: tradeStatus, isFetched: tradeStatusFetched } = useTradeStatus(
     (bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared) ? betView.betId : undefined,
   );
 
@@ -117,10 +117,23 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
   const showCancelCta = (bet.status === BetStatus.Proposed && role === 'believer') || bet.status === BetStatus.Funded;
   const showWithdrawCta = bet.status === BetStatus.Closed;
   const isProposer = address?.toLowerCase() === bet.proposer.toLowerCase();
-  const showSignOrderCta = ((bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared) && role === 'believer' && isProposer && !tradeStatus?.orderId) || signStep === 'confirmed';
+  // Wait for tradeStatus to load before showing trade CTAs to prevent race conditions
+  const tradeStatusReady = tradeStatusFetched || (bet.status !== BetStatus.Funded && bet.status !== BetStatus.Prepared);
+  const showSignOrderCta = tradeStatusReady && (((bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared) && role === 'believer' && isProposer && !tradeStatus?.orderId) || (signStep === 'confirmed' && (bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared)));
   const showPreparingIndicator = bet.status === BetStatus.Funded && role === 'believer' && tradeStatus?.prepareStatus === 'pending' && !showSignOrderCta;
   const showAwaitingSettlement = bet.status === BetStatus.Prepared && !!tradeStatus?.orderId;
-  const showUnprepareCta = bet.status === BetStatus.Prepared && role === 'believer' && isProposer;
+  const hasActiveOrder = !!tradeStatus?.orderId;
+  const tradeFailed =
+    tradeStatus?.clobStatus === 'FAILED' ||
+    tradeStatus?.clobStatus === 'CANCELED' ||
+    tradeStatus?.finalizeStatus === 'failed';
+  const showUnprepareCta =
+    tradeStatusReady &&
+    bet.status === BetStatus.Prepared &&
+    role === 'believer' &&
+    isProposer &&
+    (!hasActiveOrder || tradeFailed) &&
+    !isSigning;
 
   const gasBlocked = !preflight.isLoading && !preflight.hasEnoughGas;
   const activeError = cancelError ?? (showWithdrawCta ? withdrawError : showSignOrderCta ? signError : showUnprepareCta ? unprepareError : null);
@@ -376,7 +389,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
       {showSignOrderCta && (
         <button
           onClick={handleSignOrder}
-          disabled={isSigning || signStep === 'confirmed'}
+          disabled={isSigning || signStep === 'confirmed' || signStep === 'polling'}
           className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
           style={
             signStep === 'confirmed'
