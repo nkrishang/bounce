@@ -5,7 +5,7 @@ import { useWallets, usePrivy } from '@privy-io/react-auth';
 import { useQueryClient } from '@tanstack/react-query';
 import { ethers } from 'ethers';
 import { ClobClient } from '@polymarket/clob-client';
-import { POLYMARKET_ADDRESSES, BounceAbi } from '@bounce/contracts';
+import { POLYMARKET_ADDRESSES, BounceAbi, ERC20Abi } from '@bounce/contracts';
 import type { BetView } from '@bounce/shared';
 import { BetStatus, normalizeBet } from '@bounce/shared';
 import { createClients } from '@/lib/transaction';
@@ -20,6 +20,47 @@ const GNOSIS_SAFE_SIGNATURE_TYPE = 2;
 
 export interface SignOrderError extends ParsedError {
   errorId: string;
+}
+
+/**
+ * Derives CLOB API credentials for the given signer.
+ *
+ * The SDK's HTTP helpers NEVER throw on 4xx/5xx — they catch errors internally
+ * and return { error: "...", status: 400 } instead of the expected data shape.
+ * The SDK's .then() mapper then produces { key: undefined, secret: undefined, passphrase: undefined }.
+ *
+ * We must validate the returned creds have real values, and try derive → create with validation.
+ */
+export async function deriveClobApiCreds(signer: ethers.Signer) {
+  const client = new ClobClient(
+    CLOB_HOST, POLYGON_CHAIN_ID, signer as any,
+    undefined, undefined, undefined, undefined, true,
+  );
+
+  const derived = await client.deriveApiKey(0);
+  if (derived?.key && derived?.secret && derived?.passphrase) {
+    return derived;
+  }
+
+  const created = await client.createApiKey(0);
+  if (created?.key && created?.secret && created?.passphrase) {
+    return created;
+  }
+
+  throw new Error('Failed to obtain CLOB API credentials — both derive and create returned invalid results');
+}
+
+/** Helper to extract a CLOB error message from the SDK's silent-failure objects */
+export function extractClobError(result: any): string | null {
+  if (!result) return 'Empty response from CLOB';
+  if ('error' in result) {
+    const errMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
+    return `CLOB API error (${result.status ?? 'unknown'}): ${errMsg}`;
+  }
+  if (result.success === false || result.errorMsg) {
+    return result.errorMsg || 'CLOB order rejected';
+  }
+  return null;
 }
 
 export function useSignAndSubmitOrder() {
@@ -52,10 +93,8 @@ export function useSignAndSubmitOrder() {
         await wallet.switchChain(chainId);
         const provider = await wallet.getEthereumProvider();
 
-        // Create viem clients for on-chain reads
         const { publicClient } = createClients(chainId, provider);
 
-        // Create ethers v5 signer for @polymarket/clob-client
         const ethersProvider = new ethers.providers.Web3Provider(provider as ethers.providers.ExternalProvider);
         const ethersSigner = ethersProvider.getSigner();
         const address = await ethersSigner.getAddress();
@@ -78,7 +117,6 @@ export function useSignAndSubmitOrder() {
           setStep('preparing');
           await api.post(`/bets/${betView.betId}/prepare`, {}, { authToken });
 
-          // Poll for Prepared status — RPC may lag behind chain finality
           setStep('checking');
           let prepared = false;
           for (let attempt = 0; attempt < 10; attempt++) {
@@ -100,15 +138,49 @@ export function useSignAndSubmitOrder() {
           }
         }
 
-        const safeAddress = bet.safe as string;
+        const safeAddress = bet.safe as `0x${string}`;
+        const tokenId = betView.metadata?.outcomeTokenId;
+        if (!tokenId) throw new Error('Missing outcome token ID in bet metadata');
 
-        // Step 2: Derive CLOB API credentials using the official client
+        // Step 2: Verify on-chain that the Safe has USDC balance and allowance
+        // (getBalanceAllowance/updateBalanceAllowance don't work for non-Polymarket Safes —
+        //  those endpoints don't transmit the Safe address and check a different wallet)
+        const negRisk =
+          bet.exchange.toLowerCase() === POLYMARKET_ADDRESSES.NEG_RISK_CTF_EXCHANGE.toLowerCase();
+        const spender = negRisk
+          ? POLYMARKET_ADDRESSES.CTF_EXCHANGE
+          : (bet.exchange as `0x${string}`);
+
+        const [onChainBalance, onChainAllowance] = await Promise.all([
+          publicClient.readContract({
+            address: POLYMARKET_ADDRESSES.USDC,
+            abi: ERC20Abi,
+            functionName: 'balanceOf',
+            args: [safeAddress],
+          }),
+          publicClient.readContract({
+            address: POLYMARKET_ADDRESSES.USDC,
+            abi: ERC20Abi,
+            functionName: 'allowance',
+            args: [safeAddress, spender],
+          }),
+        ]);
+
+        const requiredUsdc = BigInt(bet.inFlightUSDC);
+        console.log(`[on-chain] Safe=${safeAddress} balance=${onChainBalance}, allowance=${onChainAllowance}, required=${requiredUsdc}`);
+        if (BigInt(onChainBalance) < requiredUsdc) {
+          throw new Error(`Safe USDC balance (${onChainBalance}) is less than required (${requiredUsdc})`);
+        }
+        if (BigInt(onChainAllowance) < requiredUsdc) {
+          throw new Error(`Safe USDC allowance for spender ${spender} (${onChainAllowance}) is less than required (${requiredUsdc})`);
+        }
+
+        // Step 3: Derive CLOB API credentials
         setStep('signing');
 
-        const tempClient = new ClobClient(CLOB_HOST, POLYGON_CHAIN_ID, ethersSigner as any);
-        const apiCreds = await tempClient.createOrDeriveApiKey();
+        const apiCreds = await deriveClobApiCreds(ethersSigner);
+        console.log('[CLOB] API creds obtained, apiKey:', apiCreds.key.slice(0, 8) + '...');
 
-        // Step 3: Initialize trading client with GNOSIS_SAFE signature type
         const clobClient = new ClobClient(
           CLOB_HOST,
           POLYGON_CHAIN_ID,
@@ -116,61 +188,50 @@ export function useSignAndSubmitOrder() {
           apiCreds,
           GNOSIS_SAFE_SIGNATURE_TYPE,
           safeAddress,
+          undefined,
+          true,
         );
 
-        // Step 3b: Wait for CLOB to index the new balance/allowance after prepareTrade
+        // Step 4: Post market order with retry for transient CLOB indexing delays
         setStep('submitting');
-
-        for (let attempt = 0; attempt < 12; attempt++) {
-          try {
-            await clobClient.updateBalanceAllowance({
-              asset_type: 'COLLATERAL' as any,
-            });
-            break;
-          } catch {
-            if (attempt === 11) {
-              throw new Error('CLOB has not indexed the new allowance yet — please retry shortly');
-            }
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-          }
-        }
-
-        const tokenId = betView.metadata?.outcomeTokenId;
-        if (!tokenId) throw new Error('Missing outcome token ID in bet metadata');
 
         const usdcHuman = Number(bet.inFlightUSDC) / 1_000_000;
 
-        // Determine negRisk from exchange address
-        const negRisk =
-          bet.exchange.toLowerCase() === POLYMARKET_ADDRESSES.NEG_RISK_CTF_EXCHANGE.toLowerCase();
+        let result: any;
+        let lastClobError = '';
+        for (let attempt = 0; attempt < 5; attempt++) {
+          result = await clobClient.createAndPostMarketOrder({
+            tokenID: tokenId,
+            amount: usdcHuman,
+            side: 'BUY' as any,
+            price: 0.99,
+          }, {
+            tickSize: '0.01',
+            negRisk,
+          });
 
-        // Use a market order (FOK) so it fills immediately at the best available price.
-        // price acts as worst-price limit (slippage protection) — 1.0 accepts any price.
-        const signedOrder = await clobClient.createMarketOrder({
-          tokenID: tokenId,
-          amount: usdcHuman,
-          side: 'BUY' as any,
-          price: 0.99,
-        }, {
-          tickSize: '0.01',
-          negRisk,
-        });
+          console.log(`[CLOB] postOrder attempt ${attempt}:`, JSON.stringify(result));
 
-        const result = await clobClient.postOrder(signedOrder, 'FOK' as any);
-        console.log('[CLOB] postOrder result:', JSON.stringify(result));
+          const clobErr = extractClobError(result);
+          if (!clobErr) break;
 
-        if (!result) {
-          throw new Error('Empty response from CLOB');
+          // Retry on balance/allowance indexing errors
+          const isIndexingError = clobErr.toLowerCase().includes('balance') ||
+            clobErr.toLowerCase().includes('allowance') ||
+            clobErr.toLowerCase().includes('not enough');
+          if (isIndexingError && attempt < 4) {
+            lastClobError = clobErr;
+            console.log(`[CLOB] Retrying in ${3 * (attempt + 1)}s due to indexing delay: ${clobErr}`);
+            await new Promise((resolve) => setTimeout(resolve, 3000 * (attempt + 1)));
+            continue;
+          }
+
+          throw new Error(clobErr);
         }
 
-        // The CLOB HTTP helper returns { error, status } on 4xx/5xx errors
-        if ('error' in result) {
-          const errMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
-          throw new Error(`CLOB API error (${result.status ?? 'unknown'}): ${errMsg}`);
-        }
-
-        if (result.success === false || result.errorMsg) {
-          throw new Error(result.errorMsg || 'CLOB order rejected');
+        const finalErr = extractClobError(result);
+        if (finalErr) {
+          throw new Error(lastClobError || finalErr);
         }
 
         const orderId = result.orderID;
@@ -195,7 +256,7 @@ export function useSignAndSubmitOrder() {
         // Step 6: Poll backend trade-status until finalizeTrade completes
         setStep('polling');
 
-        const maxAttempts = 60; // 5 minutes at 5s intervals
+        const maxAttempts = 60;
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise((resolve) => setTimeout(resolve, 5000));
 

@@ -101,6 +101,31 @@ async function pollLoop(betId: number, orderId: string): Promise<void> {
 
           if (status === 'MATCHED' || status === 'CONFIRMED' || status === 'MINED') {
             logger.info({ betId, orderId, clobStatus: status }, 'CLOB order settled, attempting finalize');
+
+            // Extract fill data from CLOB order response
+            try {
+              const trades = (orderData as any).associate_trades || [];
+              let totalSize = 0;
+              let totalCost = 0;
+              for (const t of trades) {
+                const sz = parseFloat(t.size || '0');
+                const px = parseFloat(t.price || '0');
+                totalSize += sz;
+                totalCost += sz * px;
+              }
+              const avgPrice = totalSize > 0 ? totalCost / totalSize : parseFloat((orderData as any).price || '0');
+              const fillAmount = totalSize > 0 ? totalCost : parseFloat((orderData as any).size_matched || '0') * avgPrice;
+              if (avgPrice > 0) {
+                await updateTradeExecution(bounceAddress, betId, {
+                  fillPrice: avgPrice.toString(),
+                  fillAmount: fillAmount.toString(),
+                });
+                logger.info({ betId, avgPrice, fillAmount, tradeCount: trades.length }, 'Captured CLOB fill data');
+              }
+            } catch (fillErr) {
+              logger.warn({ betId, err: fillErr }, 'Failed to extract CLOB fill data');
+            }
+
             await sleep(3000);
 
             const exec = await getTradeExecution(bounceAddress, betId);

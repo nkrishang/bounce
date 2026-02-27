@@ -119,6 +119,8 @@ export async function betRoutes(fastify: FastifyInstance) {
           clobStatus: execution.clobStatus,
           finalizeStatus: execution.finalizeStatus,
           finalizeTxHash: execution.finalizeTxHash,
+          fillPrice: execution.fillPrice || null,
+          fillAmount: execution.fillAmount || null,
           lastError: execution.lastError,
           updatedAt: execution.updatedAt?.toISOString() || new Date().toISOString(),
         },

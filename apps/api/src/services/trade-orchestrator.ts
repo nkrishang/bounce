@@ -92,6 +92,33 @@ export async function callFinalizeTrade(betId: number): Promise<Hash> {
 
     await (publicClient as PublicClient).waitForTransactionReceipt({ hash, confirmations: 1 });
 
+    // Read updated on-chain state for diagnostics + fill data
+    try {
+      const raw = await (publicClient as PublicClient).readContract({
+        address: POLYMARKET_ADDRESSES.BOUNCE,
+        abi: BounceAbi,
+        functionName: 'getBet',
+        args: [BigInt(betId)],
+      });
+      const updatedBet = normalizeBet(raw as Record<string, unknown>);
+      logger.info({
+        betId,
+        usdcSpent: updatedBet.usdcSpent.toString(),
+        positionShares: updatedBet.positionShares.toString(),
+        escrowUSDC: updatedBet.escrowUSDC.toString(),
+        inFlightUSDC: updatedBet.inFlightUSDC.toString(),
+        status: updatedBet.status,
+      }, 'finalizeTrade on-chain state after confirmation');
+
+      // If on-chain usdcSpent is 0 but shares exist, the allowance-based spent
+      // calculation didn't detect the USDC spend. Log a warning for debugging.
+      if (updatedBet.usdcSpent === 0n && updatedBet.positionShares > 0n) {
+        logger.warn({ betId }, 'finalizeTrade: usdcSpent is 0 despite shares existing — allowance spender may be wrong');
+      }
+    } catch (readErr) {
+      logger.warn({ betId, err: readErr }, 'Failed to read on-chain state after finalizeTrade');
+    }
+
     await updateTradeExecution(bounceAddress, betId, {
       finalizeStatus: 'confirmed',
       finalizeTxHash: hash,

@@ -57,12 +57,24 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
 
   // Trade stats for active bets
   const isActive = bet.status === BetStatus.Traded;
-  const fillPrice = isActive && bet.positionShares > 0n
+  // On-chain cost basis; fall back to CLOB fill data when contract reports 0
+  const onChainFillPrice = isActive && bet.positionShares > 0n && bet.usdcSpent > 0n
     ? Number(bet.usdcSpent) / Number(bet.positionShares)
     : null;
+  const clobFillPrice = isActive && tradeStatus?.fillPrice
+    ? parseFloat(tradeStatus.fillPrice)
+    : null;
+  const fillPrice = onChainFillPrice ?? clobFillPrice;
   const proposalPct = metadata?.outcomePrice ? Math.round(parseFloat(metadata.outcomePrice) * 100) : 50;
   const pct = isActive && fillPrice != null ? Math.round(fillPrice * 100) : proposalPct;
-  const usdcSpentHuman = isActive ? formatUsdc(bet.usdcSpent) : null;
+  // Cost basis: prefer on-chain usdcSpent, fall back to CLOB fillAmount
+  const usdcSpentHuman = isActive
+    ? (bet.usdcSpent > 0n
+        ? formatUsdc(bet.usdcSpent)
+        : tradeStatus?.fillAmount
+          ? parseFloat(tradeStatus.fillAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : formatUsdc(bet.usdcSpent))
+    : null;
   const currentPrice = (() => {
     if (!isActive || !liveEvent) return null;
     const metaCid = (metadata?.conditionId ?? '').replace(/^0x/i, '').toLowerCase();

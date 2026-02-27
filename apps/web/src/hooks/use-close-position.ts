@@ -11,6 +11,7 @@ import { BetStatus, normalizeBet } from '@bounce/shared';
 import { createClients } from '@/lib/transaction';
 import { parseTransactionError, type ParsedError } from '@/lib/parse-transaction-error';
 import { api } from '@/lib/api';
+import { deriveClobApiCreds, extractClobError } from './use-sign-and-submit-order';
 
 type Step = 'idle' | 'checking' | 'signing' | 'submitting' | 'polling' | 'confirmed' | 'failed';
 
@@ -80,13 +81,15 @@ export function useClosePosition() {
           throw new Error('No shares to sell');
         }
 
-        const safeAddress = bet.safe as string;
+        const safeAddress = bet.safe as `0x${string}`;
+        const tokenId = betView.metadata?.outcomeTokenId;
+        if (!tokenId) throw new Error('Missing outcome token ID in bet metadata');
 
         // Step 2: Derive CLOB API credentials
         setStep('signing');
 
-        const tempClient = new ClobClient(CLOB_HOST, POLYGON_CHAIN_ID, ethersSigner as any);
-        const apiCreds = await tempClient.createOrDeriveApiKey();
+        const apiCreds = await deriveClobApiCreds(ethersSigner);
+        console.log('[CLOB] API creds obtained, apiKey:', apiCreds.key.slice(0, 8) + '...');
 
         const clobClient = new ClobClient(
           CLOB_HOST,
@@ -95,60 +98,53 @@ export function useClosePosition() {
           apiCreds,
           GNOSIS_SAFE_SIGNATURE_TYPE,
           safeAddress,
+          undefined,
+          true,
         );
 
-        // Step 3: Wait for CLOB to index conditional token balance/allowance
+        // Step 3: Post sell order with retry for transient CLOB indexing delays
+        // (getBalanceAllowance/updateBalanceAllowance don't work for non-Polymarket Safes —
+        //  those endpoints don't transmit the Safe address and check a different wallet)
         setStep('submitting');
 
-        const tokenId = betView.metadata?.outcomeTokenId;
-        if (!tokenId) throw new Error('Missing outcome token ID in bet metadata');
-
-        for (let attempt = 0; attempt < 12; attempt++) {
-          try {
-            await clobClient.updateBalanceAllowance({
-              asset_type: 'CONDITIONAL' as any,
-              token_id: tokenId,
-            });
-            break;
-          } catch {
-            if (attempt === 11) {
-              throw new Error('CLOB has not indexed the conditional token balance — please retry shortly');
-            }
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-          }
-        }
-
-        // Sell all shares
         const sharesHuman = Number(bet.positionShares) / 1_000_000;
-
         const negRisk =
           bet.exchange.toLowerCase() === POLYMARKET_ADDRESSES.NEG_RISK_CTF_EXCHANGE.toLowerCase();
 
-        // Market order with worst-price limit of 0.01 (accept any price ≥ 1¢)
-        const signedOrder = await clobClient.createMarketOrder({
-          tokenID: tokenId,
-          amount: sharesHuman,
-          side: 'SELL' as any,
-          price: 0.01,
-        }, {
-          tickSize: '0.01',
-          negRisk,
-        });
+        let result: any;
+        let lastClobError = '';
+        for (let attempt = 0; attempt < 5; attempt++) {
+          result = await clobClient.createAndPostMarketOrder({
+            tokenID: tokenId,
+            amount: sharesHuman,
+            side: 'SELL' as any,
+            price: 0.01,
+          }, {
+            tickSize: '0.01',
+            negRisk,
+          });
 
-        const result = await clobClient.postOrder(signedOrder, 'FOK' as any);
-        console.log('[CLOB] postOrder SELL result:', JSON.stringify(result));
+          console.log(`[CLOB] postOrder SELL attempt ${attempt}:`, JSON.stringify(result));
 
-        if (!result) {
-          throw new Error('Empty response from CLOB');
+          const clobErr = extractClobError(result);
+          if (!clobErr) break;
+
+          const isIndexingError = clobErr.toLowerCase().includes('balance') ||
+            clobErr.toLowerCase().includes('allowance') ||
+            clobErr.toLowerCase().includes('not enough');
+          if (isIndexingError && attempt < 4) {
+            lastClobError = clobErr;
+            console.log(`[CLOB] Retrying in ${3 * (attempt + 1)}s due to indexing delay: ${clobErr}`);
+            await new Promise((resolve) => setTimeout(resolve, 3000 * (attempt + 1)));
+            continue;
+          }
+
+          throw new Error(clobErr);
         }
 
-        if ('error' in result) {
-          const errMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
-          throw new Error(`CLOB API error (${result.status ?? 'unknown'}): ${errMsg}`);
-        }
-
-        if (result.success === false || result.errorMsg) {
-          throw new Error(result.errorMsg || 'CLOB sell order rejected');
+        const finalErr = extractClobError(result);
+        if (finalErr) {
+          throw new Error(lastClobError || finalErr);
         }
 
         const orderId = result.orderID;

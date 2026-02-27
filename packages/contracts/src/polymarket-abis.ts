@@ -321,6 +321,13 @@ export const BounceAbi = [
   },
   {
     type: 'function',
+    name: 'NEG_RISK_ADAPTER',
+    inputs: [],
+    outputs: [{ name: '', type: 'address', internalType: 'address' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
     name: 'BPS_DENOMINATOR',
     inputs: [],
     outputs: [{ name: '', type: 'uint256', internalType: 'uint256' }],

@@ -32,6 +32,9 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     /// @notice Polymarket Neg Risk CTF Exchange address.
     address public constant NEG_RISK_CTF_EXCHANGE = 0xC5d563A36AE78145C45a50134d48A1215220f80a;
 
+    /// @notice Polymarket Neg Risk Adapter address.
+    address public constant NEG_RISK_ADAPTER = 0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296;
+
     /// @notice Basis points denominator (100% = 10,000 BPS).
     uint256 public constant BPS_DENOMINATOR = 10_000;
 
@@ -441,19 +444,42 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
 
         SafeTransferLib.safeTransfer(USDC, safe, amount);
 
-        // Approve the actual USDC spender (CTF_EXCHANGE for neg-risk, exchange otherwise).
+        // Approve USDC for all contracts that need to pull it during CLOB settlement.
+        // Per Polymarket docs: CTF_EXCHANGE, NEG_RISK_CTF_EXCHANGE, and NEG_RISK_ADAPTER.
         address spender = _usdcSpender(exchange);
         _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, spender, amount));
-        // For neg-risk, also approve the wrapper exchange (NEG_RISK_CTF_EXCHANGE).
         if (spender != exchange) {
             _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, amount));
         }
+        // For neg-risk, also approve the adapter (required by CLOB balance/allowance check).
+        if (exchange == NEG_RISK_CTF_EXCHANGE) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_ADAPTER, amount));
+        }
 
+        // Set CTF (ERC1155) approvals for the exchange contracts (one-time, needed for sells).
         if (!_ctfApprovalSet[safe][exchange]) {
             _execFromSafe(
                 safe, CTF, abi.encodeWithSelector(IConditionalTokensMinimal.setApprovalForAll.selector, exchange, true)
             );
             _ctfApprovalSet[safe][exchange] = true;
+        }
+        if (exchange == NEG_RISK_CTF_EXCHANGE) {
+            if (!_ctfApprovalSet[safe][CTF_EXCHANGE]) {
+                _execFromSafe(
+                    safe,
+                    CTF,
+                    abi.encodeWithSelector(IConditionalTokensMinimal.setApprovalForAll.selector, CTF_EXCHANGE, true)
+                );
+                _ctfApprovalSet[safe][CTF_EXCHANGE] = true;
+            }
+            if (!_ctfApprovalSet[safe][NEG_RISK_ADAPTER]) {
+                _execFromSafe(
+                    safe,
+                    CTF,
+                    abi.encodeWithSelector(IConditionalTokensMinimal.setApprovalForAll.selector, NEG_RISK_ADAPTER, true)
+                );
+                _ctfApprovalSet[safe][NEG_RISK_ADAPTER] = true;
+            }
         }
 
         bet.escrowUSDC = 0;
@@ -502,10 +528,13 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
             usdcLeftover = toReturn;
         }
 
-        // Clear USDC approvals (spender + wrapper for neg-risk).
+        // Clear USDC approvals (spender + wrapper + adapter for neg-risk).
         _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, spender, 0));
         if (spender != exchange) {
             _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, 0));
+        }
+        if (exchange == NEG_RISK_CTF_EXCHANGE) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_ADAPTER, 0));
         }
 
         bet.usdcSpent += spent;
@@ -546,10 +575,13 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
             _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), toRecover));
         }
 
-        // Clear USDC approvals (spender + wrapper for neg-risk).
+        // Clear USDC approvals (spender + wrapper + adapter for neg-risk).
         _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, spender, 0));
         if (spender != exchange) {
             _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, exchange, 0));
+        }
+        if (exchange == NEG_RISK_CTF_EXCHANGE) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_ADAPTER, 0));
         }
 
         bet.escrowUSDC += toRecover;

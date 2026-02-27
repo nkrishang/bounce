@@ -111,6 +111,8 @@ export interface BetTradeState {
   clobStatus?: 'MATCHED' | 'MINED' | 'CONFIRMED' | 'RETRYING' | 'FAILED' | 'CANCELED';
   finalizeStatus?: 'pending' | 'confirmed' | 'failed';
   finalizeTxHash?: string;
+  fillPrice?: string;
+  fillAmount?: string;
   lastError?: string;
   updatedAt: string;
 }

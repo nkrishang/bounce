@@ -29,6 +29,8 @@ export const tradeExecutions = pgTable('trade_executions', {
   clobStatus: text('clob_status'),
   finalizeStatus: text('finalize_status'),
   finalizeTxHash: text('finalize_tx_hash'),
+  fillPrice: text('fill_price'),
+  fillAmount: text('fill_amount'),
   lastError: text('last_error'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
