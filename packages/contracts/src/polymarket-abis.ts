@@ -185,6 +185,13 @@ export const BounceAbi = [
   },
   {
     type: 'function',
+    name: 'closePosition',
+    inputs: [{ name: 'betId', type: 'uint256', internalType: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
     name: 'withdraw',
     inputs: [{ name: 'betId', type: 'uint256', internalType: 'uint256' }],
     outputs: [],
@@ -383,6 +390,16 @@ export const BounceAbi = [
     inputs: [
       { name: 'betId', type: 'uint256', indexed: true, internalType: 'uint256' },
       { name: 'usdcReceived', type: 'uint256', indexed: false, internalType: 'uint256' },
+    ],
+    anonymous: false,
+  },
+  {
+    type: 'event',
+    name: 'PositionClosed',
+    inputs: [
+      { name: 'betId', type: 'uint256', indexed: true, internalType: 'uint256' },
+      { name: 'usdcReceived', type: 'uint256', indexed: false, internalType: 'uint256' },
+      { name: 'sharesSold', type: 'uint256', indexed: false, internalType: 'uint256' },
     ],
     anonymous: false,
   },

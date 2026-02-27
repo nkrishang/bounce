@@ -8,7 +8,7 @@ import {
   saveBetMetadata,
 } from '../services/bet.service.js';
 import { getTradeExecution, upsertTradeExecution } from '../services/trade.service.js';
-import { callPrepareTrade, callUnprepareTrade } from '../services/trade-orchestrator.js';
+import { callPrepareTrade, callUnprepareTrade, reconcileBetSettlement } from '../services/trade-orchestrator.js';
 import { POLYMARKET_ADDRESSES, BounceAbi } from '@bounce/contracts';
 import { normalizeBet, BetStatus } from '@bounce/shared';
 import { publicClient } from '../lib/viem.js';
@@ -112,6 +112,7 @@ export async function betRoutes(fastify: FastifyInstance) {
       return {
         data: {
           betId: execution.betId,
+          flow: execution.flow,
           prepareStatus: execution.prepareStatus,
           prepareTxHash: execution.prepareTxHash,
           orderId: execution.orderId,
@@ -217,10 +218,12 @@ export async function betRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Invalid betId' });
       }
 
-      const body = request.body as { orderId?: string };
+      const body = request.body as { orderId?: string; flow?: string };
       if (!body.orderId) {
         return reply.status(400).send({ error: 'Missing orderId' });
       }
+
+      const flow = body.flow === 'close' ? 'close' : 'open';
 
       const { upsertTradeExecution } = await import('../services/trade.service.js');
       await upsertTradeExecution({
@@ -228,6 +231,10 @@ export async function betRoutes(fastify: FastifyInstance) {
         betId,
         orderId: body.orderId,
         clobStatus: 'SUBMITTED',
+        flow,
+        finalizeStatus: null,
+        finalizeTxHash: null,
+        lastError: null,
       });
 
       const { startClobPolling } = await import('../services/clob-poller.js');
@@ -238,6 +245,32 @@ export async function betRoutes(fastify: FastifyInstance) {
     } catch (error) {
       logger.error(error, 'Failed to register CLOB order');
       return reply.status(500).send({ error: 'Failed to register CLOB order' });
+    }
+  });
+
+  // Reconcile a stuck bet by checking on-chain state and calling finalizeTrade/closePosition
+  // Requires Privy authentication
+  fastify.post<{ Params: { betId: string } }>('/:betId/reconcile', async (request, reply) => {
+    try {
+      try {
+        await verifyPrivyToken(request.headers.authorization);
+      } catch {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const betId = parseInt(request.params.betId, 10);
+      if (isNaN(betId)) {
+        return reply.status(400).send({ error: 'Invalid betId' });
+      }
+
+      const result = await reconcileBetSettlement(betId);
+      if (result.action) {
+        logger.info({ betId, action: result.action, txHash: result.txHash }, 'Reconcile completed');
+      }
+      return { data: result };
+    } catch (error) {
+      logger.error(error, 'Failed to reconcile bet settlement');
+      return reply.status(500).send({ error: 'Failed to reconcile bet settlement' });
     }
   });
 }

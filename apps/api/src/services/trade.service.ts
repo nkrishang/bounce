@@ -57,6 +57,7 @@ export async function getPendingTradeExecutions(bounceAddress: string): Promise<
         or(
           eq(tradeExecutions.prepareStatus, 'pending'),
           isNull(tradeExecutions.finalizeStatus),
+          eq(tradeExecutions.finalizeStatus, 'failed'),
         ),
       ),
     );

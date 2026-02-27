@@ -15,6 +15,13 @@
       "when": 1772167200000,
       "tag": "0001_add_bounce_address",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772179443400,
+      "tag": "0002_brief_quasimodo",
+      "breakpoints": true
     }
   ]
 }

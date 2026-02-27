@@ -104,6 +104,7 @@ export interface BetView {
 // Off-chain trade execution state (from backend)
 export interface BetTradeState {
   betId: number;
+  flow?: 'open' | 'close';
   prepareStatus: 'pending' | 'confirmed' | 'failed';
   prepareTxHash?: string;
   orderId?: string;

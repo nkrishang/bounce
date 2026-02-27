@@ -4,15 +4,15 @@ import { normalizeBet, BetStatus } from '@bounce/shared';
 import { logger } from '../lib/logger.js';
 import { publicClient } from '../lib/viem.js';
 import { getTradeExecution, updateTradeExecution } from './trade.service.js';
-import { callFinalizeTrade } from './trade-orchestrator.js';
+import { callFinalizeTrade, callClosePosition, reconcileBetSettlement } from './trade-orchestrator.js';
 
 const bounceAddress = POLYMARKET_ADDRESSES.BOUNCE.toLowerCase();
 
 const POLL_INTERVAL_MS = 5_000;
 const MAX_POLL_DURATION_MS = 10 * 60 * 1_000; // 10 minutes
 
-/** In-memory set to prevent duplicate pollers for the same bet. */
-const activePollers = new Set<number>();
+/** In-memory map of betId → orderId to prevent duplicate pollers and allow replacement. */
+const activePollers = new Map<number, string>();
 
 /**
  * Starts polling CLOB order status and on-chain state for settlement detection.
@@ -21,18 +21,24 @@ const activePollers = new Set<number>();
  * Fire-and-forget — does not throw.
  */
 export function startClobPolling(betId: number, orderId: string): void {
-  if (activePollers.has(betId)) {
-    logger.debug({ betId }, 'CLOB poller already active, skipping');
+  const existing = activePollers.get(betId);
+  if (existing === orderId) {
+    logger.debug({ betId, orderId }, 'CLOB poller already active for same order, skipping');
     return;
   }
 
-  activePollers.add(betId);
+  if (existing) {
+    logger.info({ betId, oldOrderId: existing, orderId }, 'Replacing active poller with new orderId');
+  }
+
+  activePollers.set(betId, orderId);
   logger.info({ betId, orderId }, 'Starting on-chain settlement polling');
 
   pollLoop(betId, orderId).catch((err) => {
     logger.error({ betId, orderId, err }, 'Settlement poller unexpected error');
   }).finally(() => {
-    activePollers.delete(betId);
+    // Only delete if we are still the active poller
+    if (activePollers.get(betId) === orderId) activePollers.delete(betId);
   });
 }
 
@@ -42,6 +48,12 @@ async function pollLoop(betId: number, orderId: string): Promise<void> {
 
   while (Date.now() - startedAt < MAX_POLL_DURATION_MS) {
     await sleep(POLL_INTERVAL_MS);
+
+    // Exit if this poller has been superseded by a newer order
+    if (activePollers.get(betId) !== orderId) {
+      logger.info({ betId, orderId }, 'Stale poller detected, exiting');
+      return;
+    }
 
     try {
       // Read on-chain bet state
@@ -53,16 +65,27 @@ async function pollLoop(betId: number, orderId: string): Promise<void> {
       });
       const bet = normalizeBet(raw as Record<string, unknown>);
 
-      // If already finalized (Traded/Closed/Withdrawn), stop polling
-      if (bet.status === BetStatus.Traded || bet.status === BetStatus.Closed || bet.status === BetStatus.Withdrawn) {
-        logger.info({ betId, status: bet.status }, 'Bet already finalized on-chain');
-        await updateTradeExecution(bounceAddress, betId, { clobStatus: 'CONFIRMED' });
+      // Terminal states — stop polling regardless of flow
+      if (bet.status === BetStatus.Closed || bet.status === BetStatus.Withdrawn) {
+        logger.info({ betId, status: bet.status }, 'Bet in terminal state on-chain');
+        await updateTradeExecution(bounceAddress, betId, { clobStatus: 'CONFIRMED', finalizeStatus: 'confirmed' });
         return;
       }
 
-      // If no longer Prepared (e.g. unprepared/cancelled), stop
-      if (bet.status !== BetStatus.Prepared) {
-        logger.warn({ betId, status: bet.status }, 'Bet no longer in Prepared status, stopping poller');
+      // For buy orders (Prepared → Traded), check if already finalized
+      // For close orders (Traded), we continue polling
+      if (bet.status === BetStatus.Traded) {
+        const exec = await getTradeExecution(bounceAddress, betId);
+        if (exec?.flow === 'open' && exec?.finalizeStatus === 'confirmed') {
+          logger.info({ betId }, 'Buy order already finalized');
+          return;
+        }
+        // Close order — continue polling
+      }
+
+      // If no longer Prepared (and not Traded), stop
+      if (bet.status !== BetStatus.Prepared && bet.status !== BetStatus.Traded) {
+        logger.warn({ betId, status: bet.status }, 'Bet in unexpected status, stopping poller');
         return;
       }
 
@@ -78,9 +101,14 @@ async function pollLoop(betId: number, orderId: string): Promise<void> {
 
           if (status === 'MATCHED' || status === 'CONFIRMED' || status === 'MINED') {
             logger.info({ betId, orderId, clobStatus: status }, 'CLOB order settled, attempting finalize');
-            // Add a short delay to allow on-chain state to propagate
             await sleep(3000);
-            await finalize(betId);
+
+            const exec = await getTradeExecution(bounceAddress, betId);
+            if (exec?.flow === 'close') {
+              await closeFinalize(betId);
+            } else {
+              await finalize(betId);
+            }
             return;
           }
 
@@ -97,7 +125,7 @@ async function pollLoop(betId: number, orderId: string): Promise<void> {
         logger.warn({ betId, orderId, err: clobErr }, 'CLOB order status check failed, using fallback');
       }
 
-      // Fallback: check if shares have appeared (most reliable on-chain signal)
+      // Fallback: check on-chain share balance changes
       try {
         const IConditionalTokensAbi = [{
           inputs: [{ name: 'account', type: 'address' }, { name: 'id', type: 'uint256' }],
@@ -114,11 +142,22 @@ async function pollLoop(betId: number, orderId: string): Promise<void> {
           args: [bet.safe as `0x${string}`, bet.positionId],
         }) as bigint;
 
-        if (sharesNow > bet.positionShares) {
-          logger.info({ betId, orderId, sharesNow: sharesNow.toString(), prevShares: bet.positionShares.toString() }, 'Shares detected on-chain, finalizing trade');
-          await updateTradeExecution(bounceAddress, betId, { clobStatus: 'CONFIRMED' });
-          await finalize(betId);
-          return;
+        if (bet.status === BetStatus.Prepared) {
+          // Buy order: check if shares have appeared
+          if (sharesNow > bet.positionShares) {
+            logger.info({ betId, orderId, sharesNow: sharesNow.toString(), prevShares: bet.positionShares.toString() }, 'Shares detected on-chain, finalizing trade');
+            await updateTradeExecution(bounceAddress, betId, { clobStatus: 'CONFIRMED' });
+            await finalize(betId);
+            return;
+          }
+        } else if (bet.status === BetStatus.Traded) {
+          // Close order: check if shares have decreased
+          if (sharesNow < bet.positionShares) {
+            logger.info({ betId, orderId, sharesNow: sharesNow.toString(), prevShares: bet.positionShares.toString() }, 'Shares decreased on-chain, finalizing close');
+            await updateTradeExecution(bounceAddress, betId, { clobStatus: 'CONFIRMED' });
+            await closeFinalize(betId);
+            return;
+          }
         }
       } catch (shareErr) {
         logger.warn({ betId, err: shareErr }, 'Fallback share balance check failed');
@@ -150,8 +189,24 @@ async function finalize(betId: number): Promise<void> {
   }
 }
 
+async function closeFinalize(betId: number): Promise<void> {
+  const existing = await getTradeExecution(bounceAddress, betId);
+  if (existing?.finalizeStatus === 'confirmed' || existing?.finalizeStatus === 'pending') {
+    logger.info({ betId }, 'Close finalize already in progress or done, skipping');
+    return;
+  }
+
+  try {
+    await callClosePosition(betId);
+  } catch (err) {
+    logger.error({ betId, err }, 'closePosition failed during settlement polling');
+  }
+}
+
 /**
- * Sweeps the DB for orders that need polling (e.g. after server restart).
+ * Sweeps the DB for orders that need polling or reconciliation (e.g. after server restart).
+ * For each pending execution, first attempts on-chain reconciliation. If the settlement
+ * hasn't landed yet and an orderId exists, restarts the CLOB poller.
  */
 export async function sweepPendingOrders(): Promise<void> {
   try {
@@ -159,10 +214,23 @@ export async function sweepPendingOrders(): Promise<void> {
     const pending = await getPendingTradeExecutions(bounceAddress);
 
     for (const exec of pending) {
-      if (!exec.orderId) continue;
       if (exec.finalizeStatus === 'confirmed') continue;
 
-      startClobPolling(exec.betId, exec.orderId);
+      // Try on-chain reconciliation first (handles cases where CLOB settled but poller died)
+      try {
+        const result = await reconcileBetSettlement(exec.betId);
+        if (result.action) {
+          logger.info({ betId: exec.betId, action: result.action }, 'Sweep reconciled stuck bet');
+          continue;
+        }
+      } catch (err) {
+        logger.warn({ betId: exec.betId, err }, 'Sweep reconciliation attempt failed, will try polling');
+      }
+
+      // If reconciliation didn't resolve it, restart poller if we have an orderId
+      if (exec.orderId) {
+        startClobPolling(exec.betId, exec.orderId);
+      }
     }
   } catch (err) {
     logger.error({ err }, 'Sweep pending orders failed');

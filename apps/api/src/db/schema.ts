@@ -22,6 +22,7 @@ export const betMetadata = pgTable('bet_metadata', {
 export const tradeExecutions = pgTable('trade_executions', {
   bounceAddress: text('bounce_address').notNull(),
   betId: integer('bet_id').notNull(),
+  flow: text('flow').notNull().default('open'), // 'open' for buy, 'close' for sell
   prepareStatus: text('prepare_status').notNull().default('pending'),
   prepareTxHash: text('prepare_tx_hash'),
   orderId: text('order_id'),

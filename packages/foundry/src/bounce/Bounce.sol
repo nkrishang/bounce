@@ -153,6 +153,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
         uint256 indexed betId, uint256 usdcSpentDelta, uint256 sharesDelta, uint256 usdcLeftoverReturned
     );
     event TradeUnprepared(uint256 indexed betId, uint256 amountReturned);
+    event PositionClosed(uint256 indexed betId, uint256 usdcReceived, uint256 sharesSold);
 
     // ============================================
     // Custom Errors
@@ -179,6 +180,7 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
     error TradeAlreadySettled();
     error ExecuteTradeDeprecated();
     error SellPositionDeprecated();
+    error NoSharesSold();
 
     // ============================================
     // Initializer
@@ -615,8 +617,51 @@ contract Bounce is Ownable, UUPSUpgradeable, ReentrancyGuard, IGuard {
 
         emit PositionRedeemed(betId, usdcDelta);
 
-        // If all shares redeemed, transition to Closed.
-        if (bet.positionShares == 0) {
+        // If all shares redeemed (or only dust remains), transition to Closed.
+        if (bet.positionShares <= 10_000) {
+            bet.positionShares = 0;
+            bet.status = BetStatus.Closed;
+            bet.closedAt = uint40(block.timestamp);
+            emit BetClosed(betId, bet.escrowUSDC);
+        }
+    }
+
+    /// @notice Closes a traded position after CLOB sell settlement.
+    /// @dev Permissionless — pulls USDC proceeds from Safe, updates accounting.
+    ///      After finalizeTrade, the Safe's USDC balance is 0. Any USDC present
+    ///      after a CLOB sell order settles is attributed as sell proceeds.
+    /// @param betId The bet ID whose position to close.
+    function closePosition(uint256 betId) external nonReentrant {
+        Bet storage bet = _bets[betId];
+
+        if (bet.status != BetStatus.Traded) revert InvalidStatus(bet.status, BetStatus.Traded);
+
+        address safe = bet.safe;
+        _assertSafeReady(safe);
+
+        // Check current share balance in the Safe.
+        uint256 sharesNow = IConditionalTokensMinimal(CTF).balanceOf(safe, bet.positionId);
+        // Allow close if shares decreased OR only dust remains (≤ 0.01 shares).
+        if (sharesNow >= bet.positionShares && sharesNow > 10_000) revert NoSharesSold();
+        uint256 sharesSold = sharesNow < bet.positionShares ? bet.positionShares - sharesNow : 0;
+
+        // Pull all USDC proceeds from Safe to Bounce escrow.
+        uint256 usdcNow = IERC20(USDC).balanceOf(safe);
+        if (usdcNow > 0) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), usdcNow));
+        }
+
+        // Update accounting.
+        bet.positionShares = sharesNow;
+        bet.escrowUSDC += usdcNow;
+        bet.usdcReceived += usdcNow;
+
+        emit PositionClosed(betId, usdcNow, sharesSold);
+
+        // If all shares sold (or only dust remains), transition to Closed.
+        // Dust threshold: 10_000 raw units = 0.01 shares (USDC has 6 decimals).
+        if (sharesNow <= 10_000) {
+            bet.positionShares = 0;
             bet.status = BetStatus.Closed;
             bet.closedAt = uint40(block.timestamp);
             emit BetClosed(betId, bet.escrowUSDC);

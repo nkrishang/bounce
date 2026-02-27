@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, User, Clock, CheckCircle, BarChart3, XCircle, ArrowDownToLine, Loader2, AlertTriangle, Check, Send } from 'lucide-react';
+import { TrendingUp, TrendingDown, User, Clock, CheckCircle, BarChart3, XCircle, ArrowDownToLine, Loader2, AlertTriangle, Check, Send } from 'lucide-react';
 import type { BetView } from '@bounce/shared';
 import { BetStatus, formatAddress } from '@bounce/shared';
 import { formatUsdc } from '@/lib/bet-math';
@@ -13,6 +14,7 @@ import { useSignAndSubmitOrder } from '@/hooks/use-sign-and-submit-order';
 import { useTradeStatus } from '@/hooks/use-trade-status';
 import { useUnprepareTrade } from '@/hooks/use-unprepare-trade';
 import { usePolymarketEvent } from '@/hooks/use-polymarket-markets';
+import { SellPositionModal } from '@/components/polymarket/sell-position-modal';
 
 interface MyBetCardProps {
   betView: BetView;
@@ -32,13 +34,15 @@ const statusConfig: Record<number, { label: string; color: string; bg: string; i
 export function MyBetCard({ betView, role }: MyBetCardProps) {
   const { bet, metadata } = betView;
   const { address } = useAuth();
+  const [sellModalOpen, setSellModalOpen] = useState(false);
   const { cancelBet, isLoading: isCancelling, step: cancelStep, error: cancelError, reset: resetCancel } = useCancelBet();
   const { withdrawBet, isLoading: isWithdrawing, step: withdrawStep, error: withdrawError, reset: resetWithdraw } = useWithdrawBet();
   const preflight = useGasPreflight(address as `0x${string}` | undefined);
   const { signAndSubmit, isLoading: isSigning, step: signStep, error: signError, reset: resetSign } = useSignAndSubmitOrder();
   const { unprepare, isLoading: isUnpreparing, step: unprepareStep, error: unprepareError, reset: resetUnprepare } = useUnprepareTrade();
+
   const { data: tradeStatus, isFetched: tradeStatusFetched } = useTradeStatus(
-    (bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared) ? betView.betId : undefined,
+    (bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared || bet.status === BetStatus.Traded) ? betView.betId : undefined,
   );
 
   const { data: liveEvent } = usePolymarketEvent(
@@ -47,7 +51,6 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
 
   const proposerStake = (bet.totalCapital * BigInt(bet.proposerCapitalBps)) / 10000n;
   const funderPortion = bet.totalCapital - proposerStake;
-  const pct = metadata?.outcomePrice ? Math.round(parseFloat(metadata.outcomePrice) * 100) : 50;
   const isYesOutcome = metadata?.isYesOutcome ?? true;
   const status = statusConfig[bet.status] ?? statusConfig[BetStatus.Proposed];
   const StatusIcon = status.icon;
@@ -57,6 +60,8 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
   const fillPrice = isActive && bet.positionShares > 0n
     ? Number(bet.usdcSpent) / Number(bet.positionShares)
     : null;
+  const proposalPct = metadata?.outcomePrice ? Math.round(parseFloat(metadata.outcomePrice) * 100) : 50;
+  const pct = isActive && fillPrice != null ? Math.round(fillPrice * 100) : proposalPct;
   const usdcSpentHuman = isActive ? formatUsdc(bet.usdcSpent) : null;
   const currentPrice = (() => {
     if (!isActive || !liveEvent) return null;
@@ -297,7 +302,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
       </div>
 
       {/* Status */}
-      {!showSignOrderCta && bet.status !== BetStatus.Proposed && bet.status !== BetStatus.Funded && (
+      {!showSignOrderCta && bet.status !== BetStatus.Proposed && bet.status !== BetStatus.Funded && bet.status !== BetStatus.Traded && bet.status !== BetStatus.Closed && (
         <div
           className="flex items-center justify-center gap-2 py-3 rounded-xl"
           style={{ background: status.bg, border: `1px solid ${status.color}25` }}
@@ -452,6 +457,36 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
             <><XCircle className="w-4 h-4" /> Reset Trade</>
           )}
         </button>
+      )}
+
+      {/* Sell Position CTA — visible on active bets for both roles */}
+      {isActive && (
+        <button
+          onClick={() => setSellModalOpen(true)}
+          className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99]"
+          style={
+            totalPnl != null && totalPnl > 0
+              ? { background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#22c55e' }
+              : totalPnl != null && totalPnl < 0
+              ? { background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#ef4444' }
+              : { background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255, 255, 255, 0.12)', color: 'rgba(255, 255, 255, 0.6)' }
+          }
+        >
+          {totalPnl != null && totalPnl > 0
+            ? <><TrendingUp className="w-4 h-4" /> Sell Position</>
+            : <><TrendingDown className="w-4 h-4" /> Sell Position</>
+          }
+        </button>
+      )}
+
+      {/* Sell Position Modal */}
+      {isActive && sellModalOpen && (
+        <SellPositionModal
+          betView={betView}
+          role={role}
+          open={sellModalOpen}
+          onClose={() => setSellModalOpen(false)}
+        />
       )}
     </motion.div>
   );
