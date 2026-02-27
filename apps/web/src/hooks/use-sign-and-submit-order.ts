@@ -110,6 +110,11 @@ export function useSignAndSubmitOrder() {
           safeAddress,
         );
 
+        // Step 3b: Force CLOB to re-read on-chain balance/allowance after prepareTrade
+        await clobClient.updateBalanceAllowance({
+          asset_type: 'COLLATERAL' as any,
+        });
+
         // Step 4: Build and submit order as a market order for immediate fill
         setStep('submitting');
 
