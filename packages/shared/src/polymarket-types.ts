@@ -79,6 +79,7 @@ export interface BetOnchain {
 
 // Off-chain metadata (stored in backend)
 export interface BetMetadata {
+  bounceAddress: string;
   chainId: number;
   betId: number;
   slug: string;

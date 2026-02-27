@@ -8,6 +8,13 @@
       "when": 1772095836455,
       "tag": "0000_organic_sugar_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1772167200000,
+      "tag": "0001_add_bounce_address",
+      "breakpoints": true
     }
   ]
 }

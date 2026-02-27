@@ -11,6 +11,8 @@ import { useWithdrawBet } from '@/hooks/use-withdraw-bet';
 import { useGasPreflight } from '@/hooks/use-gas-preflight';
 import { useSignAndSubmitOrder } from '@/hooks/use-sign-and-submit-order';
 import { useTradeStatus } from '@/hooks/use-trade-status';
+import { useUnprepareTrade } from '@/hooks/use-unprepare-trade';
+import { usePolymarketEvent } from '@/hooks/use-polymarket-markets';
 
 interface MyBetCardProps {
   betView: BetView;
@@ -34,8 +36,13 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
   const { withdrawBet, isLoading: isWithdrawing, step: withdrawStep, error: withdrawError, reset: resetWithdraw } = useWithdrawBet();
   const preflight = useGasPreflight(address as `0x${string}` | undefined);
   const { signAndSubmit, isLoading: isSigning, step: signStep, error: signError, reset: resetSign } = useSignAndSubmitOrder();
+  const { unprepare, isLoading: isUnpreparing, step: unprepareStep, error: unprepareError, reset: resetUnprepare } = useUnprepareTrade();
   const { data: tradeStatus } = useTradeStatus(
     (bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared) ? betView.betId : undefined,
+  );
+
+  const { data: liveEvent } = usePolymarketEvent(
+    bet.status === BetStatus.Traded ? metadata?.slug : undefined,
   );
 
   const proposerStake = (bet.totalCapital * BigInt(bet.proposerCapitalBps)) / 10000n;
@@ -45,15 +52,78 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
   const status = statusConfig[bet.status] ?? statusConfig[BetStatus.Proposed];
   const StatusIcon = status.icon;
 
-  const showCancelCta = bet.status === BetStatus.Proposed && role === 'believer';
+  // Trade stats for active bets
+  const isActive = bet.status === BetStatus.Traded;
+  const fillPrice = isActive && bet.positionShares > 0n
+    ? Number(bet.usdcSpent) / Number(bet.positionShares)
+    : null;
+  const usdcSpentHuman = isActive ? formatUsdc(bet.usdcSpent) : null;
+  const currentPrice = (() => {
+    if (!isActive || !liveEvent) return null;
+    const metaCid = (metadata?.conditionId ?? '').replace(/^0x/i, '').toLowerCase();
+    const market = liveEvent.markets?.find((m) => {
+      const mCid = (m.conditionId || m.condition_id || '').replace(/^0x/i, '').toLowerCase();
+      return mCid === metaCid;
+    });
+    if (!market) return null;
+    // Try tokens array first (most reliable)
+    if (market.tokens?.length) {
+      const idx = metadata?.outcomeIndex ?? 0;
+      return market.tokens[idx]?.price ?? null;
+    }
+    // Fallback to outcome_prices string
+    try {
+      const pricesRaw = (market as any).outcomePrices || market.outcome_prices || '[]';
+      const prices: string[] = typeof pricesRaw === 'string' ? JSON.parse(pricesRaw) : pricesRaw;
+      const idx = metadata?.outcomeIndex ?? 0;
+      return prices[idx] ? parseFloat(prices[idx]) : null;
+    } catch { return null; }
+  })();
+
+  // PnL calculations for active bets
+  const positionValue = isActive && currentPrice != null
+    ? Number(bet.positionShares) * currentPrice / 1_000_000
+    : null;
+  const totalPnl = isActive && positionValue != null
+    ? positionValue - Number(bet.usdcSpent) / 1_000_000
+    : null;
+  const userPnl = (() => {
+    if (totalPnl == null) return null;
+    const proposerCap = Number(bet.totalCapital) * bet.proposerCapitalBps / 10000 / 1_000_000;
+    const funderCap = Number(bet.totalCapital) / 1_000_000 - proposerCap;
+    if (totalPnl >= 0) {
+      // Profit: split per proposerProfitShareBps
+      const proposerProfit = totalPnl * bet.proposerProfitShareBps / 10000;
+      const funderProfit = totalPnl - proposerProfit;
+      return role === 'believer'
+        ? proposerCap + proposerProfit - Number(proposerStake) / 1_000_000
+        : funderCap + funderProfit - Number(funderPortion) / 1_000_000;
+    } else {
+      // Loss: proposer absorbs first
+      const loss = -totalPnl;
+      if (loss <= proposerCap) {
+        return role === 'believer'
+          ? (proposerCap - loss) - Number(proposerStake) / 1_000_000
+          : 0; // funder fully protected
+      } else {
+        const funderLoss = loss - proposerCap;
+        return role === 'believer'
+          ? -Number(proposerStake) / 1_000_000
+          : -(funderLoss);
+      }
+    }
+  })();
+
+  const showCancelCta = (bet.status === BetStatus.Proposed && role === 'believer') || bet.status === BetStatus.Funded;
   const showWithdrawCta = bet.status === BetStatus.Closed;
   const isProposer = address?.toLowerCase() === bet.proposer.toLowerCase();
-  const showSignOrderCta = (bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared) && role === 'believer' && isProposer && !tradeStatus?.orderId;
+  const showSignOrderCta = ((bet.status === BetStatus.Funded || bet.status === BetStatus.Prepared) && role === 'believer' && isProposer && !tradeStatus?.orderId) || signStep === 'confirmed';
   const showPreparingIndicator = bet.status === BetStatus.Funded && role === 'believer' && tradeStatus?.prepareStatus === 'pending' && !showSignOrderCta;
   const showAwaitingSettlement = bet.status === BetStatus.Prepared && !!tradeStatus?.orderId;
+  const showUnprepareCta = bet.status === BetStatus.Prepared && role === 'believer' && isProposer;
 
   const gasBlocked = !preflight.isLoading && !preflight.hasEnoughGas;
-  const activeError = showCancelCta ? cancelError : showWithdrawCta ? withdrawError : showSignOrderCta ? signError : null;
+  const activeError = cancelError ?? (showWithdrawCta ? withdrawError : showSignOrderCta ? signError : showUnprepareCta ? unprepareError : null);
 
   const handleCancel = async () => {
     resetCancel();
@@ -73,6 +143,13 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
     resetSign();
     try {
       await signAndSubmit(betView);
+    } catch { /* error handled by hook */ }
+  };
+
+  const handleUnprepare = async () => {
+    resetUnprepare();
+    try {
+      await unprepare(betView.betId);
     } catch { /* error handled by hook */ }
   };
 
@@ -112,22 +189,75 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-dark-border bg-[#111113] px-4 py-3">
-          <span className="text-xs text-muted-foreground font-medium">
-            {role === 'believer' ? 'Your Stake' : 'Your Funding'}
-          </span>
-          <p className="text-lg font-bold text-white mt-1 font-mono">
-            ${role === 'believer' ? formatUsdc(proposerStake) : formatUsdc(funderPortion)}
-          </p>
+      {isActive ? (
+        <div className="flex flex-col gap-0 border border-dark-border rounded-xl overflow-hidden">
+          {[
+            {
+              label: role === 'believer' ? 'Your Investment' : 'Your Funding',
+              value: `$${role === 'believer' ? formatUsdc(proposerStake) : formatUsdc(funderPortion)}`,
+            },
+            {
+              label: 'Cost Basis',
+              value: `$${usdcSpentHuman}`,
+            },
+            {
+              label: 'Fill Price',
+              value: fillPrice != null ? `${(fillPrice * 100).toFixed(2)}¢` : '—',
+            },
+            {
+              label: 'Current Price',
+              value: currentPrice != null ? `${(currentPrice * 100).toFixed(2)}¢` : '—',
+              color: currentPrice != null && fillPrice != null
+                ? currentPrice > fillPrice ? '#22c55e' : currentPrice < fillPrice ? '#ef4444' : undefined
+                : undefined,
+            },
+            {
+              label: 'Position PnL',
+              value: totalPnl != null
+                ? `${totalPnl >= 0 ? '+' : '-'}$${Math.abs(totalPnl).toFixed(2)}  (${totalPnl >= 0 ? '+' : '-'}${Math.abs(Number(bet.usdcSpent) > 0 ? totalPnl / (Number(bet.usdcSpent) / 1_000_000) * 100 : 0).toFixed(2)}%)`
+                : '—',
+              color: totalPnl != null ? (totalPnl > 0 ? '#22c55e' : totalPnl < 0 ? '#ef4444' : undefined) : undefined,
+            },
+            {
+              label: `Your PnL`,
+              value: userPnl != null
+                ? `${userPnl >= 0 ? '+' : '-'}$${Math.abs(userPnl).toFixed(2)}  (${userPnl >= 0 ? '+' : '-'}${Math.abs(Number(role === 'believer' ? proposerStake : funderPortion) > 0 ? userPnl / (Number(role === 'believer' ? proposerStake : funderPortion) / 1_000_000) * 100 : 0).toFixed(2)}%)`
+                : '—',
+              color: userPnl != null ? (userPnl > 0 ? '#22c55e' : userPnl < 0 ? '#ef4444' : undefined) : undefined,
+            },
+          ].map((row, i) => (
+            <div
+              key={row.label}
+              className={`flex items-center justify-between px-4 py-2.5 ${i > 0 ? 'border-t border-dark-border' : ''}`}
+            >
+              <span className="text-sm text-muted-foreground">{row.label}</span>
+              <span
+                className="text-sm font-semibold font-mono"
+                style={{ color: row.color ?? 'white' }}
+              >
+                {row.value}
+              </span>
+            </div>
+          ))}
         </div>
-        <div className="rounded-xl border border-dark-border bg-[#111113] px-4 py-3">
-          <span className="text-xs text-muted-foreground font-medium">Total Position</span>
-          <p className="text-lg font-bold text-white mt-1 font-mono">
-            ${formatUsdc(bet.totalCapital)}
-          </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-dark-border bg-[#111113] px-4 py-3">
+            <span className="text-xs text-muted-foreground font-medium">
+              {role === 'believer' ? 'Your Stake' : 'Your Funding'}
+            </span>
+            <p className="text-lg font-bold text-white mt-1 font-mono">
+              ${role === 'believer' ? formatUsdc(proposerStake) : formatUsdc(funderPortion)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-dark-border bg-[#111113] px-4 py-3">
+            <span className="text-xs text-muted-foreground font-medium">Total Position</span>
+            <p className="text-lg font-bold text-white mt-1 font-mono">
+              ${formatUsdc(bet.totalCapital)}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Trade Structure Bar */}
       <div>
@@ -154,7 +284,7 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
       </div>
 
       {/* Status */}
-      {!showSignOrderCta && (
+      {!showSignOrderCta && bet.status !== BetStatus.Proposed && bet.status !== BetStatus.Funded && (
         <div
           className="flex items-center justify-center gap-2 py-3 rounded-xl"
           style={{ background: status.bg, border: `1px solid ${status.color}25` }}
@@ -287,6 +417,28 @@ export function MyBetCard({ betView, role }: MyBetCardProps) {
             Awaiting settlement{tradeStatus?.clobStatus ? ` (${tradeStatus.clobStatus})` : '…'}
           </span>
         </div>
+      )}
+
+      {/* Reset Trade CTA (unprepare stuck Prepared bets) */}
+      {showUnprepareCta && (
+        <button
+          onClick={handleUnprepare}
+          disabled={isUnpreparing || unprepareStep === 'success'}
+          className="w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
+          style={
+            unprepareStep === 'success'
+              ? { background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#22c55e' }
+              : { background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#ef4444' }
+          }
+        >
+          {unprepareStep === 'success' ? (
+            <><Check className="w-4 h-4" /> Trade Reset</>
+          ) : isUnpreparing ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Resetting…</>
+          ) : (
+            <><XCircle className="w-4 h-4" /> Reset Trade</>
+          )}
+        </button>
       )}
     </motion.div>
   );

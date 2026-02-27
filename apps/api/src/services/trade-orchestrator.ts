@@ -6,6 +6,8 @@ import { logger } from '../lib/logger.js';
 import { publicClient } from '../lib/viem.js';
 import { upsertTradeExecution, updateTradeExecution } from './trade.service.js';
 
+const bounceAddress = POLYMARKET_ADDRESSES.BOUNCE.toLowerCase();
+
 let walletClient: WalletClient | null = null;
 
 function getWalletClient(): WalletClient {
@@ -34,7 +36,7 @@ export async function callPrepareTrade(betId: number): Promise<Hash> {
 
   logger.info({ betId }, 'Calling prepareTrade');
 
-  await upsertTradeExecution({ betId, prepareStatus: 'pending' });
+  await upsertTradeExecution({ bounceAddress, betId, prepareStatus: 'pending' });
 
   try {
     const hash = await client.writeContract({
@@ -46,9 +48,12 @@ export async function callPrepareTrade(betId: number): Promise<Hash> {
       account,
     });
 
+    // Record tx hash immediately so we can reconcile if server restarts
+    await updateTradeExecution(bounceAddress, betId, { prepareTxHash: hash });
+
     await (publicClient as PublicClient).waitForTransactionReceipt({ hash, confirmations: 1 });
 
-    await updateTradeExecution(betId, {
+    await updateTradeExecution(bounceAddress, betId, {
       prepareStatus: 'confirmed',
       prepareTxHash: hash,
     });
@@ -56,7 +61,7 @@ export async function callPrepareTrade(betId: number): Promise<Hash> {
     logger.info({ betId, hash }, 'prepareTrade confirmed');
     return hash;
   } catch (err) {
-    await updateTradeExecution(betId, {
+    await updateTradeExecution(bounceAddress, betId, {
       prepareStatus: 'failed',
       lastError: err instanceof Error ? err.message : String(err),
     });
@@ -72,7 +77,7 @@ export async function callFinalizeTrade(betId: number): Promise<Hash> {
 
   logger.info({ betId }, 'Calling finalizeTrade');
 
-  await updateTradeExecution(betId, { finalizeStatus: 'pending' });
+  await updateTradeExecution(bounceAddress, betId, { finalizeStatus: 'pending' });
 
   try {
     const hash = await client.writeContract({
@@ -86,7 +91,7 @@ export async function callFinalizeTrade(betId: number): Promise<Hash> {
 
     await (publicClient as PublicClient).waitForTransactionReceipt({ hash, confirmations: 1 });
 
-    await updateTradeExecution(betId, {
+    await updateTradeExecution(bounceAddress, betId, {
       finalizeStatus: 'confirmed',
       finalizeTxHash: hash,
     });
@@ -94,7 +99,7 @@ export async function callFinalizeTrade(betId: number): Promise<Hash> {
     logger.info({ betId, hash }, 'finalizeTrade confirmed');
     return hash;
   } catch (err) {
-    await updateTradeExecution(betId, {
+    await updateTradeExecution(bounceAddress, betId, {
       finalizeStatus: 'failed',
       lastError: err instanceof Error ? err.message : String(err),
     });
@@ -122,8 +127,11 @@ export async function callUnprepareTrade(betId: number): Promise<Hash> {
 
     await (publicClient as PublicClient).waitForTransactionReceipt({ hash, confirmations: 1 });
 
-    await updateTradeExecution(betId, {
-      prepareStatus: 'pending',
+    await upsertTradeExecution({
+      bounceAddress,
+      betId,
+      prepareStatus: 'failed',
+      prepareTxHash: null,
       orderId: null,
       clobStatus: null,
       finalizeStatus: null,

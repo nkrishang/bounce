@@ -160,10 +160,25 @@ export function useProposeBet() {
           setStep('success');
         } catch (metaErr) {
           if (metaErr instanceof ApiError && metaErr.status === 409) {
-            // Metadata already exists (race / retry) — treat as success
-            await queryClient.invalidateQueries({ queryKey: ['my-bets'] });
-            await queryClient.invalidateQueries({ queryKey: ['bets'] });
-            setStep('success');
+            // Only treat as success if existing metadata matches this bet (idempotent retry)
+            const existing = (metaErr.body as any)?.data;
+            const isSameCondition = existing?.conditionId &&
+              existing.conditionId.toLowerCase() === params.conditionId.toLowerCase();
+            const isSameBet = isSameCondition &&
+              existing.outcomeIndex === outcomeIndex &&
+              String(existing.outcomeTokenId) === String(params.outcomeTokenId);
+
+            if (isSameBet) {
+              await queryClient.invalidateQueries({ queryKey: ['my-bets'] });
+              await queryClient.invalidateQueries({ queryKey: ['bets'] });
+              setStep('success');
+            } else {
+              const parsed = parseTransactionError(metaErr);
+              const errorId = `PB-META-CONFLICT-${Date.now().toString(36)}`;
+              console.error(`[${errorId}] Metadata conflict — existing row does not match:`, { existing, params });
+              setWarning({ ...parsed, errorId });
+              setStep('success-needs-refresh');
+            }
           } else {
             const parsed = parseTransactionError(metaErr);
             const errorId = `PB-META-${Date.now().toString(36)}`;

@@ -9,7 +9,7 @@ import {Bounce} from "../src/bounce/Bounce.sol";
 contract UpgradeBounce is Script {
 
     function run() external {
-        address proxy = address(0x73d3Ba5673CFBD42A71bF26E187Fd37978Ee45EA);
+        address proxy = address(0x2170cD8cC9F6740cD36F825c1D9Ea4E7f21fe3e8);
         require(proxy != address(0), "Proxy is zero");
 
         uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");

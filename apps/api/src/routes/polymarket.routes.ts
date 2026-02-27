@@ -261,6 +261,8 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
       }
 
       const { upsertTradeExecution } = await import('../services/trade.service.js');
+      const { POLYMARKET_ADDRESSES } = await import('@bounce/contracts');
+      const bounceAddress = POLYMARKET_ADDRESSES.BOUNCE.toLowerCase();
 
       // Look up per-signer CLOB credentials (must be derived first via /clob/derive-key)
       const signerAddress = String(body.order.signer);
@@ -346,6 +348,7 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
 
       // Track order in DB
       await upsertTradeExecution({
+        bounceAddress,
         betId: body.betId,
         orderId: result.orderID || null,
         clobStatus: result.status || 'SUBMITTED',
