@@ -102,9 +102,15 @@ export function useClosePosition() {
           true,
         );
 
+        // Step 2b: Tell CLOB API to re-index the Safe's CTF token balance/allowance.
+        try {
+          await clobClient.updateBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId } as any);
+          console.log('[CLOB] updateBalanceAllowance (CONDITIONAL) succeeded');
+        } catch (balErr) {
+          console.warn('[CLOB] updateBalanceAllowance failed, proceeding anyway:', balErr);
+        }
+
         // Step 3: Post sell order with retry for transient CLOB indexing delays
-        // (getBalanceAllowance/updateBalanceAllowance don't work for non-Polymarket Safes —
-        //  those endpoints don't transmit the Safe address and check a different wallet)
         setStep('submitting');
 
         const sharesHuman = Number(bet.positionShares) / 1_000_000;

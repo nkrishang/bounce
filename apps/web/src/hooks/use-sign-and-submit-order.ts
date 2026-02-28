@@ -190,6 +190,16 @@ export function useSignAndSubmitOrder() {
           true,
         );
 
+        // Step 3b: Tell CLOB API to re-index the Safe's on-chain balance/allowance.
+        // prepareTrade moved USDC via module execution; the CLOB indexer won't see it
+        // until we explicitly trigger a refresh.
+        try {
+          await clobClient.updateBalanceAllowance({ asset_type: 'COLLATERAL' as any });
+          console.log('[CLOB] updateBalanceAllowance (COLLATERAL) succeeded');
+        } catch (balErr) {
+          console.warn('[CLOB] updateBalanceAllowance failed, proceeding anyway:', balErr);
+        }
+
         // Step 4: Post market order with retry for transient CLOB indexing delays
         setStep('submitting');
 
