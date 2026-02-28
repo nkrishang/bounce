@@ -147,9 +147,7 @@ export function useSignAndSubmitOrder() {
         //  those endpoints don't transmit the Safe address and check a different wallet)
         const negRisk =
           bet.exchange.toLowerCase() === POLYMARKET_ADDRESSES.NEG_RISK_CTF_EXCHANGE.toLowerCase();
-        const spender = negRisk
-          ? POLYMARKET_ADDRESSES.CTF_EXCHANGE
-          : (bet.exchange as `0x${string}`);
+        const spender = bet.exchange as `0x${string}`;
 
         const [onChainBalance, onChainAllowance] = await Promise.all([
           publicClient.readContract({
