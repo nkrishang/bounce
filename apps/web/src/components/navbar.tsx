@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Wallet, LogOut, ChevronDown, Menu, X } from "lucide-react";
+import { Wallet, LogOut, ChevronDown, Menu, X, Info } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Facehash } from "facehash";
 import { useAuth } from "@/hooks/use-auth";
@@ -75,8 +75,9 @@ export function Navbar() {
               </Link>
               <button
                 onClick={() => setShowHowItWorks(true)}
-                className="hidden sm:block text-sm font-medium transition-colors text-dark-surface-foreground/70 hover:text-dark-surface-foreground"
+                className="hidden sm:flex items-center gap-1.5 text-sm font-medium transition-colors text-dark-surface-foreground/70 hover:text-dark-surface-foreground"
               >
+                <Info className="w-3.5 h-3.5" />
                 How it works
               </button>
             </div>
@@ -269,8 +270,9 @@ export function Navbar() {
                     setShowHowItWorks(true);
                     setShowMobileMenu(false);
                   }}
-                  className="block w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-dark-surface-foreground/70 hover:text-dark-surface-foreground hover:bg-white/5"
+                  className="flex items-center gap-1.5 w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-dark-surface-foreground/70 hover:text-dark-surface-foreground hover:bg-white/5"
                 >
+                  <Info className="w-3.5 h-3.5" />
                   How it works
                 </button>
 
