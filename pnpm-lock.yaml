@@ -96,6 +96,9 @@ importers:
       framer-motion:
         specifier: ^11.3.8
         version: 11.18.2(react-dom@19.2.3)(react@19.2.3)
+      liveline:
+        specifier: ^0.0.6
+        version: 0.0.6(react@19.2.3)
       lucide-react:
         specifier: ^0.424.0
         version: 0.424.0(react@19.2.3)
@@ -7838,6 +7841,15 @@ packages:
       '@lit/reactive-element': 2.1.2
       lit-element: 4.2.2
       lit-html: 3.3.2
+    dev: false
+
+  /liveline@0.0.6(react@19.2.3):
+    resolution: {integrity: sha512-ZHw/Xgh1elzCc361YFRW4+rqGPl8dWdDDS26XYLxkn4uYBlEs5V6OajpIC75l2Lff1Q+I8TvBvav4rbLGHIpJg==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: '>=18'
+    dependencies:
+      react: 19.2.3
     dev: false
 
   /locate-path@5.0.0:
