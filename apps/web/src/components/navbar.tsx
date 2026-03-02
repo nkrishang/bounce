@@ -9,6 +9,7 @@ import { useState, useEffect } from "react";
 import { Facehash } from "facehash";
 import { useAuth } from "@/hooks/use-auth";
 import { WalletModal } from "./wallet-modal";
+import { HowItWorksModal } from "./how-it-works-modal";
 import { formatAddress } from "@bounce/shared";
 
 const FACEHASH_COLORS = ['#8B5CF6', '#EC4899', '#F97316', '#06B6D4', '#10B981', '#6366F1', '#F43F5E', '#A855F7', '#14B8A6', '#EAB308'];
@@ -18,6 +19,7 @@ export function Navbar() {
   const { isReady, isAuthenticated, login, logout, address, walletsLoading } =
     useAuth();
   const [showWalletModal, setShowWalletModal] = useState(false);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
@@ -71,6 +73,12 @@ export function Navbar() {
               >
                 My Bets
               </Link>
+              <button
+                onClick={() => setShowHowItWorks(true)}
+                className="hidden sm:block text-sm font-medium transition-colors text-dark-surface-foreground/70 hover:text-dark-surface-foreground"
+              >
+                How it works
+              </button>
             </div>
 
             {/* Desktop wallet/auth */}
@@ -256,6 +264,15 @@ export function Navbar() {
                 >
                   My Bets
                 </Link>
+                <button
+                  onClick={() => {
+                    setShowHowItWorks(true);
+                    setShowMobileMenu(false);
+                  }}
+                  className="block w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-dark-surface-foreground/70 hover:text-dark-surface-foreground hover:bg-white/5"
+                >
+                  How it works
+                </button>
 
                 <div className="pt-2 border-t border-dark-border">
                   {!isReady ? (
@@ -309,6 +326,10 @@ export function Navbar() {
       <WalletModal
         open={showWalletModal}
         onClose={() => setShowWalletModal(false)}
+      />
+      <HowItWorksModal
+        open={showHowItWorks}
+        onClose={() => setShowHowItWorks(false)}
       />
     </>
   );
