@@ -94,7 +94,7 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
     const cacheKey = `polymarket-events-v2-${params.toString()}`;
     
     try {
-      const data = await cache.getOrFetch(
+      const allEvents = await cache.getOrFetch(
         cacheKey,
         async () => {
           const url = `${GAMMA_API}/events?${params.toString()}`;
@@ -104,10 +104,11 @@ export async function polymarketRoutes(fastify: FastifyInstance) {
             throw new Error(`Gamma API error: ${response.status}`);
           }
           const rawEvents = await response.json();
-          return rankEvents(rawEvents).slice(0, parseInt(limit || '20', 10));
+          return rankEvents(rawEvents);
         },
         60
       );
+      const data = allEvents.slice(0, parseInt(limit || '20', 10));
       return { data };
     } catch (error) {
       logger.error(error, 'Failed to fetch Polymarket events');
