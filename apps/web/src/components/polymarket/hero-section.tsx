@@ -360,7 +360,7 @@ export function HeroSection() {
         <div className="text-center mx-auto mb-12">
           <motion.h1
             className="font-black leading-[1] tracking-tighter text-white whitespace-nowrap w-fit mx-auto"
-            style={{ fontSize: 'min(10vw, 8rem)' }}
+            style={{ fontSize: 'min(9vw, 6.5rem)' }}
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: 'easeOut' }}
@@ -424,6 +424,19 @@ export function HeroSection() {
             </motion.span>
           </motion.button>
         </div>
+
+        {/* Beta banner */}
+        <motion.div
+          className="flex justify-center mb-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+        >
+          <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-amber-500/[0.08] border border-amber-500/20">
+            <span className="px-2 py-0.5 rounded bg-amber-500/20 text-[10px] font-bold uppercase tracking-wider text-amber-400">Beta</span>
+            <span className="text-xs text-amber-300 font-medium">This product is in early access. Use at your own risk.</span>
+          </div>
+        </motion.div>
 
         {/* Hero visual: Unified bet card + Liveline */}
         <motion.div
