@@ -17,6 +17,11 @@ enum PositionStatus {
     Sold
 }
 
+enum PositionTranche {
+    Junior,
+    Senior
+}
+
 struct Position {
     /// @notice The owner of the Polymarket gnosis safe of the position.
     address owner;
@@ -47,6 +52,9 @@ struct Position {
 
     /// @notice The status of the position in relation to outcome token purchase.
     PositionStatus status;
+
+    /// @notice The tranche of the position in relation to the bounce vault.
+    PositionTranche tranche;
 }
 
 contract BounceV2 is ReentrancyGuard {
@@ -202,8 +210,7 @@ contract BounceV2 is ReentrancyGuard {
     // Purchase outcome tokens for a market
     // ============================================
 
-    /// @notice Prepares a purchase outcome tokens for a market.
-    function prepareBuyOutcome(
+    function prepareBuyOutcomeJunior(
         address _safe,
         address _exchange,
         bytes32 _conditionId,
@@ -211,6 +218,34 @@ contract BounceV2 is ReentrancyGuard {
         uint256 _outcomeTokenId,
         uint256 _usdcSpendAmount
     ) external nonReentrant returns (uint256 positionId) {
+        return _prepareBuyOutcome(
+            _safe, _exchange, _conditionId, _outcomeIndex, _outcomeTokenId, _usdcSpendAmount, PositionTranche.Junior
+        );
+    }
+
+    function prepareBuyOutcomeSenior(
+        address _safe,
+        address _exchange,
+        bytes32 _conditionId,
+        uint8 _outcomeIndex,
+        uint256 _outcomeTokenId,
+        uint256 _usdcSpendAmount
+    ) external nonReentrant returns (uint256 positionId) {
+        return _prepareBuyOutcome(
+            _safe, _exchange, _conditionId, _outcomeIndex, _outcomeTokenId, _usdcSpendAmount, PositionTranche.Senior
+        );
+    }
+
+    /// @notice Prepares a purchase outcome tokens for a market.
+    function _prepareBuyOutcome(
+        address _safe,
+        address _exchange,
+        bytes32 _conditionId,
+        uint8 _outcomeIndex,
+        uint256 _outcomeTokenId,
+        uint256 _usdcSpendAmount,
+        PositionTranche _tranche
+    ) internal returns (uint256 positionId) {
         // Check: safe not zero.
         if (_safe == address(0)) revert InvalidSafeAddress();
         // Check: usdc spend amount not zero.
@@ -241,7 +276,8 @@ contract BounceV2 is ReentrancyGuard {
             vault: vault,
             reservedUsdcSpendAmount: _usdcSpendAmount,
             actualUsdcSpendAmount: 0,
-            status: PositionStatus.Prepared
+            status: PositionStatus.Prepared,
+            tranche: _tranche
         });
         positionId = nextPositionId_++;
         positions_[positionId] = pos;
