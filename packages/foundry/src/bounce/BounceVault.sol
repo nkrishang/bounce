@@ -4,14 +4,13 @@ pragma solidity ^0.8.24;
 import {VaultParams} from "src/bounce/interfaces/IVaultParams.sol";
 
 contract BounceVault {
-
     // ============================================
     // Immutables
     // ============================================
-    
+
     /// @notice Unique ID for the Polymarket bet market.
     bytes32 conditionId;
-    
+
     /// @notice Outcome of the bet. (e.g. 0 = Yes, 1 = No, etc.)
     uint8 outcomeIndex;
 
@@ -25,9 +24,7 @@ contract BounceVault {
     // Constructor
     // ============================================
 
-    constructor(
-        VaultParams memory _vaultParams
-    ) {
+    constructor(VaultParams memory _vaultParams) {
         conditionId = _vaultParams.conditionId;
         outcomeIndex = _vaultParams.outcomeIndex;
         outcomeTokenId = _vaultParams.outcomeTokenId;

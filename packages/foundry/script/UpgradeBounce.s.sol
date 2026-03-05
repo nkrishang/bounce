@@ -7,7 +7,6 @@ import {Bounce} from "../src/bounce/Bounce.sol";
 /// @title UpgradeBounce
 /// @notice Upgrades an existing Bounce UUPS proxy to a newly deployed implementation.
 contract UpgradeBounce is Script {
-
     function run() external {
         address proxy = address(0x2170cD8cC9F6740cD36F825c1D9Ea4E7f21fe3e8);
         require(proxy != address(0), "Proxy is zero");

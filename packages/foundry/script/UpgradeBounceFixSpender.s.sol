@@ -8,7 +8,6 @@ import {Bounce} from "../src/bounce/Bounce.sol";
 /// @notice Upgrades Bounce to fix the _usdcSpender bug and atomically corrects
 ///         the corrupted bet's usdcSpent via upgradeToAndCall.
 contract UpgradeBounceFixSpender is Script {
-
     function run() external {
         address proxy = address(0xdC015EEbF0f2DAbB1EdF856902879A626e82B62d);
         uint256 betId = uint256(1);

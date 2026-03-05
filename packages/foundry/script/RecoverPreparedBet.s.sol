@@ -11,7 +11,6 @@ import {IERC20} from "forge-std/interfaces/IERC20.sol";
 ///      bet.exchange (NEG_RISK_CTF_EXCHANGE) which is still intact since CLOB never settled.
 ///      After this script, proposer or funder must call cancelBet(betId) separately.
 contract RecoverPreparedBet is Script {
-
     function run() external {
         address proxy = address(0x2170cD8cC9F6740cD36F825c1D9Ea4E7f21fe3e8);
         uint256 betId = vm.envUint("BET_ID");
