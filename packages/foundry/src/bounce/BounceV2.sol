@@ -10,51 +10,17 @@ import {BounceVault} from "src/bounce/BounceVault.sol";
 import {VaultParams} from "src/bounce/interfaces/IVaultParams.sol";
 import {IGnosisSafeMinimal} from "src/bounce/interfaces/IGnosisSafeMinimal.sol";
 import {IConditionalTokensMinimal} from "src/bounce/interfaces/IConditionalTokensMinimal.sol";
+import {PositionStatus, PositionTranche, Position} from "src/bounce/interfaces/IPosition.sol";
 
-enum PositionStatus {
-    Prepared,
-    Purchased,
-    Sold
-}
+struct Safe {
+    /// @notice The address of the gnosis safe.
+    address safeAddress;
 
-enum PositionTranche {
-    Junior,
-    Senior
-}
+    /// @notice Indicates whether safe has given one-time max USDC allowance to Polymarket via this contract.
+    bool setup;
 
-struct Position {
-    /// @notice The owner of the Polymarket gnosis safe of the position.
-    address owner;
-
-    /// @notice The Polymarket gnosis safe owner of the position.
-    address safe;
-
-    /// @notice Unique ID for the Polymarket bet market.
-    bytes32 conditionId;
-
-    /// @notice Outcome of the bet. (e.g. 0 = Yes, 1 = No, etc.)
-    uint8 outcomeIndex;
-
-    /// @notice ERC-1155 token ID of the outcome position.
-    uint256 outcomeTokenId;
-
-    /// @notice The Polymarket exchange contract for the bet.
-    address exchange;
-
-    /// @notice The bounce vault for the Polymarket market outcome.
-    address vault;
-
-    /// @notice The USDC reserved for purchasing position.
-    uint256 reservedUsdcSpendAmount;
-
-    /// @notice The USDC actually spent in purchasing position.
-    uint256 actualUsdcSpendAmount;
-
-    /// @notice The status of the position in relation to outcome token purchase.
-    PositionStatus status;
-
-    /// @notice The tranche of the position in relation to the bounce vault.
-    PositionTranche tranche;
+    /// @notice Indicates whether the safe has an active prepared bet.
+    bool activeBet;
 }
 
 contract BounceV2 is ReentrancyGuard {
@@ -71,6 +37,15 @@ contract BounceV2 is ReentrancyGuard {
     /// @notice Emitted when a outcome token purchase is prepared.
     event PreparedBuyOutcome(
         uint256 indexed positionId, bytes32 indexed conditionId, address indexed owner, Position position
+    );
+
+    /// @notice Emitted when a outcome token purchase is finalized.
+    event FinalizedBuyOutcome(
+        uint256 indexed positionId,
+        bytes32 indexed conditionId,
+        address indexed owner,
+        uint256 usdcSpent,
+        uint256 outcomeTokensPurchased
     );
 
     // ============================================
@@ -100,6 +75,27 @@ contract BounceV2 is ReentrancyGuard {
 
     /// @notice Thrown when interaction with a safe from this contract fails.
     error SafeExecFromModuleFailed();
+
+    /// @notice Thrown when setting up safe again.
+    error SafeAlreadyPrepared();
+
+    /// @notice Thrown when interacting with a safe not set up.
+    error SafeNotPrepared();
+
+    /// @notice Thrown when creating new position while the a bet is active for the position safe.
+    error SafeBetActive();
+
+    /// @notice Thrown when attempting to interact with a position in an incompatible status.
+    error InvalidPositionStatus();
+
+    /// @notice Thrown when attempting to interact with a position not owned.
+    error InvalidPositionOwner();
+
+    /// @notice Thrown when no USDC spend in outcome token purchase.
+    error NoUsdcSpentInPurchase();
+
+    /// @notice Thrown when no outcome tokens gained in purchase.
+    error NoOutcomeTokensGainedInPurchase();
 
     // ============================================
     // Constants (Polygon)
@@ -139,6 +135,9 @@ contract BounceV2 is ReentrancyGuard {
     /// @notice Mapping from unique position ID => position data.
     mapping(uint256 positionId => Position position) private positions_;
 
+    /// @notice Mapping from safe => safe data.
+    mapping(address safeAddress => Safe data) private safes_;
+
     // ============================================
     // Create vault for outcome in market.
     // ============================================
@@ -166,6 +165,8 @@ contract BounceV2 is ReentrancyGuard {
         if (!IGnosisSafeMinimal(_safe).isOwner(msg.sender)) revert SafeNotOwner();
         // Check: safe has installed this contract as guard and module.
         _assertSafeReady(_safe);
+        // Check: safe not already setup.
+        if (safes_[_safe].setup) revert SafeAlreadyPrepared();
 
         // Approve USDC for all Polymarket exchanges.
         _execFromSafe({
@@ -202,6 +203,8 @@ contract BounceV2 is ReentrancyGuard {
             to: CTF,
             data: abi.encodeWithSelector(IConditionalTokensMinimal.setApprovalForAll.selector, NEG_RISK_ADAPTER, true)
         });
+
+        safes_[_safe].setup = true;
 
         emit SafeSetup(_safe, msg.sender);
     }
@@ -248,17 +251,20 @@ contract BounceV2 is ReentrancyGuard {
     ) internal returns (uint256 positionId) {
         // Check: safe not zero.
         if (_safe == address(0)) revert InvalidSafeAddress();
-        // Check: usdc spend amount not zero.
-        if (_usdcSpendAmount == 0) revert InvalidSpendAmount();
-        // Check: exchange is a polymarket exchange.
-        if (_exchange != CTF_EXCHANGE && _exchange != NEG_RISK_CTF_EXCHANGE && _exchange != NEG_RISK_ADAPTER) {
-            revert InvalidExchangeAddress();
-        }
+        // Check: safe is prepared.
+        Safe storage safeData = safes_[_safe];
+        if (!safeData.setup) revert SafeNotPrepared();
+        // Check: no bet is active.
+        if (safeData.activeBet) revert SafeBetActive();
         // Check: caller is owner of safe.
         address positionOwner = msg.sender;
         if (!IGnosisSafeMinimal(_safe).isOwner(positionOwner)) revert SafeNotOwner();
         // Check: safe has installed this contract as guard and module.
         _assertSafeReady(_safe);
+        // Check: exchange is a polymarket exchange.
+        if (_exchange != CTF_EXCHANGE && _exchange != NEG_RISK_CTF_EXCHANGE && _exchange != NEG_RISK_ADAPTER) {
+            revert InvalidExchangeAddress();
+        }
         // Check: vault for the market outcome is deployed.
         address vault = _getVaultAddress({
             conditionId: _conditionId, outcomeIndex: _outcomeIndex, outcomeTokenId: _outcomeTokenId, exchange: _exchange
@@ -274,6 +280,9 @@ contract BounceV2 is ReentrancyGuard {
             outcomeTokenId: _outcomeTokenId,
             exchange: _exchange,
             vault: vault,
+            prePurchaseUsdcAllowance: IERC20(USDC).allowance(_safe, _exchange),
+            prePurchaseConditionTokenBalance: IConditionalTokensMinimal(CTF).balanceOf(_safe, _outcomeTokenId),
+            actualConditionTokensPurchased: 0,
             reservedUsdcSpendAmount: _usdcSpendAmount,
             actualUsdcSpendAmount: 0,
             status: PositionStatus.Prepared,
@@ -288,6 +297,55 @@ contract BounceV2 is ReentrancyGuard {
         });
 
         emit PreparedBuyOutcome(positionId, pos.conditionId, pos.owner, pos);
+    }
+
+    function finalizeBuyOutcome(uint256 _positionId) external nonReentrant {
+        Position storage pos = positions_[_positionId];
+        address safe = pos.safe;
+
+        // Check: position is in prepared status only.
+        if (pos.status != PositionStatus.Prepared) revert InvalidPositionStatus();
+
+        // Check: non-zero USDC spent in purchasing tokens.
+        uint256 usdcSpent = pos.prePurchaseUsdcAllowance - IERC20(USDC).allowance(safe, pos.exchange);
+        if (usdcSpent == 0) revert NoUsdcSpentInPurchase();
+
+        // Check: non-zero outcome tokens gained in purchase.
+        uint256 outcomeTokensPurchased =
+            IConditionalTokensMinimal(CTF).balanceOf(safe, pos.outcomeTokenId) - pos.prePurchaseConditionTokenBalance;
+        if (outcomeTokensPurchased == 0) revert NoOutcomeTokensGainedInPurchase();
+
+        // Pull outcome tokens purchased from safe to bounce vault.
+        IConditionalTokensMinimal(CTF)
+            .safeTransferFrom({
+                from: safe, to: pos.vault, id: pos.outcomeTokenId, value: outcomeTokensPurchased, data: bytes("")
+            });
+
+        // Mint shares to position owner.
+        BounceVault(pos.vault)
+            .mint({
+                to: pos.owner, usdcAmount: usdcSpent, outcomeTokensAmount: outcomeTokensPurchased, tranche: pos.tranche
+            });
+
+        // Update position data.
+        pos.actualUsdcSpendAmount = usdcSpent;
+        pos.actualConditionTokensPurchased = outcomeTokensPurchased;
+        pos.status = PositionStatus.Purchased;
+
+        // Refund leftover USDC back to position owner
+        if (pos.reservedUsdcSpendAmount > usdcSpent) {
+            uint256 usdcLeftover = pos.reservedUsdcSpendAmount - usdcSpent;
+            uint256 usdcNow = IERC20(USDC).balanceOf(safe);
+            uint256 toReturn = usdcLeftover > usdcNow ? usdcNow : usdcLeftover;
+            if (toReturn > 0) {
+                _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), toReturn));
+            }
+        }
+
+        // Update safe data.
+        safes_[safe].activeBet = false;
+
+        emit FinalizedBuyOutcome(_positionId, pos.conditionId, pos.owner, usdcSpent, outcomeTokensPurchased);
     }
 
     // ============================================

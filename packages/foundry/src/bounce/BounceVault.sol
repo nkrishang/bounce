@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {VaultParams} from "src/bounce/interfaces/IVaultParams.sol";
+import {PositionTranche} from "src/bounce/interfaces/IPosition.sol";
 
 contract BounceVault {
     // ============================================
@@ -30,4 +31,10 @@ contract BounceVault {
         outcomeTokenId = _vaultParams.outcomeTokenId;
         exchange = _vaultParams.exchange;
     }
+
+    // ============================================
+    // Mint shares
+    // ============================================
+
+    function mint(address to, uint256 usdcAmount, uint256 outcomeTokensAmount, PositionTranche tranche) external {}
 }

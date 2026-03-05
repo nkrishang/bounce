@@ -16,6 +16,14 @@ interface IConditionalTokensMinimal {
     /// @param approved Whether to approve or revoke.
     function setApprovalForAll(address operator, bool approved) external;
 
+    /// @notice Transfers `_value` amount of an `_id` from the `_from` address to the `_to` address specified (with safety call).
+    /// @param from Source address
+    /// @param to Target address
+    /// @param id ID of the token type
+    /// @param value Transfer amount
+    /// @param data Additional data with no specified format, MUST be sent unaltered in call to `onERC1155Received` on `_to`
+    function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes calldata data) external;
+
     /// @notice Redeems resolved conditional token positions for collateral (USDC).
     /// @param collateralToken The collateral token address (USDC).
     /// @param parentCollectionId The parent collection ID (bytes32(0) for root).
