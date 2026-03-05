@@ -36,5 +36,13 @@ contract BounceVault {
     // Mint shares
     // ============================================
 
-    function mint(address to, uint256 usdcAmount, uint256 outcomeTokensAmount, PositionTranche tranche) external {}
+    function mint(address to, uint256 usdcAmount, uint256 outcomeTokensAmount, PositionTranche tranche) external returns (uint256 shares) {}
+
+    // ============================================
+    // Redeem shares
+    // ============================================
+
+    function redeem(address owner, uint256 shares, PositionTranche tranche) external returns (uint256 conditionTokenAmount) {
+        
+    }
 }

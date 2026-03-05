@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 enum PositionStatus {
     Prepared,
     Purchased,
+    PreparedExit,
     Sold
 }
 
@@ -48,6 +49,12 @@ struct Position {
 
     /// @notice The USDC actually spent in purchasing position.
     uint256 actualUsdcSpendAmount;
+
+    /// @notice The position shares in the vault.
+    uint256 shares;
+
+    /// @notice The USDC received on selling the position.
+    uint256 usdcReceived;
 
     /// @notice The status of the position in relation to outcome token purchase.
     PositionStatus status;

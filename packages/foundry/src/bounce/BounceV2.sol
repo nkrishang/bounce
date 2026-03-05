@@ -285,6 +285,8 @@ contract BounceV2 is ReentrancyGuard {
             actualConditionTokensPurchased: 0,
             reservedUsdcSpendAmount: _usdcSpendAmount,
             actualUsdcSpendAmount: 0,
+            shares: 0,
+            usdcReceived: 0,
             status: PositionStatus.Prepared,
             tranche: _tranche
         });
@@ -301,7 +303,10 @@ contract BounceV2 is ReentrancyGuard {
 
     function finalizeBuyOutcome(uint256 _positionId) external nonReentrant {
         Position storage pos = positions_[_positionId];
+        
+        // Check: safe has installed this contract as guard and module.
         address safe = pos.safe;
+        _assertSafeReady(safe);
 
         // Check: position is in prepared status only.
         if (pos.status != PositionStatus.Prepared) revert InvalidPositionStatus();
@@ -322,7 +327,7 @@ contract BounceV2 is ReentrancyGuard {
             });
 
         // Mint shares to position owner.
-        BounceVault(pos.vault)
+        uint256 shares = BounceVault(pos.vault)
             .mint({
                 to: pos.owner, usdcAmount: usdcSpent, outcomeTokensAmount: outcomeTokensPurchased, tranche: pos.tranche
             });
@@ -330,6 +335,7 @@ contract BounceV2 is ReentrancyGuard {
         // Update position data.
         pos.actualUsdcSpendAmount = usdcSpent;
         pos.actualConditionTokensPurchased = outcomeTokensPurchased;
+        pos.shares = shares;
         pos.status = PositionStatus.Purchased;
 
         // Refund leftover USDC back to position owner
@@ -346,6 +352,82 @@ contract BounceV2 is ReentrancyGuard {
         safes_[safe].activeBet = false;
 
         emit FinalizedBuyOutcome(_positionId, pos.conditionId, pos.owner, usdcSpent, outcomeTokensPurchased);
+    }
+
+    // ============================================
+    // Sell outcome tokens back for USDC
+    // ============================================
+
+    function prepareExitOutcome(uint256 _positionId) external nonReentrant returns (uint256 conditionTokenBalance) {
+        Position storage pos = positions_[_positionId];
+        
+        // Check: safe has installed this contract as guard and module.
+        address safe = pos.safe;
+        _assertSafeReady(safe);
+
+        // Check: caller is owner of safe.
+        address positionOwner = msg.sender;
+        if (!IGnosisSafeMinimal(safe).isOwner(positionOwner)) revert SafeNotOwner();
+
+        // Check: position is in prepared status only.
+        if (pos.status != PositionStatus.Purchased) revert InvalidPositionStatus();
+
+        // Check: no bet is active.
+        if (safes_[safe].activeBet) revert SafeBetActive();
+
+        // Update safe data.
+        safes_[safe].activeBet = true;
+
+        // Update position data.
+        pos.status = PositionStatus.PreparedExit;
+
+        // Withdraw conditional tokens from vault.
+        conditionTokenBalance = BounceVault(pos.vault).redeem({
+            owner: positionOwner,
+            shares: pos.shares,
+            tranche: pos.tranche
+        });
+
+        // Transfer condition tokens to safe.
+        IConditionalTokensMinimal(CTF)
+            .safeTransferFrom({
+                from: address(this), to: safe, id: pos.outcomeTokenId, value: conditionTokenBalance, data: bytes("")
+            });
+
+        emit PreparedExitOutcome();
+    }
+
+    function finalizeExitOutcome(uint256 _positionId) external nonReentrant {
+        Position storage pos = positions_[_positionId];
+        
+        // Check: safe has installed this contract as guard and module.
+        address safe = pos.safe;
+        _assertSafeReady(safe);
+
+        // Check: position is in prepared status only.
+        if (pos.status != PositionStatus.PreparedExit) revert InvalidPositionStatus();
+
+        // Check current share balance in the Safe.
+        uint256 sharesNow = IConditionalTokensMinimal(CTF).balanceOf(safe, pos.outcomeTokenId);
+        uint256 sharesSold = sharesNow < pos.shares ? pos.shares - sharesNow : 0;
+
+        // Pull all USDC proceeds from Safe.
+        uint256 usdcNow = IERC20(USDC).balanceOf(safe);
+        if (usdcNow > 10_000) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), usdcNow));
+        }
+
+        // Update position data.
+        pos.shares -= sharesSold;
+        pos.usdcReceived += usdcNow;
+
+        // If all shares sold (or only dust remains), transition to Closed.
+        // Dust threshold: 10_000 raw units = 0.01 shares (USDC has 6 decimals).
+        if (sharesNow <= 10_000) {
+            pos.shares = 0;
+            pos.status = PositionStatus.Closed;
+            emit PositionClosed();
+        }
     }
 
     // ============================================
