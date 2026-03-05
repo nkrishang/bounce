@@ -12,6 +12,32 @@ import {IGnosisSafeMinimal} from "src/bounce/interfaces/IGnosisSafeMinimal.sol";
 import {IConditionalTokensMinimal} from "src/bounce/interfaces/IConditionalTokensMinimal.sol";
 import {PositionStatus, PositionTranche, Position} from "src/bounce/interfaces/IPosition.sol";
 
+interface IPolymarketSafeFactory {
+    struct Sig {
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+    }
+
+    function createProxy(address paymentToken, uint256 payment, address payable paymentReceiver, Sig calldata createSig)
+        external;
+}
+
+interface IGnosisSafeExecTransaction {
+    function execTransaction(
+        address to,
+        uint256 value,
+        bytes calldata data,
+        uint8 operation,
+        uint256 safeTxGas,
+        uint256 baseGas,
+        uint256 gasPrice,
+        address gasToken,
+        address payable refundReceiver,
+        bytes calldata signatures
+    ) external returns (bool success);
+}
+
 struct Safe {
     /// @notice The address of the gnosis safe.
     address safeAddress;
@@ -31,8 +57,8 @@ contract BounceV2 is ReentrancyGuard {
     /// @notice Emitted when a vault is created for a Polymarket market outcome.
     event NewVault(address indexed vault, VaultParams params);
 
-    /// @notice Emitted when a safe's polymarket approvals are set up.
-    event SafeSetup(address indexed safe, address indexed owner);
+    /// @notice Emitted when a safe is deployed and configured with Bounce as module and guard.
+    event SafeDeployed(address indexed safe, address indexed owner);
 
     /// @notice Emitted when a outcome token purchase is prepared.
     event PreparedBuyOutcome(
@@ -76,9 +102,6 @@ contract BounceV2 is ReentrancyGuard {
     /// @notice Thrown when interaction with a safe from this contract fails.
     error SafeExecFromModuleFailed();
 
-    /// @notice Thrown when setting up safe again.
-    error SafeAlreadyPrepared();
-
     /// @notice Thrown when interacting with a safe not set up.
     error SafeNotPrepared();
 
@@ -96,6 +119,18 @@ contract BounceV2 is ReentrancyGuard {
 
     /// @notice Thrown when no outcome tokens gained in purchase.
     error NoOutcomeTokensGainedInPurchase();
+
+    /// @notice Thrown when the Safe is already deployed.
+    error SafeAlreadyDeployed();
+
+    /// @notice Thrown when the Safe deployment via factory failed.
+    error SafeDeploymentFailed();
+
+    /// @notice Thrown when the factory EIP-712 signature is invalid.
+    error InvalidFactorySignature();
+
+    /// @notice Thrown when a Safe execTransaction call fails.
+    error SafeExecTransactionFailed();
 
     // ============================================
     // Constants (Polygon)
@@ -119,11 +154,29 @@ contract BounceV2 is ReentrancyGuard {
     /// @notice Basis points denominator (100% = 10,000 BPS).
     uint256 public constant BPS_DENOMINATOR = 10_000;
 
+    /// @notice Polymarket Safe Factory address.
+    address public constant POLYMARKET_SAFE_FACTORY = 0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b;
+
+    /// @notice Safe init code hash used by the Polymarket factory for CREATE2 address derivation.
+    bytes32 public constant SAFE_INIT_CODE_HASH =
+        0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf;
+
     /// @notice Guard interface ID that Safe 1.3.0 checks for.
     bytes4 private constant GUARD_INTERFACE_ID = 0xe6d7a83a;
 
     /// @notice Safe 1.3.0 guard storage slot: keccak256("guard_manager.guard.address").
     uint256 private constant GUARD_STORAGE_SLOT = 0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8;
+
+    /// @notice EIP-712 domain typehash.
+    bytes32 private constant EIP712_DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");
+
+    /// @notice EIP-712 CreateProxy typehash used by the Polymarket factory.
+    bytes32 private constant CREATE_PROXY_TYPEHASH =
+        keccak256("CreateProxy(address paymentToken,uint256 payment,address paymentReceiver)");
+
+    /// @notice Hashed name of the Polymarket factory for EIP-712 domain separator.
+    bytes32 private constant FACTORY_NAME_HASH = keccak256(bytes("Polymarket Contract Proxy Factory"));
 
     // ============================================
     // Storage
@@ -154,59 +207,99 @@ contract BounceV2 is ReentrancyGuard {
     }
 
     // ============================================
-    // Setup gnosis safe for bounce actions
+    // Deploy and configure gnosis safe
     // ============================================
 
-    /// @notice A one-time function to approve Polymarket to spend a safe's USDC and conditional tokens.
-    function setupSafe(address _safe) external nonReentrant {
-        // Check: safe not zero.
-        if (_safe == address(0)) revert InvalidSafeAddress();
-        // Check: caller is owner of safe.
-        if (!IGnosisSafeMinimal(_safe).isOwner(msg.sender)) revert SafeNotOwner();
-        // Check: safe has installed this contract as guard and module.
-        _assertSafeReady(_safe);
-        // Check: safe not already setup.
-        if (safes_[_safe].setup) revert SafeAlreadyPrepared();
+    /// @notice Deploys a Gnosis Safe via the Polymarket factory, configures BounceV2 as module and guard,
+    ///         and approves Polymarket to spend the safe's USDC and conditional tokens.
+    /// @dev Requires three off-chain signatures from the Safe owner:
+    ///      1. EIP-712 factory signature (determines the Safe owner)
+    ///      2. Safe execTransaction signature for enableModule (nonce=0)
+    ///      3. Safe execTransaction signature for setGuard (nonce=1)
+    /// @param _factorySig EIP-712 signature for the Polymarket factory's createProxy.
+    /// @param _enableModuleSig Packed signature for Safe execTransaction to enable this contract as module.
+    /// @param _setGuardSig Packed signature for Safe execTransaction to set this contract as guard.
+    /// @return safe The address of the deployed and configured Safe.
+    function deploySafe(
+        IPolymarketSafeFactory.Sig calldata _factorySig,
+        bytes calldata _enableModuleSig,
+        bytes calldata _setGuardSig
+    ) external nonReentrant returns (address safe) {
+        // Recover the owner from the factory EIP-712 signature.
+        address owner = _recoverFactorySigner(_factorySig);
+        if (owner == address(0)) revert InvalidFactorySignature();
+        if (msg.sender != owner) revert SafeNotOwner();
 
-        // Approve USDC for all Polymarket exchanges.
+        // Predict deterministic Safe address and ensure it's not already deployed.
+        safe = _predictSafeAddress(owner);
+        if (safe.code.length != 0) revert SafeAlreadyDeployed();
+
+        // 1. Deploy Safe via Polymarket factory (free path: all zeros).
+        IPolymarketSafeFactory(POLYMARKET_SAFE_FACTORY).createProxy(
+            address(0), 0, payable(address(0)), _factorySig
+        );
+        if (safe.code.length == 0) revert SafeDeploymentFailed();
+
+        // 2. Enable BounceV2 as module via Safe.execTransaction (nonce=0).
+        {
+            bytes memory data = abi.encodeWithSignature("enableModule(address)", address(this));
+            bool ok = IGnosisSafeExecTransaction(safe).execTransaction(
+                safe, 0, data, 0, 0, 0, 0, address(0), payable(address(0)), _enableModuleSig
+            );
+            if (!ok) revert SafeExecTransactionFailed();
+        }
+
+        // 3. Set BounceV2 as guard via Safe.execTransaction (nonce=1).
+        {
+            bytes memory data = abi.encodeWithSignature("setGuard(address)", address(this));
+            bool ok = IGnosisSafeExecTransaction(safe).execTransaction(
+                safe, 0, data, 0, 0, 0, 0, address(0), payable(address(0)), _setGuardSig
+            );
+            if (!ok) revert SafeExecTransactionFailed();
+        }
+
+        // Post-condition: module + guard correctly installed.
+        _assertSafeReady(safe);
+
+        // 4. Approve USDC for all Polymarket exchanges (via module path — bypasses guard).
         _execFromSafe({
-            safe: _safe,
+            safe: safe,
             to: USDC,
             data: abi.encodeWithSelector(IERC20.approve.selector, CTF_EXCHANGE, type(uint256).max)
         });
         _execFromSafe({
-            safe: _safe,
+            safe: safe,
             to: USDC,
             data: abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_CTF_EXCHANGE, type(uint256).max)
         });
         _execFromSafe({
-            safe: _safe,
+            safe: safe,
             to: USDC,
             data: abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_ADAPTER, type(uint256).max)
         });
 
-        // Approve conditional token for all Polymarket exchanges.
+        // 5. Approve conditional tokens for all Polymarket exchanges.
         _execFromSafe({
-            safe: _safe,
+            safe: safe,
             to: CTF,
             data: abi.encodeWithSelector(IConditionalTokensMinimal.setApprovalForAll.selector, CTF_EXCHANGE, true)
         });
         _execFromSafe({
-            safe: _safe,
+            safe: safe,
             to: CTF,
             data: abi.encodeWithSelector(
                 IConditionalTokensMinimal.setApprovalForAll.selector, NEG_RISK_CTF_EXCHANGE, true
             )
         });
         _execFromSafe({
-            safe: _safe,
+            safe: safe,
             to: CTF,
             data: abi.encodeWithSelector(IConditionalTokensMinimal.setApprovalForAll.selector, NEG_RISK_ADAPTER, true)
         });
 
-        safes_[_safe].setup = true;
+        safes_[safe].setup = true;
 
-        emit SafeSetup(_safe, msg.sender);
+        emit SafeDeployed(safe, owner);
     }
 
     // ============================================
@@ -454,5 +547,29 @@ contract BounceV2 is ReentrancyGuard {
         return CREATE3.predictDeterministicAddress(
             keccak256(abi.encodePacked(conditionId, outcomeIndex, outcomeTokenId, exchange))
         );
+    }
+
+    /// @notice Predicts the deterministic Safe address for a given owner.
+    function _predictSafeAddress(address owner) internal pure returns (address) {
+        bytes32 salt = keccak256(abi.encode(owner));
+        return address(
+            uint160(
+                uint256(keccak256(abi.encodePacked(bytes1(0xff), POLYMARKET_SAFE_FACTORY, salt, SAFE_INIT_CODE_HASH)))
+            )
+        );
+    }
+
+    /// @notice Recovers the signer from a Polymarket factory EIP-712 signature.
+    function _recoverFactorySigner(IPolymarketSafeFactory.Sig calldata sig) internal view returns (address) {
+        bytes32 domainSeparator = keccak256(
+            abi.encode(EIP712_DOMAIN_TYPEHASH, FACTORY_NAME_HASH, block.chainid, POLYMARKET_SAFE_FACTORY)
+        );
+        bytes32 structHash = keccak256(abi.encode(CREATE_PROXY_TYPEHASH, address(0), uint256(0), address(0)));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+
+        uint8 v = sig.v;
+        if (v < 27) v += 27;
+
+        return ecrecover(digest, v, sig.r, sig.s);
     }
 }
