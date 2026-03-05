@@ -11,6 +11,7 @@ import {VaultParams} from "src/bounce/interfaces/IVaultParams.sol";
 import {IGnosisSafeMinimal} from "src/bounce/interfaces/IGnosisSafeMinimal.sol";
 import {IConditionalTokensMinimal} from "src/bounce/interfaces/IConditionalTokensMinimal.sol";
 import {PositionStatus, PositionTranche, Position} from "src/bounce/interfaces/IPosition.sol";
+import {IGuard, Operation} from "src/thesis/interfaces/IGuard.sol";
 
 interface IPolymarketSafeFactory {
     struct Sig {
@@ -39,9 +40,6 @@ interface IGnosisSafeExecTransaction {
 }
 
 struct Safe {
-    /// @notice The address of the gnosis safe.
-    address safeAddress;
-
     /// @notice Indicates whether safe has given one-time max USDC allowance to Polymarket via this contract.
     bool setup;
 
@@ -49,7 +47,7 @@ struct Safe {
     bool activeBet;
 }
 
-contract BounceV2 is ReentrancyGuard {
+contract BounceV2 is ReentrancyGuard, IGuard {
     // ============================================
     // Events
     // ============================================
@@ -73,6 +71,21 @@ contract BounceV2 is ReentrancyGuard {
         uint256 usdcSpent,
         uint256 outcomeTokensPurchased
     );
+
+    /// @notice Emitted when a outcome token exit is prepared.
+    event PreparedExitOutcome(uint256 indexed positionId, address indexed owner, uint256 conditionTokensForSale);
+
+    /// @notice Emitted when a outcome token exit is finalized.
+    event FinalizedExitOutcome(uint256 indexed positionId, address indexed owner, uint256 usdcReceived);
+
+    /// @notice Emitted when a position is fully closed.
+    event PositionClosed(uint256 indexed positionId, address indexed owner);
+
+    /// @notice Emitted when a prepared purchase is cancelled.
+    event CancelledBuyOutcome(uint256 indexed positionId, address indexed owner);
+
+    /// @notice Emitted when direct Safe transaction is blocked by guard.
+    error DirectSafeTxDisabled();
 
     // ============================================
     // Errors
@@ -131,6 +144,12 @@ contract BounceV2 is ReentrancyGuard {
 
     /// @notice Thrown when a Safe execTransaction call fails.
     error SafeExecTransactionFailed();
+
+    /// @notice Thrown when no condition tokens were sold during exit.
+    error NoTokensSoldInExit();
+
+    /// @notice Thrown when attempting to cancel a purchase that has already been settled on-chain.
+    error PurchaseAlreadySettled();
 
     // ============================================
     // Constants (Polygon)
@@ -211,7 +230,7 @@ contract BounceV2 is ReentrancyGuard {
     // ============================================
 
     /// @notice Deploys a Gnosis Safe via the Polymarket factory, configures BounceV2 as module and guard,
-    ///         and approves Polymarket to spend the safe's USDC and conditional tokens.
+    ///         and approves Polymarket conditional token exchanges.
     /// @dev Requires three off-chain signatures from the Safe owner:
     ///      1. EIP-712 factory signature (determines the Safe owner)
     ///      2. Safe execTransaction signature for enableModule (nonce=0)
@@ -261,24 +280,9 @@ contract BounceV2 is ReentrancyGuard {
         // Post-condition: module + guard correctly installed.
         _assertSafeReady(safe);
 
-        // 4. Approve USDC for all Polymarket exchanges (via module path — bypasses guard).
-        _execFromSafe({
-            safe: safe,
-            to: USDC,
-            data: abi.encodeWithSelector(IERC20.approve.selector, CTF_EXCHANGE, type(uint256).max)
-        });
-        _execFromSafe({
-            safe: safe,
-            to: USDC,
-            data: abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_CTF_EXCHANGE, type(uint256).max)
-        });
-        _execFromSafe({
-            safe: safe,
-            to: USDC,
-            data: abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_ADAPTER, type(uint256).max)
-        });
-
-        // 5. Approve conditional tokens for all Polymarket exchanges.
+        // 4. Approve conditional tokens for all Polymarket exchanges (via module path — bypasses guard).
+        // Note: USDC approvals are set per-trade in _prepareBuyOutcome, not here.
+        // ERC20 max approvals don't decrement on transferFrom, breaking allowance-delta accounting.
         _execFromSafe({
             safe: safe,
             to: CTF,
@@ -344,6 +348,8 @@ contract BounceV2 is ReentrancyGuard {
     ) internal returns (uint256 positionId) {
         // Check: safe not zero.
         if (_safe == address(0)) revert InvalidSafeAddress();
+        // Check: non-zero spend amount.
+        if (_usdcSpendAmount == 0) revert InvalidSpendAmount();
         // Check: safe is prepared.
         Safe storage safeData = safes_[_safe];
         if (!safeData.setup) revert SafeNotPrepared();
@@ -364,6 +370,9 @@ contract BounceV2 is ReentrancyGuard {
         });
         if (vault.code.length == 0) revert VaultDoesNotExist();
 
+        // Mark safe as having an active bet.
+        safeData.activeBet = true;
+
         // Store new position.
         Position memory pos = Position({
             owner: positionOwner,
@@ -373,13 +382,14 @@ contract BounceV2 is ReentrancyGuard {
             outcomeTokenId: _outcomeTokenId,
             exchange: _exchange,
             vault: vault,
-            prePurchaseUsdcAllowance: IERC20(USDC).allowance(_safe, _exchange),
+            prePurchaseUsdcAllowance: 0, // Set after per-trade approval below.
             prePurchaseConditionTokenBalance: IConditionalTokensMinimal(CTF).balanceOf(_safe, _outcomeTokenId),
             actualConditionTokensPurchased: 0,
             reservedUsdcSpendAmount: _usdcSpendAmount,
             actualUsdcSpendAmount: 0,
             shares: 0,
             usdcReceived: 0,
+            conditionTokensForSale: 0,
             status: PositionStatus.Prepared,
             tranche: _tranche
         });
@@ -390,6 +400,18 @@ contract BounceV2 is ReentrancyGuard {
         SafeTransferLib.safeTransferFrom({
             token: USDC, from: pos.owner, to: pos.safe, amount: pos.reservedUsdcSpendAmount
         });
+
+        // Set per-trade USDC approval for the exchange (enables allowance-delta accounting).
+        _execFromSafe(_safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, _exchange, _usdcSpendAmount));
+        if (_exchange == NEG_RISK_CTF_EXCHANGE) {
+            _execFromSafe(_safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, CTF_EXCHANGE, _usdcSpendAmount));
+            _execFromSafe(
+                _safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_ADAPTER, _usdcSpendAmount)
+            );
+        }
+
+        // Record allowance after approval (equals reservedUsdcSpendAmount).
+        positions_[positionId].prePurchaseUsdcAllowance = _usdcSpendAmount;
 
         emit PreparedBuyOutcome(positionId, pos.conditionId, pos.owner, pos);
     }
@@ -404,8 +426,9 @@ contract BounceV2 is ReentrancyGuard {
         // Check: position is in prepared status only.
         if (pos.status != PositionStatus.Prepared) revert InvalidPositionStatus();
 
-        // Check: non-zero USDC spent in purchasing tokens.
-        uint256 usdcSpent = pos.prePurchaseUsdcAllowance - IERC20(USDC).allowance(safe, pos.exchange);
+        // Check: non-zero USDC spent in purchasing tokens (via allowance delta).
+        uint256 remainingAllowance = IERC20(USDC).allowance(safe, pos.exchange);
+        uint256 usdcSpent = pos.reservedUsdcSpendAmount - remainingAllowance;
         if (usdcSpent == 0) revert NoUsdcSpentInPurchase();
 
         // Check: non-zero outcome tokens gained in purchase.
@@ -413,11 +436,19 @@ contract BounceV2 is ReentrancyGuard {
             IConditionalTokensMinimal(CTF).balanceOf(safe, pos.outcomeTokenId) - pos.prePurchaseConditionTokenBalance;
         if (outcomeTokensPurchased == 0) revert NoOutcomeTokensGainedInPurchase();
 
-        // Pull outcome tokens purchased from safe to bounce vault.
-        IConditionalTokensMinimal(CTF)
-            .safeTransferFrom({
-                from: safe, to: pos.vault, id: pos.outcomeTokenId, value: outcomeTokensPurchased, data: bytes("")
-            });
+        // Pull outcome tokens purchased from safe to bounce vault (via Safe module path).
+        _execFromSafe(
+            safe,
+            CTF,
+            abi.encodeWithSelector(
+                IConditionalTokensMinimal.safeTransferFrom.selector,
+                safe,
+                pos.vault,
+                pos.outcomeTokenId,
+                outcomeTokensPurchased,
+                bytes("")
+            )
+        );
 
         // Mint shares to position owner.
         uint256 shares = BounceVault(pos.vault)
@@ -431,14 +462,21 @@ contract BounceV2 is ReentrancyGuard {
         pos.shares = shares;
         pos.status = PositionStatus.Purchased;
 
-        // Refund leftover USDC back to position owner
+        // Refund leftover USDC back to position owner (via Safe module path).
         if (pos.reservedUsdcSpendAmount > usdcSpent) {
             uint256 usdcLeftover = pos.reservedUsdcSpendAmount - usdcSpent;
             uint256 usdcNow = IERC20(USDC).balanceOf(safe);
             uint256 toReturn = usdcLeftover > usdcNow ? usdcNow : usdcLeftover;
             if (toReturn > 0) {
-                _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), toReturn));
+                _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, pos.owner, toReturn));
             }
+        }
+
+        // Clear USDC approvals.
+        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, pos.exchange, 0));
+        if (pos.exchange == NEG_RISK_CTF_EXCHANGE) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, CTF_EXCHANGE, 0));
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_ADAPTER, 0));
         }
 
         // Update safe data.
@@ -448,21 +486,68 @@ contract BounceV2 is ReentrancyGuard {
     }
 
     // ============================================
+    // Cancel a prepared purchase
+    // ============================================
+
+    /// @notice Cancels a prepared purchase, returning USDC to the position owner.
+    /// @dev Can only be called if the CLOB order has not executed (allowance unchanged, no tokens received).
+    function cancelBuyOutcome(uint256 _positionId) external nonReentrant {
+        Position storage pos = positions_[_positionId];
+
+        // Check: position is in Prepared status (not yet finalized).
+        if (pos.status != PositionStatus.Prepared) revert InvalidPositionStatus();
+
+        // Check: caller is position owner.
+        if (msg.sender != pos.owner) revert InvalidPositionOwner();
+
+        address safe = pos.safe;
+        _assertSafeReady(safe);
+
+        // Verify no CLOB order has executed:
+        // 1. USDC allowance unchanged (exchange hasn't pulled any USDC).
+        uint256 currentAllowance = IERC20(USDC).allowance(safe, pos.exchange);
+        if (currentAllowance != pos.reservedUsdcSpendAmount) revert PurchaseAlreadySettled();
+
+        // 2. Condition token balance unchanged (no tokens received from exchange).
+        uint256 ctBalance = IConditionalTokensMinimal(CTF).balanceOf(safe, pos.outcomeTokenId);
+        if (ctBalance != pos.prePurchaseConditionTokenBalance) revert PurchaseAlreadySettled();
+
+        // Clear USDC approvals.
+        _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, pos.exchange, 0));
+        if (pos.exchange == NEG_RISK_CTF_EXCHANGE) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, CTF_EXCHANGE, 0));
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.approve.selector, NEG_RISK_ADAPTER, 0));
+        }
+
+        // Return USDC from Safe to position owner (cap at actual balance for safety).
+        uint256 usdcBalance = IERC20(USDC).balanceOf(safe);
+        uint256 toReturn = pos.reservedUsdcSpendAmount > usdcBalance ? usdcBalance : pos.reservedUsdcSpendAmount;
+        if (toReturn > 0) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, pos.owner, toReturn));
+        }
+
+        // Update state.
+        pos.status = PositionStatus.Cancelled;
+        safes_[safe].activeBet = false;
+
+        emit CancelledBuyOutcome(_positionId, pos.owner);
+    }
+
+    // ============================================
     // Sell outcome tokens back for USDC
     // ============================================
 
     function prepareExitOutcome(uint256 _positionId) external nonReentrant returns (uint256 conditionTokenBalance) {
         Position storage pos = positions_[_positionId];
-        
+
         // Check: safe has installed this contract as guard and module.
         address safe = pos.safe;
         _assertSafeReady(safe);
 
-        // Check: caller is owner of safe.
-        address positionOwner = msg.sender;
-        if (!IGnosisSafeMinimal(safe).isOwner(positionOwner)) revert SafeNotOwner();
+        // Check: caller is position owner.
+        if (msg.sender != pos.owner) revert InvalidPositionOwner();
 
-        // Check: position is in prepared status only.
+        // Check: position is in purchased status only.
         if (pos.status != PositionStatus.Purchased) revert InvalidPositionStatus();
 
         // Check: no bet is active.
@@ -474,52 +559,62 @@ contract BounceV2 is ReentrancyGuard {
         // Update position data.
         pos.status = PositionStatus.PreparedExit;
 
-        // Withdraw conditional tokens from vault.
+        // Withdraw conditional tokens from vault directly to the Safe.
         conditionTokenBalance = BounceVault(pos.vault).redeem({
-            owner: positionOwner,
+            owner: pos.owner,
             shares: pos.shares,
-            tranche: pos.tranche
+            tranche: pos.tranche,
+            receiver: safe
         });
 
-        // Transfer condition tokens to safe.
-        IConditionalTokensMinimal(CTF)
-            .safeTransferFrom({
-                from: address(this), to: safe, id: pos.outcomeTokenId, value: conditionTokenBalance, data: bytes("")
-            });
+        // Track condition tokens sent for sale.
+        pos.conditionTokensForSale = conditionTokenBalance;
 
-        emit PreparedExitOutcome();
+        emit PreparedExitOutcome(_positionId, pos.owner, conditionTokenBalance);
     }
 
     function finalizeExitOutcome(uint256 _positionId) external nonReentrant {
         Position storage pos = positions_[_positionId];
-        
+
         // Check: safe has installed this contract as guard and module.
         address safe = pos.safe;
         _assertSafeReady(safe);
 
-        // Check: position is in prepared status only.
+        // Check: position is in PreparedExit status.
         if (pos.status != PositionStatus.PreparedExit) revert InvalidPositionStatus();
 
-        // Check current share balance in the Safe.
-        uint256 sharesNow = IConditionalTokensMinimal(CTF).balanceOf(safe, pos.outcomeTokenId);
-        uint256 sharesSold = sharesNow < pos.shares ? pos.shares - sharesNow : 0;
+        // Check current condition token balance in the Safe vs what was sent for sale.
+        uint256 tokensNow = IConditionalTokensMinimal(CTF).balanceOf(safe, pos.outcomeTokenId);
+        if (tokensNow >= pos.conditionTokensForSale && tokensNow > 10_000) revert NoTokensSoldInExit();
+        uint256 tokensSold = tokensNow < pos.conditionTokensForSale ? pos.conditionTokensForSale - tokensNow : 0;
 
-        // Pull all USDC proceeds from Safe.
+        // Pull all USDC proceeds from Safe to the vault for settlement.
         uint256 usdcNow = IERC20(USDC).balanceOf(safe);
-        if (usdcNow > 10_000) {
-            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, address(this), usdcNow));
+        if (usdcNow > 0) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, pos.vault, usdcNow));
         }
 
-        // Update position data.
-        pos.shares -= sharesSold;
-        pos.usdcReceived += usdcNow;
+        // Vault computes tranche PnL split: pays owner their portion, retains counterparty's portion.
+        (uint256 ownerAmount,) = BounceVault(pos.vault).settleExit({
+            owner: pos.owner,
+            shares: pos.shares,
+            tranche: pos.tranche,
+            usdcProceeds: usdcNow
+        });
 
-        // If all shares sold (or only dust remains), transition to Closed.
+        // Update position data.
+        pos.conditionTokensForSale -= tokensSold;
+        pos.usdcReceived += ownerAmount;
+
+        emit FinalizedExitOutcome(_positionId, pos.owner, ownerAmount);
+
+        // If all condition tokens sold (or only dust remains), transition to Closed.
         // Dust threshold: 10_000 raw units = 0.01 shares (USDC has 6 decimals).
-        if (sharesNow <= 10_000) {
-            pos.shares = 0;
+        if (tokensNow <= 10_000) {
+            pos.conditionTokensForSale = 0;
             pos.status = PositionStatus.Closed;
-            emit PositionClosed();
+            safes_[safe].activeBet = false;
+            emit PositionClosed(_positionId, pos.owner);
         }
     }
 
@@ -571,5 +666,34 @@ contract BounceV2 is ReentrancyGuard {
         if (v < 27) v += 27;
 
         return ecrecover(digest, v, sig.r, sig.s);
+    }
+
+    // ============================================
+    // Guard Implementation (IGuard)
+    // ============================================
+
+    /// @notice Always reverts — blocks all direct Safe transactions.
+    function checkTransaction(
+        address,
+        uint256,
+        bytes memory,
+        Operation,
+        uint256,
+        uint256,
+        uint256,
+        address,
+        address payable,
+        bytes memory,
+        address
+    ) external pure override {
+        revert DirectSafeTxDisabled();
+    }
+
+    /// @notice No-op post-execution hook.
+    function checkAfterExecution(bytes32, bool) external pure override {}
+
+    /// @notice Returns true for both IGuard and Safe 1.3.0 guard interface IDs.
+    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
+        return interfaceId == type(IGuard).interfaceId || interfaceId == GUARD_INTERFACE_ID;
     }
 }

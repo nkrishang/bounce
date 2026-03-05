@@ -5,7 +5,8 @@ enum PositionStatus {
     Prepared,
     Purchased,
     PreparedExit,
-    Sold
+    Closed,
+    Cancelled
 }
 
 enum PositionTranche {
@@ -55,6 +56,9 @@ struct Position {
 
     /// @notice The USDC received on selling the position.
     uint256 usdcReceived;
+
+    /// @notice The condition tokens sent to Safe for sale during exit.
+    uint256 conditionTokensForSale;
 
     /// @notice The status of the position in relation to outcome token purchase.
     PositionStatus status;

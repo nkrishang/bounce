@@ -42,7 +42,39 @@ contract BounceVault {
     // Redeem shares
     // ============================================
 
-    function redeem(address owner, uint256 shares, PositionTranche tranche) external returns (uint256 conditionTokenAmount) {
+    function redeem(address owner, uint256 shares, PositionTranche tranche, address receiver) external returns (uint256 conditionTokenAmount) {
         
+    }
+
+    // ============================================
+    // Settle exit
+    // ============================================
+
+    /// @notice Settles exit proceeds: accounts for tranche PnL split, holds counterparty amount, returns owner amount.
+    /// @param owner The position owner exiting.
+    /// @param shares The vault shares being redeemed.
+    /// @param tranche The tranche of the exiting position.
+    /// @param usdcProceeds Total USDC proceeds from the sale.
+    /// @return ownerAmount USDC to send to the exiting position owner.
+    /// @return counterpartyAmount USDC retained in vault for the counterparty tranche.
+    function settleExit(address owner, uint256 shares, PositionTranche tranche, uint256 usdcProceeds)
+        external
+        returns (uint256 ownerAmount, uint256 counterpartyAmount)
+    {}
+
+    // ============================================
+    // ERC1155 Receiver
+    // ============================================
+
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata) external pure returns (bytes4) {
+        return this.onERC1155Received.selector;
+    }
+
+    function onERC1155BatchReceived(address, address, uint256[] calldata, uint256[] calldata, bytes calldata)
+        external
+        pure
+        returns (bytes4)
+    {
+        return this.onERC1155BatchReceived.selector;
     }
 }
