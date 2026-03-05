@@ -193,8 +193,7 @@ contract BounceV2 is ReentrancyGuard, IGuard {
     address public constant POLYMARKET_SAFE_FACTORY = 0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b;
 
     /// @notice Safe init code hash used by the Polymarket factory for CREATE2 address derivation.
-    bytes32 public constant SAFE_INIT_CODE_HASH =
-        0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf;
+    bytes32 public constant SAFE_INIT_CODE_HASH = 0x2bce2127ff07fb632d16c8347c4ebf501f4841168bed00d9e6ef715ddb6fcecf;
 
     /// @notice Guard interface ID that Safe 1.3.0 checks for.
     bytes4 private constant GUARD_INTERFACE_ID = 0xe6d7a83a;
@@ -270,26 +269,22 @@ contract BounceV2 is ReentrancyGuard, IGuard {
         if (safe.code.length != 0) revert SafeAlreadyDeployed();
 
         // 1. Deploy Safe via Polymarket factory (free path: all zeros).
-        IPolymarketSafeFactory(POLYMARKET_SAFE_FACTORY).createProxy(
-            address(0), 0, payable(address(0)), _factorySig
-        );
+        IPolymarketSafeFactory(POLYMARKET_SAFE_FACTORY).createProxy(address(0), 0, payable(address(0)), _factorySig);
         if (safe.code.length == 0) revert SafeDeploymentFailed();
 
         // 2. Enable BounceV2 as module via Safe.execTransaction (nonce=0).
         {
             bytes memory data = abi.encodeWithSignature("enableModule(address)", address(this));
-            bool ok = IGnosisSafeExecTransaction(safe).execTransaction(
-                safe, 0, data, 0, 0, 0, 0, address(0), payable(address(0)), _enableModuleSig
-            );
+            bool ok = IGnosisSafeExecTransaction(safe)
+                .execTransaction(safe, 0, data, 0, 0, 0, 0, address(0), payable(address(0)), _enableModuleSig);
             if (!ok) revert SafeExecTransactionFailed();
         }
 
         // 3. Set BounceV2 as guard via Safe.execTransaction (nonce=1).
         {
             bytes memory data = abi.encodeWithSignature("setGuard(address)", address(this));
-            bool ok = IGnosisSafeExecTransaction(safe).execTransaction(
-                safe, 0, data, 0, 0, 0, 0, address(0), payable(address(0)), _setGuardSig
-            );
+            bool ok = IGnosisSafeExecTransaction(safe)
+                .execTransaction(safe, 0, data, 0, 0, 0, 0, address(0), payable(address(0)), _setGuardSig);
             if (!ok) revert SafeExecTransactionFailed();
         }
 
@@ -434,7 +429,7 @@ contract BounceV2 is ReentrancyGuard, IGuard {
 
     function finalizeBuyOutcome(uint256 _positionId) external nonReentrant {
         Position storage pos = positions_[_positionId];
-        
+
         // Check: safe has installed this contract as guard and module.
         address safe = pos.safe;
         _assertSafeReady(safe);
@@ -576,12 +571,8 @@ contract BounceV2 is ReentrancyGuard, IGuard {
         pos.status = PositionStatus.PreparedExit;
 
         // Withdraw conditional tokens from vault directly to the Safe.
-        conditionTokenBalance = BounceVault(pos.vault).redeem({
-            owner: pos.owner,
-            shares: pos.shares,
-            tranche: pos.tranche,
-            receiver: safe
-        });
+        conditionTokenBalance =
+            BounceVault(pos.vault).redeem({owner: pos.owner, shares: pos.shares, tranche: pos.tranche, receiver: safe});
 
         // Track condition tokens sent for sale.
         pos.conditionTokensForSale = conditionTokenBalance;
@@ -611,12 +602,8 @@ contract BounceV2 is ReentrancyGuard, IGuard {
         }
 
         // Vault computes tranche PnL split: pays owner their portion, retains counterparty's portion.
-        (uint256 ownerAmount,) = BounceVault(pos.vault).settleExit({
-            owner: pos.owner,
-            shares: pos.shares,
-            tranche: pos.tranche,
-            usdcProceeds: usdcNow
-        });
+        (uint256 ownerAmount,) = BounceVault(pos.vault)
+            .settleExit({owner: pos.owner, shares: pos.shares, tranche: pos.tranche, usdcProceeds: usdcNow});
 
         // Update position data.
         pos.conditionTokensForSale -= tokensSold;
@@ -711,12 +698,7 @@ contract BounceV2 is ReentrancyGuard, IGuard {
         safes_[safe].activeBet = true;
 
         // Pull outcome tokens from vault to Safe.
-        BounceVault(pos.vault).redeem({
-            owner: pos.owner,
-            shares: pos.shares,
-            tranche: pos.tranche,
-            receiver: safe
-        });
+        BounceVault(pos.vault).redeem({owner: pos.owner, shares: pos.shares, tranche: pos.tranche, receiver: safe});
 
         // Snapshot balances before redeem.
         uint256 usdcBefore = IERC20(USDC).balanceOf(safe);
@@ -747,12 +729,8 @@ contract BounceV2 is ReentrancyGuard, IGuard {
         }
 
         // Settle tranche accounting via vault.
-        (uint256 ownerAmount,) = BounceVault(pos.vault).settleExit({
-            owner: pos.owner,
-            shares: pos.shares,
-            tranche: pos.tranche,
-            usdcProceeds: usdcDelta
-        });
+        (uint256 ownerAmount,) = BounceVault(pos.vault)
+            .settleExit({owner: pos.owner, shares: pos.shares, tranche: pos.tranche, usdcProceeds: usdcDelta});
 
         // Update position data.
         pos.usdcReceived += ownerAmount;
@@ -839,9 +817,8 @@ contract BounceV2 is ReentrancyGuard, IGuard {
 
     /// @notice Recovers the signer from a Polymarket factory EIP-712 signature.
     function _recoverFactorySigner(IPolymarketSafeFactory.Sig calldata sig) internal view returns (address) {
-        bytes32 domainSeparator = keccak256(
-            abi.encode(EIP712_DOMAIN_TYPEHASH, FACTORY_NAME_HASH, block.chainid, POLYMARKET_SAFE_FACTORY)
-        );
+        bytes32 domainSeparator =
+            keccak256(abi.encode(EIP712_DOMAIN_TYPEHASH, FACTORY_NAME_HASH, block.chainid, POLYMARKET_SAFE_FACTORY));
         bytes32 structHash = keccak256(abi.encode(CREATE_PROXY_TYPEHASH, address(0), uint256(0), address(0)));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
 
