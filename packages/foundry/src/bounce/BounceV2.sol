@@ -84,6 +84,19 @@ contract BounceV2 is ReentrancyGuard, IGuard {
     /// @notice Emitted when a prepared purchase is cancelled.
     event CancelledBuyOutcome(uint256 indexed positionId, address indexed owner);
 
+    /// @notice Emitted when a prepared exit is cancelled and tokens returned to vault.
+    event CancelledExitOutcome(uint256 indexed positionId, address indexed owner, uint256 tokensReturned);
+
+    /// @notice Emitted when resolved outcome tokens are redeemed via CTF.
+    event RedeemedPosition(
+        uint256 indexed positionId,
+        bytes32 indexed conditionId,
+        address indexed owner,
+        uint256 usdcProceeds,
+        uint256 ownerUsdcReceived,
+        uint256 tokensRedeemed
+    );
+
     /// @notice Emitted when direct Safe transaction is blocked by guard.
     error DirectSafeTxDisabled();
 
@@ -150,6 +163,9 @@ contract BounceV2 is ReentrancyGuard, IGuard {
 
     /// @notice Thrown when attempting to cancel a purchase that has already been settled on-chain.
     error PurchaseAlreadySettled();
+
+    /// @notice Thrown when attempting to cancel an exit that has already partially or fully settled.
+    error ExitAlreadySettled();
 
     // ============================================
     // Constants (Polygon)
@@ -616,6 +632,173 @@ contract BounceV2 is ReentrancyGuard, IGuard {
             safes_[safe].activeBet = false;
             emit PositionClosed(_positionId, pos.owner);
         }
+    }
+
+    // ============================================
+    // Cancel a prepared exit
+    // ============================================
+
+    /// @notice Cancels a prepared exit, returning outcome tokens from Safe back to vault.
+    /// @dev Can only be called if no CLOB sell has settled (no tokens sold, no USDC received).
+    function cancelExitOutcome(uint256 _positionId) external nonReentrant {
+        Position storage pos = positions_[_positionId];
+
+        // Check: position is in PreparedExit status.
+        if (pos.status != PositionStatus.PreparedExit) revert InvalidPositionStatus();
+
+        // Check: caller is position owner.
+        if (msg.sender != pos.owner) revert InvalidPositionOwner();
+
+        address safe = pos.safe;
+        _assertSafeReady(safe);
+
+        // Verify no CLOB sell has settled:
+        // 1. Condition token balance unchanged (no tokens sold by exchange).
+        uint256 tokensNow = IConditionalTokensMinimal(CTF).balanceOf(safe, pos.outcomeTokenId);
+        if (tokensNow < pos.conditionTokensForSale) revert ExitAlreadySettled();
+
+        // 2. No USDC received from sell (no proceeds in Safe).
+        uint256 usdcNow = IERC20(USDC).balanceOf(safe);
+        if (usdcNow > 0) revert ExitAlreadySettled();
+
+        // Return outcome tokens from Safe back to vault.
+        _execFromSafe(
+            safe,
+            CTF,
+            abi.encodeWithSelector(
+                IConditionalTokensMinimal.safeTransferFrom.selector,
+                safe,
+                pos.vault,
+                pos.outcomeTokenId,
+                pos.conditionTokensForSale,
+                bytes("")
+            )
+        );
+
+        uint256 tokensReturned = pos.conditionTokensForSale;
+
+        // Reset position back to Purchased.
+        pos.conditionTokensForSale = 0;
+        pos.status = PositionStatus.Purchased;
+        safes_[safe].activeBet = false;
+
+        emit CancelledExitOutcome(_positionId, pos.owner, tokensReturned);
+    }
+
+    // ============================================
+    // Redeem resolved position via CTF
+    // ============================================
+
+    /// @notice Redeems resolved outcome tokens via CTF.redeemPositions for USDC.
+    /// @dev Pulls tokens from vault to Safe, redeems via CTF, routes USDC to vault for tranche settlement.
+    ///      Does not revert on zero USDC proceeds (handles YES-loses case where tokens are worthless).
+    function redeemPosition(uint256 _positionId) external nonReentrant {
+        Position storage pos = positions_[_positionId];
+
+        // Check: position is in Purchased status.
+        if (pos.status != PositionStatus.Purchased) revert InvalidPositionStatus();
+
+        // Check: caller is position owner.
+        if (msg.sender != pos.owner) revert InvalidPositionOwner();
+
+        address safe = pos.safe;
+        _assertSafeReady(safe);
+
+        // Check: no bet is active.
+        if (safes_[safe].activeBet) revert SafeBetActive();
+
+        // Mark safe as active.
+        safes_[safe].activeBet = true;
+
+        // Pull outcome tokens from vault to Safe.
+        BounceVault(pos.vault).redeem({
+            owner: pos.owner,
+            shares: pos.shares,
+            tranche: pos.tranche,
+            receiver: safe
+        });
+
+        // Snapshot balances before redeem.
+        uint256 usdcBefore = IERC20(USDC).balanceOf(safe);
+        uint256 tokensBefore = IConditionalTokensMinimal(CTF).balanceOf(safe, pos.outcomeTokenId);
+
+        // Build indexSets array and execute redeemPositions from Safe.
+        uint256[] memory indexSets = new uint256[](1);
+        indexSets[0] = uint256(1) << uint256(pos.outcomeIndex);
+
+        _execFromSafe(
+            safe,
+            CTF,
+            abi.encodeWithSelector(
+                IConditionalTokensMinimal.redeemPositions.selector, USDC, bytes32(0), pos.conditionId, indexSets
+            )
+        );
+
+        // Snapshot balances after redeem.
+        uint256 usdcAfter = IERC20(USDC).balanceOf(safe);
+        uint256 tokensAfter = IConditionalTokensMinimal(CTF).balanceOf(safe, pos.outcomeTokenId);
+
+        uint256 usdcDelta = usdcAfter - usdcBefore;
+        uint256 tokensRedeemed = tokensBefore - tokensAfter;
+
+        // Route USDC proceeds from Safe to vault for tranche settlement.
+        if (usdcDelta > 0) {
+            _execFromSafe(safe, USDC, abi.encodeWithSelector(IERC20.transfer.selector, pos.vault, usdcDelta));
+        }
+
+        // Settle tranche accounting via vault.
+        (uint256 ownerAmount,) = BounceVault(pos.vault).settleExit({
+            owner: pos.owner,
+            shares: pos.shares,
+            tranche: pos.tranche,
+            usdcProceeds: usdcDelta
+        });
+
+        // Update position data.
+        pos.usdcReceived += ownerAmount;
+        pos.status = PositionStatus.Closed;
+        safes_[safe].activeBet = false;
+
+        emit RedeemedPosition(_positionId, pos.conditionId, pos.owner, usdcDelta, ownerAmount, tokensRedeemed);
+        emit PositionClosed(_positionId, pos.owner);
+    }
+
+    // ============================================
+    // View functions
+    // ============================================
+
+    /// @notice Returns the full Position struct for a given position ID.
+    function getPosition(uint256 _positionId) external view returns (Position memory) {
+        return positions_[_positionId];
+    }
+
+    /// @notice Returns the Safe data for a given safe address.
+    function getSafe(address _safe) external view returns (Safe memory) {
+        return safes_[_safe];
+    }
+
+    /// @notice Returns the next position ID that will be assigned.
+    function nextPositionId() external view returns (uint256) {
+        return nextPositionId_;
+    }
+
+    /// @notice Returns the predicted deterministic Safe address for a given owner.
+    function predictSafeAddress(address _owner) external pure returns (address) {
+        return _predictSafeAddress(_owner);
+    }
+
+    /// @notice Returns the deterministic vault address for a given market outcome.
+    function getVaultAddress(bytes32 _conditionId, uint8 _outcomeIndex, uint256 _outcomeTokenId, address _exchange)
+        external
+        view
+        returns (address)
+    {
+        return _getVaultAddress(_conditionId, _outcomeIndex, _outcomeTokenId, _exchange);
+    }
+
+    /// @notice Returns the contract version.
+    function version() external pure returns (string memory) {
+        return "2.0.0";
     }
 
     // ============================================
