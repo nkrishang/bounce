@@ -568,4 +568,86 @@ contract BounceV2SimulationTest is Test {
         assertEq(uint256(bounceV2.getPosition(alicePosId).status), uint256(PositionStatus.Closed));
         assertEq(uint256(bounceV2.getPosition(carolPosId).status), uint256(PositionStatus.Closed));
     }
+
+    // ============================================
+    // Test 9: Loss protection tradeoff -- fully matched vs junior scarce
+    // ============================================
+    //
+    // Senior Protection = r / (R+1) = r / 5
+    //   where r = min(S, 4J) / S is the matched fraction of senior.
+    //
+    // Fully matched (r=1.0): protection = 20% → senior survives a 10% loss unscathed.
+    // Junior scarce (r=0.5): protection = 10% → a 10% loss breaches the buffer.
+    //
+    // Senior Profit Multiple = 1 − 0.6r
+    //   Fully matched: 0.50x | Junior scarce: 0.75x
+    //
+    // The tradeoff: higher profit multiple comes at the cost of lower loss protection.
+
+    function test_scenario9_lossProtection_fullyMatched() public {
+        console.log("\n=== Scenario 9a: Loss Protection -- Fully Matched (r=1.0, protection=20%) ===");
+        console.log("  A 10% market drop is within the 20% buffer. Senior is fully protected.\n");
+
+        (address alice, MockSafeModule aliceSafe) = _createUser("alice");
+        (address carol, MockSafeModule carolSafe) = _createUser("carol");
+
+        // Fully matched: S=400, J=100, r=1.0. Protection = 1.0/5 = 20%.
+        uint256 alicePosId = _simulateBuy(alice, aliceSafe, 400e6, PositionTranche.Senior);
+        uint256 carolPosId = _simulateBuy(carol, carolSafe, 100e6, PositionTranche.Junior);
+
+        _logVaultState("After deposits");
+        _logMatchInfo();
+
+        // 10% market drop: $0.50 → $0.45. Well within 20% protection.
+        exchange.setPrice(450_000);
+        uint256 carolPayout = _simulateSellExit(carol, carolPosId, 450_000);
+        console.log("\n  Carol exit (sell at $0.45, 10% loss):");
+        _logPnL("Carol (Junior)", 100e6, carolPayout);
+
+        uint256 alicePayout = _simulateSellExit(alice, alicePosId, 450_000);
+        console.log("  Alice exit:");
+        _logPnL("Alice (Senior)", 400e6, alicePayout);
+
+        console.log(string.concat("\n  Total payouts: $", _fmt6(carolPayout + alicePayout), " (expected: $450.00)"));
+        console.log("  Senior protection = 20%. Loss = 10%. Senior fully protected.");
+
+        assertApproxEqAbs(alicePayout, 400e6, TOLERANCE, "Senior fully protected at 10% loss");
+        assertApproxEqAbs(carolPayout, 50e6, TOLERANCE, "Junior absorbs all loss");
+    }
+
+    function test_scenario9_lossProtection_juniorScarce() public {
+        console.log("\n=== Scenario 9b: Loss Protection -- Junior Scarce (r=0.5, protection=10%) ===");
+        console.log("  Same 10% drop, but protection is only 10%. Senior takes losses.\n");
+
+        (address alice, MockSafeModule aliceSafe) = _createUser("alice");
+        (address carol, MockSafeModule carolSafe) = _createUser("carol");
+
+        // Junior scarce: S=800, J=100, r=min(800,400)/800=0.5. Protection = 0.5/5 = 10%.
+        uint256 alicePosId = _simulateBuy(alice, aliceSafe, 800e6, PositionTranche.Senior);
+        uint256 carolPosId = _simulateBuy(carol, carolSafe, 100e6, PositionTranche.Junior);
+
+        _logVaultState("After deposits");
+        _logMatchInfo();
+
+        // Same 10% market drop: $0.50 → $0.45. Exceeds 10% protection.
+        // Matched pod (S_m=400, J_m=100): junior absorbs full 10% loss → senior protected.
+        // Unmatched pod (S_u=400): raw exposure → loses 10% = $40.
+        exchange.setPrice(450_000);
+        uint256 carolPayout = _simulateSellExit(carol, carolPosId, 450_000);
+        console.log("\n  Carol exit (sell at $0.45, 10% loss):");
+        _logPnL("Carol (Junior)", 100e6, carolPayout);
+
+        uint256 alicePayout = _simulateSellExit(alice, alicePosId, 450_000);
+        console.log("  Alice exit:");
+        _logPnL("Alice (Senior)", 800e6, alicePayout);
+
+        // Senior loses ~$40 on her $400 unmatched portion (10% raw loss).
+        // Matched $400 is fully protected. Total senior payout ~$760.
+        console.log(string.concat("\n  Total payouts: $", _fmt6(carolPayout + alicePayout), " (expected: $810.00)"));
+        console.log("  Senior protection = 10%. Loss = 10%. Unmatched senior exposed.");
+
+        assertApproxEqAbs(carolPayout, 50e6, TOLERANCE, "Junior absorbs matched loss");
+        assertApproxEqAbs(alicePayout, 760e6, TOLERANCE, "Senior loses ~40 on unmatched portion");
+        assertApproxEqAbs(carolPayout + alicePayout, 810e6, TOLERANCE, "Conservation");
+    }
 }
