@@ -13,4 +13,7 @@ struct VaultParams {
 
     /// @notice The Polymarket exchange contract for the bet.
     address exchange;
+
+    /// @notice The BounceV2 coordinator contract address.
+    address bounceV2;
 }

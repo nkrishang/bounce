@@ -111,7 +111,7 @@ contract BounceVault {
     // ============================================
 
     constructor(VaultParams memory _vaultParams) {
-        bounceV2 = msg.sender;
+        bounceV2 = _vaultParams.bounceV2;
         conditionId = _vaultParams.conditionId;
         outcomeIndex = _vaultParams.outcomeIndex;
         outcomeTokenId = _vaultParams.outcomeTokenId;

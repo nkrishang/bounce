@@ -231,6 +231,7 @@ contract BounceV2 is ReentrancyGuard, IGuard {
 
     /// @notice Creates vault for outcome in market at a deterministic address.
     function createVault(VaultParams memory _params) external returns (address vault) {
+        _params.bounceV2 = address(this);
         bytes32 salt = keccak256(
             abi.encodePacked(_params.conditionId, _params.outcomeIndex, _params.outcomeTokenId, _params.exchange)
         );
