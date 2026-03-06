@@ -19,6 +19,7 @@ contract BounceVault {
     uint256 internal constant BPS = 10_000;
     uint256 internal constant SENIOR_PROFIT_BPS = 4_000; // 40%
     uint256 internal constant DUST_THRESHOLD = 10_000;
+    uint256 internal constant SENIOR_RATIO = 4; // 80:20 => matched senior = 4x matched junior
 
     // ============================================
     // Errors
@@ -66,10 +67,16 @@ contract BounceVault {
         PositionTranche tranche;
         address receiver;
         uint256 shares;
-        uint256 tokensAssigned;
-        uint256 tokensRemaining;
-        uint256 seniorPrincipalRemaining;
-        uint256 juniorPrincipalRemaining;
+        // Matched bucket (waterfall: 40/60 profit split, junior-first loss)
+        uint256 matchedTokensAssigned;
+        uint256 matchedTokensRemaining;
+        uint256 matchedSeniorPrincipalRemaining;
+        uint256 matchedJuniorPrincipalRemaining;
+        // Unmatched bucket (regular bet: 100% to owner, no counterparty)
+        uint256 unmatchedTokensAssigned;
+        uint256 unmatchedTokensRemaining;
+        uint256 unmatchedPrincipalRemaining;
+        // Cash
         uint256 reservedCash;
         bool reservedCashPaid;
     }
@@ -82,6 +89,22 @@ contract BounceVault {
     }
 
     mapping(address receiver => PendingExitRef) internal pendingExitByReceiver;
+
+    // ============================================
+    // Internal structs (memory only)
+    // ============================================
+
+    struct MatchInfo {
+        uint256 sP;
+        uint256 jP;
+        uint256 totalP;
+        uint256 matchedS;
+        uint256 matchedJ;
+        uint256 matchedP;
+        uint256 unmatchedS;
+        uint256 unmatchedJ;
+        uint256 unmatchedP;
+    }
 
     // ============================================
     // Constructor
@@ -158,23 +181,69 @@ contract BounceVault {
         uint256 tShares = ts.totalShares;
         if (tShares == 0) revert InsufficientShares();
 
-        // Compute deployed NAV claim for the exiting shares.
-        uint256 trancheDeployed = _trancheDeployedNAV(tranche);
-        uint256 deployedExitValue = FixedPointMathLib.mulDiv(trancheDeployed, shares, tShares);
+        // Compute matched/unmatched deployed NAV parts for this tranche.
+        (uint256 sM, uint256 jM, uint256 sU, uint256 jU) = _currentDeployedNAVParts();
 
-        // Convert deployed NAV to micro-pod token count.
-        // The exiting tranche only receives their SHARE of sale proceeds (via _splitProceeds),
-        // so we must sell enough tokens that the tranche's split equals deployedExitValue.
-        // tokens = deployedExitValue / tranchePayoutPerToken
-        if (lastExecutionPrice > 0 && deployedExitValue > 0) {
-            uint256 payoutPerToken = _tranchePayoutPerToken(tranche);
-            if (payoutPerToken > 0) {
-                conditionTokenAmount = FixedPointMathLib.mulDivUp(deployedExitValue, PRICE_SCALE, payoutPerToken);
+        uint256 trancheMatchedNAV = (tranche == PositionTranche.Senior) ? sM : jM;
+        uint256 trancheUnmatchedNAV = (tranche == PositionTranche.Senior) ? sU : jU;
+
+        // Pro-rata exit values for the exiting shares.
+        uint256 matchedExitValue = FixedPointMathLib.mulDiv(trancheMatchedNAV, shares, tShares);
+        uint256 unmatchedExitValue = FixedPointMathLib.mulDiv(trancheUnmatchedNAV, shares, tShares);
+
+        MatchInfo memory m = _matchInfo();
+
+        // --- Matched token assignment (micro-pod via waterfall payout-per-token) ---
+        uint256 tokensMatched = 0;
+        uint256 matchedSExit = 0;
+        uint256 matchedJExit = 0;
+
+        if (matchedExitValue > 0 && lastExecutionPrice > 0 && m.matchedP > 0) {
+            uint256 payoutMatched = _matchedPayoutPerToken(tranche, m);
+            if (payoutMatched > 0) {
+                tokensMatched = FixedPointMathLib.mulDivUp(matchedExitValue, PRICE_SCALE, payoutMatched);
             }
-            // Cap at actual vault balance.
-            uint256 vaultBal = IConditionalTokensMinimal(CTF).balanceOf(address(this), outcomeTokenId);
-            if (conditionTokenAmount > vaultBal) conditionTokenAmount = vaultBal;
+            // Cap at matched token supply.
+            uint256 matchedTokensAvail = _bucketTokens(m.matchedP, m.totalP);
+            if (tokensMatched > matchedTokensAvail) tokensMatched = matchedTokensAvail;
+
+            // Remove proportional principal from BOTH tranches within matched bucket.
+            if (tokensMatched > 0 && matchedTokensAvail > 0) {
+                matchedSExit = FixedPointMathLib.mulDiv(m.matchedS, tokensMatched, matchedTokensAvail);
+                matchedJExit = FixedPointMathLib.mulDiv(m.matchedJ, tokensMatched, matchedTokensAvail);
+                senior.principal -= matchedSExit;
+                junior.principal -= matchedJExit;
+            }
         }
+
+        // --- Unmatched token assignment (full market price, no counterparty) ---
+        uint256 tokensUnmatched = 0;
+        uint256 unmatchedExit = 0;
+
+        if (unmatchedExitValue > 0 && lastExecutionPrice > 0) {
+            tokensUnmatched = FixedPointMathLib.mulDivUp(unmatchedExitValue, PRICE_SCALE, lastExecutionPrice);
+
+            // Cap at unmatched token supply for this tranche.
+            uint256 unmatchedP_tranche = (tranche == PositionTranche.Senior) ? m.unmatchedS : m.unmatchedJ;
+            uint256 unmatchedTokensAvail = _bucketTokens(unmatchedP_tranche, m.totalP);
+            if (tokensUnmatched > unmatchedTokensAvail) tokensUnmatched = unmatchedTokensAvail;
+
+            // Remove principal only from exiting tranche (no counterparty in unmatched).
+            if (tokensUnmatched > 0 && unmatchedTokensAvail > 0) {
+                unmatchedExit = FixedPointMathLib.mulDiv(unmatchedP_tranche, tokensUnmatched, unmatchedTokensAvail);
+                if (tranche == PositionTranche.Senior) {
+                    senior.principal -= unmatchedExit;
+                } else {
+                    junior.principal -= unmatchedExit;
+                }
+            }
+        }
+
+        conditionTokenAmount = tokensMatched + tokensUnmatched;
+
+        // Cap at actual vault balance.
+        uint256 vaultBal = IConditionalTokensMinimal(CTF).balanceOf(address(this), outcomeTokenId);
+        if (conditionTokenAmount > vaultBal) conditionTokenAmount = vaultBal;
 
         // Reserve pro-rata claim on tranche usdcCash.
         uint256 reservedCash = 0;
@@ -187,33 +256,26 @@ contract BounceVault {
         shareBalanceOf[owner][tranche] = ownerBal - shares;
         ts.totalShares = tShares - shares;
 
-        // Remove proportional principal from BOTH tranches (unified pool model).
-        uint256 sPrincipalExit = 0;
-        uint256 jPrincipalExit = 0;
-
-        if (conditionTokenAmount > 0 && totalOutcomeTokens > 0) {
-            sPrincipalExit = FixedPointMathLib.mulDiv(senior.principal, conditionTokenAmount, totalOutcomeTokens);
-            jPrincipalExit = FixedPointMathLib.mulDiv(junior.principal, conditionTokenAmount, totalOutcomeTokens);
-
-            senior.principal -= sPrincipalExit;
-            junior.principal -= jPrincipalExit;
+        // Update total outcome tokens and transfer.
+        if (conditionTokenAmount > 0) {
             totalOutcomeTokens -= conditionTokenAmount;
-
-            // Transfer tokens to receiver (Safe).
             IConditionalTokensMinimal(CTF)
                 .safeTransferFrom(address(this), receiver, outcomeTokenId, conditionTokenAmount, bytes(""));
         }
 
-        // Create pending exit.
+        // Create pending exit with matched/unmatched buckets.
         pe.active = true;
         pe.owner = owner;
         pe.tranche = tranche;
         pe.receiver = receiver;
         pe.shares = shares;
-        pe.tokensAssigned = conditionTokenAmount;
-        pe.tokensRemaining = conditionTokenAmount;
-        pe.seniorPrincipalRemaining = sPrincipalExit;
-        pe.juniorPrincipalRemaining = jPrincipalExit;
+        pe.matchedTokensAssigned = tokensMatched;
+        pe.matchedTokensRemaining = tokensMatched;
+        pe.matchedSeniorPrincipalRemaining = matchedSExit;
+        pe.matchedJuniorPrincipalRemaining = matchedJExit;
+        pe.unmatchedTokensAssigned = tokensUnmatched;
+        pe.unmatchedTokensRemaining = tokensUnmatched;
+        pe.unmatchedPrincipalRemaining = unmatchedExit;
         pe.reservedCash = reservedCash;
         pe.reservedCashPaid = false;
 
@@ -224,9 +286,9 @@ contract BounceVault {
     // Settle exit
     // ============================================
 
-    /// @notice Settles exit proceeds: accounts for tranche PnL split, holds counterparty amount, returns owner amount.
+    /// @notice Settles exit proceeds: matched portion uses waterfall split, unmatched goes 100% to owner.
     /// @dev Supports partial fills — can be called multiple times for the same pending exit.
-    ///      Pro-rates PnL split by tokens sold since last settle, not by shares.
+    ///      Sold tokens are allocated pro-rata between matched/unmatched by remaining token counts.
     function settleExit(address owner, uint256 shares, PositionTranche tranche, uint256 usdcProceeds)
         external
         onlyBounceV2
@@ -243,15 +305,16 @@ contract BounceVault {
             pe.reservedCashPaid = true;
         }
 
-        // Cash-only exit (no tokens were assigned).
-        if (pe.tokensAssigned == 0) {
+        // Cash-only exit (no tokens were assigned in either bucket).
+        uint256 totalTokensAssigned = pe.matchedTokensAssigned + pe.unmatchedTokensAssigned;
+        if (totalTokensAssigned == 0) {
             if (ownerAmount > 0) SafeTransferLib.safeTransfer(USDC, owner, ownerAmount);
             _clearPendingExit(owner, tranche);
             return (ownerAmount, 0);
         }
 
         // Infer tokens sold since last settle by checking receiver balance.
-        uint256 tokensBefore = pe.tokensRemaining;
+        uint256 tokensBefore = pe.matchedTokensRemaining + pe.unmatchedTokensRemaining;
         uint256 tokensNow = IConditionalTokensMinimal(CTF).balanceOf(pe.receiver, outcomeTokenId);
         uint256 tokensSold = tokensBefore > tokensNow ? tokensBefore - tokensNow : 0;
 
@@ -263,53 +326,83 @@ contract BounceVault {
                 lastExecutionPrice = 0;
             }
 
-            // Pro-rate principal sold from remaining exit principals.
-            uint256 sPrinSold = FixedPointMathLib.mulDiv(pe.seniorPrincipalRemaining, tokensSold, tokensBefore);
-            uint256 jPrinSold = FixedPointMathLib.mulDiv(pe.juniorPrincipalRemaining, tokensSold, tokensBefore);
+            // Allocate sold tokens between matched/unmatched pro-rata by remaining counts.
+            uint256 matchedSold = FixedPointMathLib.mulDiv(pe.matchedTokensRemaining, tokensSold, tokensBefore);
+            uint256 unmatchedSold = tokensSold - matchedSold;
 
-            pe.seniorPrincipalRemaining -= sPrinSold;
-            pe.juniorPrincipalRemaining -= jPrinSold;
-            pe.tokensRemaining = tokensNow;
+            // Allocate proceeds pro-rata by sold token counts.
+            uint256 matchedProceeds = FixedPointMathLib.mulDiv(usdcProceeds, matchedSold, tokensSold);
+            uint256 unmatchedProceeds = usdcProceeds - matchedProceeds;
 
-            // Split proceeds by tranching rules.
-            (uint256 sChunk, uint256 jChunk) = _splitProceeds(usdcProceeds, sPrinSold, jPrinSold);
+            // --- Settle matched portion (waterfall) ---
+            if (matchedSold > 0 && pe.matchedTokensRemaining > 0) {
+                uint256 sPrinSold = FixedPointMathLib.mulDiv(
+                    pe.matchedSeniorPrincipalRemaining, matchedSold, pe.matchedTokensRemaining
+                );
+                uint256 jPrinSold = FixedPointMathLib.mulDiv(
+                    pe.matchedJuniorPrincipalRemaining, matchedSold, pe.matchedTokensRemaining
+                );
 
-            if (tranche == PositionTranche.Senior) {
-                ownerAmount += sChunk;
-                counterpartyAmount += jChunk;
-                junior.usdcCash += jChunk;
-            } else {
-                ownerAmount += jChunk;
-                counterpartyAmount += sChunk;
-                senior.usdcCash += sChunk;
+                pe.matchedSeniorPrincipalRemaining -= sPrinSold;
+                pe.matchedJuniorPrincipalRemaining -= jPrinSold;
+                pe.matchedTokensRemaining -= matchedSold;
+
+                (uint256 sChunk, uint256 jChunk) = _splitProceeds(matchedProceeds, sPrinSold, jPrinSold);
+
+                if (tranche == PositionTranche.Senior) {
+                    ownerAmount += sChunk;
+                    counterpartyAmount += jChunk;
+                    junior.usdcCash += jChunk;
+                } else {
+                    ownerAmount += jChunk;
+                    counterpartyAmount += sChunk;
+                    senior.usdcCash += sChunk;
+                }
+            }
+
+            // --- Settle unmatched portion (100% to owner) ---
+            if (unmatchedSold > 0 && pe.unmatchedTokensRemaining > 0) {
+                uint256 unmatchedPrinSold = FixedPointMathLib.mulDiv(
+                    pe.unmatchedPrincipalRemaining, unmatchedSold, pe.unmatchedTokensRemaining
+                );
+                pe.unmatchedPrincipalRemaining -= unmatchedPrinSold;
+                pe.unmatchedTokensRemaining -= unmatchedSold;
+
+                ownerAmount += unmatchedProceeds;
             }
         }
 
         // Handle dust write-off.
-        if (pe.tokensRemaining > 0 && pe.tokensRemaining <= DUST_THRESHOLD) {
-            (uint256 sChunk, uint256 jChunk) =
-                _splitProceeds(0, pe.seniorPrincipalRemaining, pe.juniorPrincipalRemaining);
+        uint256 totalRemaining = pe.matchedTokensRemaining + pe.unmatchedTokensRemaining;
+        if (totalRemaining > 0 && totalRemaining <= DUST_THRESHOLD) {
+            // Write off matched dust via waterfall.
+            if (pe.matchedTokensRemaining > 0) {
+                (uint256 sChunk, uint256 jChunk) =
+                    _splitProceeds(0, pe.matchedSeniorPrincipalRemaining, pe.matchedJuniorPrincipalRemaining);
 
-            pe.seniorPrincipalRemaining = 0;
-            pe.juniorPrincipalRemaining = 0;
-            pe.tokensRemaining = 0;
-
-            if (tranche == PositionTranche.Senior) {
-                ownerAmount += sChunk;
-                counterpartyAmount += jChunk;
-                junior.usdcCash += jChunk;
-            } else {
-                ownerAmount += jChunk;
-                counterpartyAmount += sChunk;
-                senior.usdcCash += sChunk;
+                if (tranche == PositionTranche.Senior) {
+                    ownerAmount += sChunk;
+                    counterpartyAmount += jChunk;
+                    junior.usdcCash += jChunk;
+                } else {
+                    ownerAmount += jChunk;
+                    counterpartyAmount += sChunk;
+                    senior.usdcCash += sChunk;
+                }
             }
+
+            pe.matchedSeniorPrincipalRemaining = 0;
+            pe.matchedJuniorPrincipalRemaining = 0;
+            pe.matchedTokensRemaining = 0;
+            pe.unmatchedPrincipalRemaining = 0;
+            pe.unmatchedTokensRemaining = 0;
         }
 
         // Pay owner.
         if (ownerAmount > 0) SafeTransferLib.safeTransfer(USDC, owner, ownerAmount);
 
         // Clean up if fully settled.
-        if (pe.tokensRemaining == 0) {
+        if (pe.matchedTokensRemaining + pe.unmatchedTokensRemaining == 0) {
             _clearPendingExit(owner, tranche);
         }
     }
@@ -327,29 +420,66 @@ contract BounceVault {
         return FixedPointMathLib.mulDiv(totalOutcomeTokens, lastExecutionPrice, PRICE_SCALE);
     }
 
-    function _currentDeployedNAVs() internal view returns (uint256 sNAV, uint256 jNAV) {
-        uint256 dv = _deployedValue();
-        uint256 sP = senior.principal;
-        uint256 jP = junior.principal;
-        uint256 totalP = sP + jP;
+    /// @dev Computes 80:20 matching from current principals. Only one side can have unmatched capital.
+    function _matchInfo() internal view returns (MatchInfo memory m) {
+        m.sP = senior.principal;
+        m.jP = junior.principal;
+        m.totalP = m.sP + m.jP;
+        if (m.totalP == 0) return m;
 
-        if (totalP == 0) return (0, 0);
-
-        if (dv >= totalP) {
-            uint256 delta = dv - totalP;
-            uint256 sGain = FixedPointMathLib.mulDiv(delta, SENIOR_PROFIT_BPS, BPS);
-            sNAV = sP + sGain;
-            jNAV = dv - sNAV;
+        if (m.sP < m.jP * SENIOR_RATIO) {
+            // Senior is scarce: all senior matched, junior capped at sP/4.
+            m.matchedS = m.sP;
+            m.matchedJ = m.sP / SENIOR_RATIO;
         } else {
-            uint256 loss = totalP - dv;
-            if (loss >= jP) {
-                jNAV = 0;
-                sNAV = dv;
-            } else {
-                jNAV = jP - loss;
-                sNAV = dv - jNAV;
-            }
+            // Junior is scarce (or balanced): all junior matched, senior capped at jP*4.
+            m.matchedJ = m.jP;
+            m.matchedS = m.jP * SENIOR_RATIO;
         }
+
+        m.matchedP = m.matchedS + m.matchedJ;
+        m.unmatchedS = m.sP - m.matchedS;
+        m.unmatchedJ = m.jP - m.matchedJ;
+        m.unmatchedP = m.unmatchedS + m.unmatchedJ;
+    }
+
+    /// @dev Returns the conceptual token count for a principal bucket (principal-weighted).
+    function _bucketTokens(uint256 bucketP, uint256 totalP) internal view returns (uint256) {
+        if (totalOutcomeTokens == 0 || bucketP == 0 || totalP == 0) return 0;
+        return FixedPointMathLib.mulDiv(totalOutcomeTokens, bucketP, totalP);
+    }
+
+    /// @dev Splits deployed value into matched (waterfall) and unmatched (pro-rata) NAV per tranche.
+    function _currentDeployedNAVParts()
+        internal
+        view
+        returns (uint256 sMatchedNAV, uint256 jMatchedNAV, uint256 sUnmatchedNAV, uint256 jUnmatchedNAV)
+    {
+        uint256 dv = _deployedValue();
+        MatchInfo memory m = _matchInfo();
+        if (dv == 0 || m.totalP == 0) return (0, 0, 0, 0);
+
+        // Split deployed value between matched and unmatched by principal weight.
+        uint256 matchedDV = FixedPointMathLib.mulDiv(dv, m.matchedP, m.totalP);
+        uint256 unmatchedDV = dv - matchedDV;
+
+        // Matched bucket: waterfall split (40/60 profit, junior-first loss).
+        if (matchedDV > 0 && m.matchedP > 0) {
+            (sMatchedNAV, jMatchedNAV) = _splitProceeds(matchedDV, m.matchedS, m.matchedJ);
+        }
+
+        // Unmatched bucket: pro-rata to the excess side (no tranching).
+        if (unmatchedDV > 0 && m.unmatchedP > 0) {
+            sUnmatchedNAV = FixedPointMathLib.mulDiv(unmatchedDV, m.unmatchedS, m.unmatchedP);
+            jUnmatchedNAV = unmatchedDV - sUnmatchedNAV;
+        }
+    }
+
+    /// @dev Returns total deployed NAV per tranche (matched + unmatched).
+    function _currentDeployedNAVs() internal view returns (uint256 sNAV, uint256 jNAV) {
+        (uint256 sM, uint256 jM, uint256 sU, uint256 jU) = _currentDeployedNAVParts();
+        sNAV = sM + sU;
+        jNAV = jM + jU;
     }
 
     function _trancheTotalNAV(PositionTranche t) internal view returns (uint256) {
@@ -358,23 +488,19 @@ contract BounceVault {
         return jD + junior.usdcCash;
     }
 
-    function _trancheDeployedNAV(PositionTranche t) internal view returns (uint256) {
-        (uint256 sD, uint256 jD) = _currentDeployedNAVs();
-        return t == PositionTranche.Senior ? sD : jD;
-    }
+    /// @dev Per-token payout for a tranche within the matched bucket at current price.
+    ///      Used to compute the matched micro-pod size in redeem().
+    function _matchedPayoutPerToken(PositionTranche t, MatchInfo memory m) internal view returns (uint256) {
+        if (lastExecutionPrice == 0 || totalOutcomeTokens == 0 || m.totalP == 0 || m.matchedP == 0) return 0;
 
-    /// @dev Returns the per-token payout for a tranche at current price, used to compute micro-pod size.
-    ///      This is the inverse of _splitProceeds: how much USDC per token the tranche would receive
-    ///      if tokens were sold at lastExecutionPrice.
-    function _tranchePayoutPerToken(PositionTranche t) internal view returns (uint256) {
-        if (totalOutcomeTokens == 0 || lastExecutionPrice == 0) return 0;
+        uint256 matchedTokens = _bucketTokens(m.matchedP, m.totalP);
+        if (matchedTokens == 0) return 0;
 
-        // Per-token principal for each tranche (scaled by PRICE_SCALE).
-        uint256 sPrinPerToken = FixedPointMathLib.mulDiv(senior.principal, PRICE_SCALE, totalOutcomeTokens);
-        uint256 jPrinPerToken = FixedPointMathLib.mulDiv(junior.principal, PRICE_SCALE, totalOutcomeTokens);
+        uint256 sPrinPerToken = FixedPointMathLib.mulDiv(m.matchedS, PRICE_SCALE, matchedTokens);
+        uint256 jPrinPerToken = FixedPointMathLib.mulDiv(m.matchedJ, PRICE_SCALE, matchedTokens);
         uint256 totalPrinPerToken = sPrinPerToken + jPrinPerToken;
 
-        // Single-tranche edge cases: if counterparty has no principal, exiting tranche gets everything.
+        // Edge cases within matched bucket (both should be >0 when matchedP>0, but guard anyway).
         if (sPrinPerToken == 0 && t == PositionTranche.Junior) return lastExecutionPrice;
         if (jPrinPerToken == 0 && t == PositionTranche.Senior) return lastExecutionPrice;
 
@@ -391,13 +517,11 @@ contract BounceVault {
             // Loss regime: junior absorbs first.
             uint256 lossPerToken = totalPrinPerToken - lastExecutionPrice;
             if (lossPerToken >= jPrinPerToken) {
-                // Junior wiped.
                 if (t == PositionTranche.Junior) return 0;
-                return lastExecutionPrice; // Senior gets whatever remains.
+                return lastExecutionPrice;
             } else {
-                // Junior absorbs partial loss.
                 if (t == PositionTranche.Junior) return jPrinPerToken - lossPerToken;
-                return sPrinPerToken; // Senior untouched.
+                return sPrinPerToken;
             }
         }
     }
@@ -454,7 +578,8 @@ contract BounceVault {
             PendingExitRef storage ref = pendingExitByReceiver[from];
             if (ref.owner != address(0)) {
                 PendingExit storage pe = pendingExits[ref.owner][ref.tranche];
-                if (pe.active && pe.receiver == from && value == pe.tokensRemaining) {
+                uint256 totalRemaining = pe.matchedTokensRemaining + pe.unmatchedTokensRemaining;
+                if (pe.active && pe.receiver == from && value == totalRemaining) {
                     // Restore tranche state.
                     TrancheState storage ts = _tranche(pe.tranche);
                     ts.totalShares += pe.shares;
@@ -464,10 +589,21 @@ contract BounceVault {
                         ts.usdcCash += pe.reservedCash;
                     }
 
-                    // Restore pool state.
-                    senior.principal += pe.seniorPrincipalRemaining;
-                    junior.principal += pe.juniorPrincipalRemaining;
-                    totalOutcomeTokens += pe.tokensRemaining;
+                    // Restore matched pool state (both tranches' principals).
+                    senior.principal += pe.matchedSeniorPrincipalRemaining;
+                    junior.principal += pe.matchedJuniorPrincipalRemaining;
+
+                    // Restore unmatched principal (only the exiting tranche).
+                    if (pe.unmatchedPrincipalRemaining > 0) {
+                        if (pe.tranche == PositionTranche.Senior) {
+                            senior.principal += pe.unmatchedPrincipalRemaining;
+                        } else {
+                            junior.principal += pe.unmatchedPrincipalRemaining;
+                        }
+                    }
+
+                    // Restore total outcome tokens.
+                    totalOutcomeTokens += totalRemaining;
 
                     // Clear pending exit.
                     delete pendingExitByReceiver[from];
